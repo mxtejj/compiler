@@ -62,13 +62,17 @@ arena_pos(Arena *arena)
 }
 
 void *
-arena_push_(Arena *arena, u64 size, b32 non_zero)
+arena_push_(Arena *arena, u64 size, b32 non_zero, u64 align)
 {
   void *out = NULL;
+  if (align == 0)
+  {
+    align = ARENA_ALIGN;
+  }
 
   Arena *curr = arena->curr;
 
-  u64 pos_aligned = align_up_pow2(curr->pos, ARENA_ALIGN);
+  u64 pos_aligned = align_up_pow2(curr->pos, align);
   out = (u8 *)curr + pos_aligned;
   u64 new_pos = pos_aligned + size;
 
@@ -83,7 +87,7 @@ arena_push_(Arena *arena, u64 size, b32 non_zero)
 
       if (size + ARENA_HEADER_SIZE > reserve_size)
       {
-        reserve_size = align_up_pow2(size + ARENA_HEADER_SIZE, ARENA_ALIGN);
+        reserve_size = align_up_pow2(size + ARENA_HEADER_SIZE, align);
       }
 
       Arena *new_arena = arena_alloc(reserve_size, commit_size, arena->flags);
@@ -94,7 +98,7 @@ arena_push_(Arena *arena, u64 size, b32 non_zero)
       curr->prev = prev_cur;
       arena->curr = curr;
 
-      pos_aligned = align_up_pow2(curr->pos, ARENA_ALIGN);
+      pos_aligned = align_up_pow2(curr->pos, align);
       out = (u8 *)curr + pos_aligned;
       new_pos = pos_aligned + size;
     }

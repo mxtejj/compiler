@@ -1,7 +1,19 @@
 #pragma once
 
 #include "base_ctx_crack.h"
+
 #include <stdint.h>
+
+#define CLR_RED   "\x1b[31m"
+#define CLR_GRN   "\x1b[32m"
+#define CLR_YEL   "\x1b[33m"
+#define CLR_BLU   "\x1b[34m"
+#define CLR_MAG   "\x1b[35m"
+#define CLR_CYN   "\x1b[36m"
+#define CLR_WHT   "\x1b[37m"
+#define CLR_RESET "\x1b[0m"
+
+// TODO: Make sure terminal supports colors
 
 // BASE TYPES
 typedef uint8_t  u8;
@@ -46,15 +58,15 @@ typedef double f64;
 #endif
 
 #if BUILD_DEBUG
-#define assert(x)                                           \
-  do                                                        \
-  {                                                         \
-    if (!(x))                                               \
-    {                                                       \
-      printf("Assertion hit: %s:%d\n", __FILE__, __LINE__); \
-      printf("\t%s\n", stringify(x));                       \
-      trap();                                               \
-    }                                                       \
+#define assert(x)                                                                \
+  do                                                                             \
+  {                                                                              \
+    if (!(x))                                                                    \
+    {                                                                            \
+      printf(CLR_RED "Assertion hit: " CLR_RESET "%s:%d\n", __FILE__, __LINE__); \
+      printf(CLR_YEL "\t%s\n" CLR_RESET, stringify(x));                          \
+      trap();                                                                    \
+    }                                                                            \
   } while (0);
 #else
 # define assert(c)
@@ -69,7 +81,7 @@ typedef double f64;
 #define _glue(a, b) a##b
 #define glue(a, b) _glue(a, b)
 
-#define array_len(arr) (sizeof(arr) / sizeof(*(arr)))
+#define array_count(arr) (sizeof(arr) / sizeof(*(arr)))
 
 #define int_from_ptr(p) (unsigned long long)((char*)p - (char*)0)
 #define ptr_from_int(n) (void*)((char*)0 + (n))
