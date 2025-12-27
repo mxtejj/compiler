@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 
 // HEADER INCLUDES
 #include "base.h"
@@ -6,7 +7,6 @@
 #include "lexer.h"
 #include "string.h"
 #include "os.h"
-#include "ast.h"
 #include "parser.h"
 
 // SOURCE INCLUDES
@@ -46,6 +46,18 @@ win32_enable_vt_mode()
 #endif
 
 Arena *g_arena;
+
+internal const char *
+tprint(const char *fmt, ...)
+{
+  local_persist char buf[256];
+  va_list args;
+  va_start(args, fmt);
+  int n = vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(fmt);
+  buf[n] = 0;
+  return buf;
+}
 
 int
 main(int argc, char **argv)
@@ -214,57 +226,87 @@ main(int argc, char **argv)
   printf("\n");
 
   {
-    String expr_tests[] =
+    typedef struct Expr_Test_Case Expr_Test_Case;
+    struct Expr_Test_Case
+    {
+      String input;
+      String output;
+    };
+
+    Expr_Test_Case expr_tests[] =
     {
       // literals
-      S("1"),
-      S("42"),
-      S("true"),
-      S("false"),
-      S("nil"),
-      S("\"hello\""),
+      { .input = S("1"),         .output = S("1") },
+      { .input = S("42"),        .output = S("42") },
+      { .input = S("true"),      .output = S("true") },
+      { .input = S("false"),     .output = S("false") },
+      { .input = S("nil"),       .output = S("nil") },
+      { .input = S("\"hello\""), .output = S("hello") },
 
       // unary
-      S("-1"),      // (- 1)
-      S("!true"),   // (! true)
-      S("!!false"), // (! (! false))
-      S("--1"),     // (- (- 1))
-      S("-!false"), // (- (! false))
+      { .input = S("-1"),      .output = S("(- 1)") },
+      { .input = S("!true"),   .output = S("(! true)") },
+      { .input = S("!!false"), .output = S("(! (! false))") },
+      { .input = S("--1"),     .output = S("(- (- 1))") },
+      { .input = S("-!false"), .output = S("(- (! false))") },
 
       // binary precedence
-      S("1 + 2 * 3"),
-      S("1 * 2 + 3"),
-      S("4 / 2 + 8"),
+      { .input = S("1 + 2 * 3"), .output = S("(+ 1 (* 2 3))") },
+      { .input = S("1 * 2 + 3"), .output = S("(+ (* 1 2) 3)") },
+      { .input = S("4 / 2 + 8"), .output = S("(+ (/ 4 2) 8)") },
+
+      // ternary
+      { .input = S("a > b ? a : b"),                             .output = S("(?: (> a b) a b)") },
+      { .input = S("a > b ?  a > c ? a : c  :  b > c ? b : c"),  .output = S("(?: (> a b) (?: (> a c) a c) (?: (> b c) b c))") },
+      { .input = S("a > b ? (a > c ? a : c) : (b > c ? b : c)"), .output = S("(?: (> a b) (group (?: (> a c) a c)) (group (?: (> b c) b c)))") },
 
       // paren override precedence
-      S("(1 + 2) * 3"), // (* (+ 1 2) 3)
-      S("1 * (2 + 3)"), // (* 1 (+ 2 3))
-      S("((1))"),       // 1
+      { .input = S("(1 + 2) * 3"),       .output = S("(* (group (+ 1 2)) 3)") },
+      { .input = S("1 * (2 + 3)"),       .output = S("(* 1 (group (+ 2 3)))") },
+      { .input = S("((1))"),             .output = S("(group (group 1))") },
 
       // associativity
-      S("1 - 2 - 3"), // (- (- 1 2) 3)
-      S("8 / 4 / 2"), // (/ (/ 8 4) 2)
+      { .input = S("1 - 2 - 3"),         .output = S("(- (- 1 2) 3)") },
+      { .input = S("8 / 4 / 2"),         .output = S("(/ (/ 8 4) 2)") },
 
       // comparisons
-      S("1 < 2"),         // (< 1 2)
-      S("1 < 2 + 3"),     // (< 1 (+ 2 3))
-      S("1 + 2 < 3 * 4"), // (< (+ 1 2) (* 3 4))
+      { .input = S("1 < 2"),             .output = S("(< 1 2)") },
+      { .input = S("1 < 2 + 3"),         .output = S("(< 1 (+ 2 3))") },
+      { .input = S("1 + 2 < 3 * 4"),     .output = S("(< (+ 1 2) (* 3 4))") },
 
       // equality chains
       // allowed syntactically - semantic phase can reject later
-      S("1 == 2"),         // (== 1 2)
-      S("1 + 2 == 3 * 4"), // (== (+ 1 2) (* 3 4))
-      S("1 == 2 == 3"),    // (== (== 1 2) 3)
+      { .input = S("1 == 2"),            .output = S("(== 1 2)") },
+      { .input = S("1 + 2 == 3 * 4"),    .output = S("(== (+ 1 2) (* 3 4))") },
+      { .input = S("1 == 2 == 3"),       .output = S("(== (== 1 2) 3)") },
 
       // mixed everything
-      S("1 + 2 * 3 == 7"),    // (== (+ 1 (* 2 3)) 7)
-      S("(1 + 2) * (3 + 4)"), // (* (+ 1 2) (+ 3 4))
-      S("!(1 + 2 * 3 < 10)"), // (! (< (+ 1 (* 2 3)) 10))
+      { .input = S("1 + 2 * 3 == 7"),    .output = S("(== (+ 1 (* 2 3)) 7)") },
+      { .input = S("(1 + 2) * (3 + 4)"), .output = S("(* (group (+ 1 2)) (group (+ 3 4)))") },
+      { .input = S("!(1 + 2 * 3 < 10)"), .output = S("(! (group (< (+ 1 (* 2 3)) 10)))") },
 
       // identifiers
-      S("a"),           // a
-      S("a + b * c"),   // (+ a (* b c))
-      S("(x + y) * z"), // (* (+ x y) z)
+      { .input = S("a"),                 .output = S("a") },
+      { .input = S("a + b * c"),         .output = S("(+ a (* b c))") },
+      { .input = S("(x + y) * z"),       .output = S("(* (group (+ x y)) z)") },
+
+      { .input = S("1 | 2 & 3"),         .output = S("(| 1 (& 2 3))") },
+      { .input = S("1 ~ 2 & 3"),         .output = S("(~ 1 (& 2 3))") },
+      { .input = S("1 << 2 + 1"),        .output = S("(<< 1 (+ 2 1))") },
+      { .input = S("1 + 2 << 3"),        .output = S("(<< (+ 1 2) 3)") },
+      { .input = S("1 < 2 | 3"),         .output = S("(< 1 (| 2 3))") },
+      { .input = S("1 & 2 == 0"),        .output = S("(== (& 1 2) 0)") },
+      { .input = S("1 && 2 | 0"),        .output = S("(&& 1 (| 2 0))") },
+      { .input = S("1 || 0 && 0"),       .output = S("(|| 1 (&& 0 0))") },
+      { .input = S("a = b = c"),         .output = S("(= a (= b c))") },
+      { .input = S("a += b * c"),        .output = S("(+= a (* b c))") },
+      { .input = S("a <<= 1 + 2"),       .output = S("(<<= a (+ 1 2))") },
+      { .input = S("a |= b & c"),        .output = S("(|= a (& b c))") },
+      { .input = S("a = b ? c : d"),     .output = S("(= a (?: b c d))") },
+      { .input = S("a += b += c"),       .output = S("(+= a (+= b c))") },
+
+      { .input = S("flags & FLAG_MASK == SOME_FLAG"), .output = S("(== (& flags FLAG_MASK) SOME_FLAG)") },
+      { .input = S("---x"),                           .output = S("(- (- (- x)))") },
 
       // error cases
       // expect => clean error, no crash, no infinite loop
@@ -278,19 +320,30 @@ main(int argc, char **argv)
     u64 padding = 0;
     for (u32 i = 0; i < array_count(expr_tests); i++)
     {
-      padding = MAX(padding, expr_tests[i].count);
+      padding = MAX(padding, expr_tests[i].input.count);
     }
 
     for (u32 i = 0; i < array_count(expr_tests); i++)
     {
-      Lexer l = lexer_init(expr_tests[i]);
+      Expr_Test_Case test = expr_tests[i];
+
+      char buf[64];
+
+      Lexer l = lexer_init(test.input);
       Parser p = parser_init(&l);
 
       AST *e = parse_expression(&p);
+      usize n = ast_print(buf, sizeof(buf), &e->expr);
 
       printf("%.*s  " CLR_GRN "%-*s=>" CLR_YEL "  ", strf(l.source), (int)(padding - l.source.count), "");
-      ast_print(&e->expr);
+      printf("%.*s", (int)n, buf);
       printf("\n" CLR_RESET);
+
+      if (!mem_equal(buf, test.output.data, n))
+      {
+        printf("Expected " CLR_GRN "%.*s" CLR_RESET ", got " CLR_RED "%.*s\n" CLR_RESET, strf(test.output), (int)n, buf);
+        assert(!"Expression test failed");
+      }
     }
 
     int a = 5;

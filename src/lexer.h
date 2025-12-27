@@ -31,6 +31,21 @@ ternary:
   X(NEQ)              \
   X(GTEQ)             \
   X(LTEQ)             \
+  X(LOGICAL_OR)       \
+  X(LOGICAL_AND)      \
+  X(LSHIFT)           \
+  X(RSHIFT)           \
+  X(LSHIFT_ASSIGN)    \
+  X(RSHIFT_ASSIGN)    \
+  X(ADD_ASSIGN)       \
+  X(SUB_ASSIGN)       \
+  X(DIV_ASSIGN)       \
+  X(MUL_ASSIGN)       \
+  X(AND_ASSIGN)       \
+  X(OR_ASSIGN)        \
+  X(XOR_ASSIGN)       \
+  X(INCREMENT)        \
+  X(DECREMENT)        \
   X(STRING_LITERAL)   \
   X(INTEGER_LITERAL)  \
   X(FLOAT_LITERAL)    \

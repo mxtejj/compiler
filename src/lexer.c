@@ -183,9 +183,9 @@ lexer_parse_string(Lexer *l)
     else if (c == '\\')
     {
       lexer_eat(l);
-      if (lexer_peek(l) == '=')
+      if (lexer_peek(l) == '"')
       {
-        // append =
+        // append "
         char *a = push_array_align(string_arena, char, 1, 1);
         *a = lexer_peek(l);
         string_len++;
@@ -304,19 +304,19 @@ lexer_parse_integer(Lexer *l)
   if (lexer_can_peek(l) && lexer_peek(l) == '0')
   {
     lexer_eat(l);
-    if (tolower(lexer_peek(l)) == 'x')
+    if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'x')
     {
       // HEX
       lexer_eat(l);
       base = 16;
     }
-    else if (tolower(lexer_peek(l)) == 'b')
+    else if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'b')
     {
       // BINARY
       lexer_eat(l);
       base = 2;
     }
-    else if (tolower(lexer_peek(l)) == 'o')
+    else if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'o')
     {
       // OCTAL
       lexer_eat(l);
@@ -512,6 +512,120 @@ lexer_next(Lexer *l)
     assert(!"TODO: Character literal");
     break;
 
+  case '*':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_MUL_ASSIGN);
+    }
+    else
+    {
+      t = lexer_make_token(l, '*');
+    }
+    break;
+
+  case '/':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_DIV_ASSIGN);
+    }
+    else
+    {
+      t = lexer_make_token(l, '/');
+    }
+    break;
+
+  case '-':
+    lexer_eat(l);
+    // if (lexer_can_peek(l) && lexer_peek(l) == '-')
+    // {
+    //   lexer_eat(l);
+    //   t = lexer_make_token(l, TOKEN_DECREMENT);
+    // }
+    // else
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_SUB_ASSIGN);
+    }
+    else
+    {
+      t = lexer_make_token(l, '-');
+    }
+    break;
+
+  case '+':
+    lexer_eat(l);
+    // if (lexer_can_peek(l) && lexer_peek(l) == '+')
+    // {
+    //   lexer_eat(l);
+    //   t = lexer_make_token(l, TOKEN_INCREMENT);
+    // }
+    // else
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_ADD_ASSIGN);
+    }
+    else
+    {
+      t = lexer_make_token(l, '+');
+    }
+    break;
+
+  case '&':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '&')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_LOGICAL_AND);
+    }
+    else if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_AND_ASSIGN);
+    }
+    else
+    {
+      t = lexer_make_token(l, '&');
+    }
+    break;
+
+  case '|':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '|')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_LOGICAL_OR);
+    }
+    else if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_OR_ASSIGN);
+    }
+    else
+    {
+      t = lexer_make_token(l, '|');
+    }
+    break;
+
+  case '~':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_XOR_ASSIGN);
+      // a ~= b;
+    }
+    else
+    {
+      t = lexer_make_token(l, '~'); // BITWISE NOT
+    }
+    break;
+
   case '=':
     lexer_eat(l);
     if (lexer_can_peek(l) && lexer_peek(l) == '=')
@@ -545,6 +659,19 @@ lexer_next(Lexer *l)
       lexer_eat(l);
       t = lexer_make_token(l, TOKEN_GTEQ);
     }
+    else if (lexer_can_peek(l) && lexer_peek(l) == '>')
+    {
+      lexer_eat(l);
+      if (lexer_can_peek(l) && lexer_peek(l) == '=')
+      {
+        lexer_eat(l);
+        t = lexer_make_token(l, TOKEN_RSHIFT_ASSIGN);
+      }
+      else
+      {
+        t = lexer_make_token(l, TOKEN_RSHIFT);
+      }
+    }
     else
     {
       t = lexer_make_token(l, '>');
@@ -557,6 +684,19 @@ lexer_next(Lexer *l)
     {
       lexer_eat(l);
       t = lexer_make_token(l, TOKEN_LTEQ);
+    }
+    else if (lexer_can_peek(l) && lexer_peek(l) == '<')
+    {
+      lexer_eat(l);
+      if (lexer_can_peek(l) && lexer_peek(l) == '=')
+      {
+        lexer_eat(l);
+        t = lexer_make_token(l, TOKEN_LSHIFT_ASSIGN);
+      }
+      else
+      {
+        t = lexer_make_token(l, TOKEN_LSHIFT);
+      }
     }
     else
     {
