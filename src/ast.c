@@ -96,6 +96,25 @@ expr_group(Parser *p, Expr *expr)
   return node;
 }
 
+/////////////////////////////////////////////////////
+// Statements
+AST *
+stmt_alloc(Parser *p, Stmt_Kind kind)
+{
+  AST *node = ast_alloc(p);
+  node->kind = AST_STMT;
+  node->stmt.kind = kind;
+  return node;
+}
+
+AST *
+stmt_expr(Parser *p, Expr *e)
+{
+  AST *node = stmt_alloc(p, STMT_KIND_EXPR);
+  node->stmt.expr = e;
+  return node;
+}
+
 // TODO: for testing
 internal Token
 make_token(char c)
@@ -104,7 +123,7 @@ make_token(char c)
 }
 
 internal usize
-ast_print(char *buf, usize buf_size, Expr *e)
+print_expr(char *buf, usize buf_size, Expr *e)
 {
   usize n = 0;
 
@@ -123,7 +142,7 @@ ast_print(char *buf, usize buf_size, Expr *e)
     {
       n += snprintf(buf + n, buf_size - n, "(%.*s ", strf(e->unary.op.lexeme));
     }
-    n += ast_print(buf + n, buf_size - n, e->unary.right);
+    n += print_expr(buf + n, buf_size - n, e->unary.right);
     n += snprintf(buf + n, buf_size - n, ")");
     break;
   case EXPR_BINARY:
@@ -135,18 +154,18 @@ ast_print(char *buf, usize buf_size, Expr *e)
     {
       n += snprintf(buf + n, buf_size - n, "(%.*s ", strf(e->binary.op.lexeme));
     }
-    n += ast_print(buf + n, buf_size - n, e->binary.left);
+    n += print_expr(buf + n, buf_size - n, e->binary.left);
     n += snprintf(buf + n, buf_size - n, " ");
-    n += ast_print(buf + n, buf_size - n, e->binary.right);
+    n += print_expr(buf + n, buf_size - n, e->binary.right);
     n += snprintf(buf + n, buf_size - n, ")");
     break;
   case EXPR_TERNARY:
     n += snprintf(buf + n, buf_size - n, "(?: ");
-    n += ast_print(buf + n, buf_size - n, e->ternary.cond);
+    n += print_expr(buf + n, buf_size - n, e->ternary.cond);
     n += snprintf(buf + n, buf_size - n, " ");
-    n += ast_print(buf + n, buf_size - n, e->ternary.then);
+    n += print_expr(buf + n, buf_size - n, e->ternary.then);
     n += snprintf(buf + n, buf_size - n, " ");
-    n += ast_print(buf + n, buf_size - n, e->ternary.else_);
+    n += print_expr(buf + n, buf_size - n, e->ternary.else_);
     n += snprintf(buf + n, buf_size - n, ")");
     break;
   case EXPR_NIL_LITERAL:
@@ -166,8 +185,27 @@ ast_print(char *buf, usize buf_size, Expr *e)
     break;
   case EXPR_GROUP:
     n += snprintf(buf + n, buf_size - n, "(group ");
-    n += ast_print(buf + n, buf_size - n, e->group.expr);
+    n += print_expr(buf + n, buf_size - n, e->group.expr);
     n += snprintf(buf + n, buf_size - n, ")");
+    break;
+  default:
+    assert(!"TODO");
+    break;
+  }
+
+  return n;
+}
+
+internal usize
+print_stmt(char *buf, usize buf_size, Stmt *s)
+{
+  usize n = 0;
+
+  switch (s->kind)
+  {
+  case STMT_KIND_NULL: assert(!"NULL Statement"); break;
+  case STMT_KIND_EXPR:
+    print_expr(buf, buf_size, s->expr);
     break;
   default:
     assert(!"TODO");
@@ -193,5 +231,5 @@ ast_test(Parser *p)
   //   &group->expr
   // );
 
-  // ast_print(&e->expr);
+  // print_expr(&e->expr);
 }

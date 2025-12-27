@@ -612,17 +612,16 @@ lexer_next(Lexer *l)
     }
     break;
 
-  case '~':
+  case '^':
     lexer_eat(l);
     if (lexer_can_peek(l) && lexer_peek(l) == '=')
     {
       lexer_eat(l);
       t = lexer_make_token(l, TOKEN_XOR_ASSIGN);
-      // a ~= b;
     }
     else
     {
-      t = lexer_make_token(l, '~'); // BITWISE NOT
+      t = lexer_make_token(l, '^');
     }
     break;
 

@@ -122,6 +122,23 @@ typedef double f64;
 #define align_up_pow2(n, p) (((u64)(n) + ((u64)(p) - 1)) & (~((u64)(p) - 1)))
 
 ////////////////////////////
+// LINKED LIST MACROS
+#define dll_push_back_np(f,l,n,next,prev) ((f)==0?\
+                                           ((f)=(l)=(n),(n)->next=(n)->prev=0):\
+                                           ((n)->prev=(l),(l)->next=(n),(l)=(n),(n)->next=0))
+#define dll_push_back(f,l,n) dll_push_back_np(f,l,n,next,prev)
+
+#define dll_push_front(f,l,n) dll_push_back_np(f,l,n,prev,next)
+
+#define dll_remove_np(f,l,n,next,prev) (((f)==(n)?\
+                                         ((f)=(f)->next,(f)->prev=0):\
+                                         (l)==(n)?\
+                                         ((l)=(l)->prev,(l)->next=0):\
+                                         ((n)->next->prev=(n)->prev,\
+                                         (n)->prev->next=(n)->next)))
+#define dll_remove(f,l,n) dll_remove_np(f,l,n,next,prev)
+
+////////////////////////////
 // :keywords
 
 #define local_persist static

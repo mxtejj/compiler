@@ -1,6 +1,12 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#if !_WIN32
+# define RADDBG_MARKUP_STUBS
+#endif
+#define RADDBG_MARKUP_IMPLEMENTATION
+#include "raddbg_markup.h"
+
 // HEADER INCLUDES
 #include "base.h"
 #include "arena.h"
@@ -333,7 +339,7 @@ main(int argc, char **argv)
       Parser p = parser_init(&l);
 
       AST *e = parse_expression(&p);
-      usize n = ast_print(buf, sizeof(buf), &e->expr);
+      usize n = print_expr(buf, sizeof(buf), &e->expr);
 
       printf("%.*s  " CLR_GRN "%-*s=>" CLR_YEL "  ", strf(l.source), (int)(padding - l.source.count), "");
       printf("%.*s", (int)n, buf);
@@ -347,6 +353,12 @@ main(int argc, char **argv)
     }
 
     int a = 5;
+  }
+
+  printf("\n");
+
+  {
+    parser_test();
   }
 
   arena_delete(g_arena);

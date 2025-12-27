@@ -334,8 +334,61 @@ parse_expression(Parser *p)
   return parse_expr_assignment(p);
 }
 
-internal void
-parser_test(Parser *p)
+/////////////////////////////////////////////////////
+// STATEMENTS
+internal AST *
+parse_stmt_expr(Parser *p)
 {
-  // ...
+  AST *expr = parse_expression(p);
+  expect(p, ';');
+  expr->stmt.kind = STMT_KIND_EXPR;
+  return expr;
+}
+
+internal AST *
+parse_statement(Parser *p)
+{
+  // if (match(p, IF))    return parse_stmt_if(p);
+  // if (match(p, DEFER)) return parse_stmt_defer(p);
+  return parse_stmt_expr(p);
+}
+
+internal AST_List
+parse(Parser *p)
+{
+  AST_List stmt_list = {0};
+
+  while (lexer_can_peek(p->lexer))
+  {
+    //
+    // TODO: we should explicitly return
+    // Stmt for statements, and Expr for expressions
+    // instead of returning AST nodes.
+    //
+    AST *stmt = parse_statement(p);
+    stmt->kind = AST_STMT;
+    dll_push_back(stmt_list.first, stmt_list.last, stmt);
+  }
+
+  return stmt_list;
+}
+
+internal void
+parser_test()
+{
+  String source = S("x = 5 + 3;");
+
+  Lexer l = lexer_init(source);
+  Parser p = parser_init(&l);
+
+  AST_List list = parse(&p);
+  // print_stmt();
+
+  char buf[128];
+  usize buf_size = sizeof(buf);
+
+  for (AST *it = list.first; it != NULL; it = it->next)
+  {
+    usize n = print_stmt(buf, buf_size, &it->stmt);
+  }
 }
