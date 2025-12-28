@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base.h"
+#include "raddbg_markup.h"
 
 typedef struct String String;
 struct String
@@ -8,6 +9,7 @@ struct String
   u8 *data;
   u64 count;
 };
+raddbg_type_view(String, array(data, count));
 
 #define S(x) { .data = (u8 *)(x), .count = sizeof((x)) - 1 }
 #define str_comp(x) (String){ .data = (u8 *)(x), .count = sizeof((x)) - 1 }

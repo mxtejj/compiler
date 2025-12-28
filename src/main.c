@@ -1,12 +1,6 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#if !_WIN32
-# define RADDBG_MARKUP_STUBS
-#endif
-#define RADDBG_MARKUP_IMPLEMENTATION
-#include "raddbg_markup.h"
-
 // HEADER INCLUDES
 #include "base.h"
 #include "arena.h"
@@ -14,6 +8,12 @@
 #include "string.h"
 #include "os.h"
 #include "parser.h"
+
+#if !_WIN32
+# define RADDBG_MARKUP_STUBS
+#endif
+#define RADDBG_MARKUP_IMPLEMENTATION
+#include "raddbg_markup.h"
 
 // SOURCE INCLUDES
 #include "arena.c"
@@ -338,8 +338,8 @@ main(int argc, char **argv)
       Lexer l = lexer_init(test.input);
       Parser p = parser_init(&l);
 
-      AST *e = parse_expression(&p);
-      usize n = print_expr(buf, sizeof(buf), &e->expr);
+      Expr *e = parse_expression(&p);
+      usize n = print_expr(buf, sizeof(buf), e);
 
       printf("%.*s  " CLR_GRN "%-*s=>" CLR_YEL "  ", strf(l.source), (int)(padding - l.source.count), "");
       printf("%.*s", (int)n, buf);

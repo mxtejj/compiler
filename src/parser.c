@@ -36,14 +36,7 @@ parser_init(Lexer *l)
 
 // TODO: `parser_fini` destroy arena
 
-AST *
-ast_alloc(Parser *p)
-{
-  AST *node = push_struct(p->arena, AST);
-  return node;
-}
-
-internal AST *
+internal Expr *
 parse_expression(Parser *p);
 
 internal void
@@ -91,7 +84,7 @@ match(Parser *p, Token_Kind kind)
   return false;
 }
 
-internal AST *
+internal Expr *
 parse_expr_primary(Parser *p)
 {
   if (match(p, TOKEN_TRUE))            return expr_bool_lit(p, true);
@@ -103,9 +96,9 @@ parse_expr_primary(Parser *p)
   if (match(p, TOKEN_IDENT))           return expr_ident(p, p->prev);
   if (match(p, '('))
   {
-    AST *expr = parse_expression(p);
+    Expr *expr = parse_expression(p);
     expect(p, ')');
-    return expr_group(p, &expr->expr);
+    return expr_group(p, expr);
   }
 
   printf("%.*s\n", strf(p->lexer->source));
@@ -113,190 +106,190 @@ parse_expr_primary(Parser *p)
   return NULL;
 }
 
-internal AST *
+internal Expr *
 parse_expr_unary(Parser *p)
 {
   while (match(p, '!') || match(p, '-') || match(p, '~'))
   {
     Token op = p->prev;
-    AST *right = parse_expr_unary(p);
-    return expr_unary(p, op, &right->expr);
+    Expr *right = parse_expr_unary(p);
+    return expr_unary(p, op, right);
   }
   return parse_expr_primary(p);
 }
 
-internal AST *
+internal Expr *
 parse_expr_factor(Parser *p)
 {
-  AST *expr = parse_expr_unary(p);
+  Expr *expr = parse_expr_unary(p);
 
   // TODO: %  - modulo (truncated)  - integers
   // TODO: %% - remainder (floored) - integers
   while (match(p, '/') || match(p, '*') || match(p, '%'))
   {
     Token op = p->prev;
-    AST *right = parse_expr_unary(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_unary(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_term(Parser *p)
 {
-  AST *expr = parse_expr_factor(p);
+  Expr *expr = parse_expr_factor(p);
 
   while (match(p, '-') || match(p, '+'))
   {
     Token op = p->prev;
-    AST *right = parse_expr_factor(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_factor(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_shift(Parser *p)
 {
-  AST *expr = parse_expr_term(p);
+  Expr *expr = parse_expr_term(p);
 
   while (match(p, TOKEN_LSHIFT) || match(p, TOKEN_LSHIFT))
   {
     Token op = p->prev;
-    AST *right = parse_expr_term(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_term(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_bitwise_and(Parser *p)
 {
-  AST *expr = parse_expr_shift(p);
+  Expr *expr = parse_expr_shift(p);
 
   while (match(p, '&'))
   {
     Token op = p->prev;
-    AST *right = parse_expr_shift(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_shift(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_bitwise_xor(Parser *p)
 {
-  AST *expr = parse_expr_bitwise_and(p);
+  Expr *expr = parse_expr_bitwise_and(p);
 
   while (match(p, '~'))
   {
     Token op = p->prev;
-    AST *right = parse_expr_bitwise_and(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_bitwise_and(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_bitwise_or(Parser *p)
 {
-  AST *expr = parse_expr_bitwise_xor(p);
+  Expr *expr = parse_expr_bitwise_xor(p);
 
   while (match(p, '|'))
   {
     Token op = p->prev;
-    AST *right = parse_expr_bitwise_xor(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_bitwise_xor(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_comparison(Parser *p)
 {
-  AST *expr = parse_expr_bitwise_or(p);
+  Expr *expr = parse_expr_bitwise_or(p);
 
   while (match(p, '>') || match(p, TOKEN_GTEQ) || match(p, '<') || match(p, TOKEN_LTEQ))
   {
     Token op = p->prev;
-    AST *right = parse_expr_bitwise_or(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_bitwise_or(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_equality(Parser *p)
 {
-  AST *expr = parse_expr_comparison(p);
+  Expr *expr = parse_expr_comparison(p);
 
   while (match(p, TOKEN_NEQ) || match(p, TOKEN_EQ))
   {
     Token op = p->prev;
-    AST *right = parse_expr_comparison(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_comparison(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_logical_and(Parser *p)
 {
-  AST *expr = parse_expr_equality(p);
+  Expr *expr = parse_expr_equality(p);
 
   while (match(p, TOKEN_LOGICAL_AND))
   {
     Token op = p->prev;
-    AST *right = parse_expr_equality(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_equality(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_logical_or(Parser *p)
 {
-  AST *expr = parse_expr_logical_and(p);
+  Expr *expr = parse_expr_logical_and(p);
 
   while (match(p, TOKEN_LOGICAL_OR))
   {
     Token op = p->prev;
-    AST *right = parse_expr_logical_and(p);
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    Expr *right = parse_expr_logical_and(p);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_ternary(Parser *p)
 {
-  AST *expr = parse_expr_logical_or(p);
+  Expr *expr = parse_expr_logical_or(p);
 
   while (match(p, '?'))
   {
-    AST *then = parse_expression(p);
+    Expr *then = parse_expression(p);
     expect(p, ':');
-    AST *else_ = parse_expr_ternary(p); // RIGHT ASSOCIATIVE
-    expr = expr_ternary(p, &expr->expr, &then->expr, &else_->expr);
+    Expr *else0 = parse_expr_ternary(p); // RIGHT ASSOCIATIVE
+    expr = expr_ternary(p, expr, then, else0);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expr_assignment(Parser *p)
 {
-  AST *expr = parse_expr_ternary(p);
+  Expr *expr = parse_expr_ternary(p);
 
   // use `if` if we want a = b = c (recursive)
   // use while if not
@@ -313,16 +306,16 @@ parse_expr_assignment(Parser *p)
    || match(p, TOKEN_XOR_ASSIGN))
   {
     Token op = p->prev;
-    AST *right = parse_expr_assignment(p); // RIGHT ASSOCIATIVE
+    Expr *right = parse_expr_assignment(p); // RIGHT ASSOCIATIVE
 
     // semantic check later: left must be assignable
-    expr = expr_binary(p, &expr->expr, op, &right->expr);
+    expr = expr_binary(p, expr, op, right);
   }
 
   return expr;
 }
 
-internal AST *
+internal Expr *
 parse_expression(Parser *p)
 {
   //
@@ -336,59 +329,81 @@ parse_expression(Parser *p)
 
 /////////////////////////////////////////////////////
 // STATEMENTS
-internal AST *
+internal Stmt *
 parse_stmt_expr(Parser *p)
 {
-  AST *expr = parse_expression(p);
+  Expr *expr = parse_expression(p);
   expect(p, ';');
-  expr->stmt.kind = STMT_KIND_EXPR;
-  return expr;
+  return stmt_expr(p, expr);
 }
 
-internal AST *
-parse_statement(Parser *p)
+internal Stmt *
+parse_stmt(Parser *p)
 {
   // if (match(p, IF))    return parse_stmt_if(p);
   // if (match(p, DEFER)) return parse_stmt_defer(p);
   return parse_stmt_expr(p);
 }
 
-internal AST_List
-parse(Parser *p)
+internal Stmt_List
+parse_statements(Parser *p)
 {
-  AST_List stmt_list = {0};
+  Stmt_List list = {0};
 
   while (lexer_can_peek(p->lexer))
   {
-    //
-    // TODO: we should explicitly return
-    // Stmt for statements, and Expr for expressions
-    // instead of returning AST nodes.
-    //
-    AST *stmt = parse_statement(p);
-    stmt->kind = AST_STMT;
-    dll_push_back(stmt_list.first, stmt_list.last, stmt);
+    Stmt *stmt = parse_stmt(p);
+    dll_push_back(list.first, list.last, stmt);
   }
 
-  return stmt_list;
+  return list;
+}
+
+/////////////////////////////////////////////////////
+// DECLARATIONS
+internal Decl *
+parse_decl(Parser *p)
+{}
+
+internal Decl_List
+parse_declarations(Parser *p)
+{
+  Decl_List list = {0};
+
+  while (lexer_can_peek(p->lexer))
+  {
+    Decl *decl = parse_decl(p);
+    dll_push_back(list.first, list.last, decl);
+  }
+
+  return list;
 }
 
 internal void
 parser_test()
 {
-  String source = S("x = 5 + 3;");
+  String source = S(
+    "x = 5 + 3;\n"
+    "x = -a;\n"
+    "x = (2 + 3) * 4;\n"
+    "x = a > b ? 1 : 0;\n"
+    "x = a && b;\n"
+    "x = y = z = 42;\n"
+  );
 
   Lexer l = lexer_init(source);
   Parser p = parser_init(&l);
 
-  AST_List list = parse(&p);
-  // print_stmt();
+  Stmt_List list = parse_statements(&p);
 
-  char buf[128];
-  usize buf_size = sizeof(buf);
-
-  for (AST *it = list.first; it != NULL; it = it->next)
+  for (Stmt *it = list.first; it != NULL; it = it->next)
   {
-    usize n = print_stmt(buf, buf_size, &it->stmt);
+    char buf[128];
+    usize buf_size = sizeof(buf);
+    usize n = print_stmt(buf, buf_size, it);
+
+    printf("%.*s\n", (int)n, buf);
   }
+
+  int a = 5;
 }

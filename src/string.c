@@ -1,7 +1,5 @@
 #include "string.h"
 
-raddbg_type_view(String, array(data, count));
-
 String
 str_init(Arena *a, u64 count)
 {

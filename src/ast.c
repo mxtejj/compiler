@@ -3,116 +3,114 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-internal AST *
+Expr *
 expr_alloc(Parser *p, Expr_Kind kind)
 {
-  AST *node = ast_alloc(p);
-  node->kind = AST_EXPR;
-  node->expr.kind = kind;
-  return node;
+  Expr *expr = push_struct(p->arena, Expr);
+  expr->kind = kind;
+  return expr;
 }
 
-AST *
+Expr *
 expr_ident(Parser *p, Token ident)
 {
-  AST *node = expr_alloc(p, EXPR_IDENT);
-  node->expr.ident = ident.lexeme;
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_IDENT);
+  expr->ident = ident.lexeme;
+  return expr;
 }
 
-AST *
+Expr *
 expr_unary(Parser *p, Token op, Expr *right)
 {
-  AST *node = expr_alloc(p, EXPR_UNARY);
-  node->expr.unary.op    = op;
-  node->expr.unary.right = right;
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_UNARY);
+  expr->unary.op    = op;
+  expr->unary.right = right;
+  return expr;
 }
 
-AST *
+Expr *
 expr_binary(Parser *p, Expr *left, Token op, Expr *right)
 {
-  AST *node = expr_alloc(p, EXPR_BINARY);
-  node->expr.binary.left  = left;
-  node->expr.binary.op    = op;
-  node->expr.binary.right = right;
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_BINARY);
+  expr->binary.left  = left;
+  expr->binary.op    = op;
+  expr->binary.right = right;
+  return expr;
 }
 
-AST *
+Expr *
 expr_ternary(Parser *p, Expr *cond, Expr *then, Expr *else_)
 {
-  AST *node = expr_alloc(p, EXPR_TERNARY);
-  node->expr.ternary.cond = cond;
-  node->expr.ternary.then = then;
-  node->expr.ternary.else_ = else_;
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_TERNARY);
+  expr->ternary.cond = cond;
+  expr->ternary.then = then;
+  expr->ternary.else_ = else_;
+  return expr;
 }
 
-AST *
+Expr *
 expr_nil_lit(Parser *p)
 {
-  AST *node = expr_alloc(p, EXPR_NIL_LITERAL);
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_NIL_LITERAL);
+  return expr;
 }
 
-AST *
+Expr *
 expr_string_lit(Parser *p, String s)
 {
-  AST *node = expr_alloc(p, EXPR_STRING_LITERAL);
-  node->expr.literal.string = s;
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_STRING_LITERAL);
+  expr->literal.string = s;
+  return expr;
 }
 
-AST *
+Expr *
 expr_integer_lit(Parser *p, u64 n)
 {
-  AST *node = expr_alloc(p, EXPR_INTEGER_LITERAL);
-  node->expr.literal.integer = n;
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_INTEGER_LITERAL);
+  expr->literal.integer = n;
+  return expr;
 }
 
-AST *
+Expr *
 expr_float_lit(Parser *p, f64 f)
 {
-  AST *node = expr_alloc(p, EXPR_FLOAT_LITERAL);
-  node->expr.literal.floating = f;
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_FLOAT_LITERAL);
+  expr->literal.floating = f;
+  return expr;
 }
 
-AST *
+Expr *
 expr_bool_lit(Parser *p, bool b)
 {
-  AST *node = expr_alloc(p, EXPR_BOOL_LITERAL);
-  node->expr.literal.boolean = b;
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_BOOL_LITERAL);
+  expr->literal.boolean = b;
+  return expr;
 }
 
-AST *
-expr_group(Parser *p, Expr *expr)
+Expr *
+expr_group(Parser *p, Expr *e)
 {
-  AST *node = expr_alloc(p, EXPR_GROUP);
-  node->expr.group.expr = expr;
-  return node;
+  Expr *expr = expr_alloc(p, EXPR_GROUP);
+  expr->group.expr = e;
+  return expr;
 }
 
 /////////////////////////////////////////////////////
 // Statements
-AST *
+Stmt *
 stmt_alloc(Parser *p, Stmt_Kind kind)
 {
-  AST *node = ast_alloc(p);
-  node->kind = AST_STMT;
-  node->stmt.kind = kind;
-  return node;
+  Stmt *s = push_struct(p->arena, Stmt);
+  s->kind = kind;
+  return s;
 }
 
-AST *
+Stmt *
 stmt_expr(Parser *p, Expr *e)
 {
-  AST *node = stmt_alloc(p, STMT_KIND_EXPR);
-  node->stmt.expr = e;
-  return node;
+  Stmt *s = stmt_alloc(p, STMT_EXPR);
+  s->expr = e;
+  return s;
 }
 
 // TODO: for testing
@@ -203,9 +201,9 @@ print_stmt(char *buf, usize buf_size, Stmt *s)
 
   switch (s->kind)
   {
-  case STMT_KIND_NULL: assert(!"NULL Statement"); break;
-  case STMT_KIND_EXPR:
-    print_expr(buf, buf_size, s->expr);
+  case STMT_NULL: assert(!"NULL Statement"); break;
+  case STMT_EXPR:
+    n += print_expr(buf, buf_size, s->expr);
     break;
   default:
     assert(!"TODO");
@@ -218,13 +216,13 @@ print_stmt(char *buf, usize buf_size, Stmt *s)
 internal void
 ast_test(Parser *p)
 {
-  // AST *int_literal = expr_integer_lit(p, 123);
-  // AST *float_literal = expr_float_lit(p, 45.67);
+  // Expr *int_literal = expr_integer_lit(p, 123);
+  // Expr *float_literal = expr_float_lit(p, 45.67);
 
-  // AST *unary = expr_unary(p, make_token('-'), &int_literal->expr);
-  // AST *group = expr_group(p, &float_literal->expr);
+  // Expr *unary = expr_unary(p, make_token('-'), &int_literal->expr);
+  // Expr *group = expr_group(p, &float_literal->expr);
 
-  // AST *e = expr_binary(
+  // Expr *e = expr_binary(
   //   p,
   //   &unary->expr,
   //   make_token('*'),
