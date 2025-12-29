@@ -27,6 +27,7 @@ ternary:
 
 #define TOKEN_LIST(X) \
   X(IDENT)            \
+  X(ARROW)            \
   X(EQ)               \
   X(NEQ)              \
   X(GTEQ)             \
@@ -70,6 +71,7 @@ ternary:
   X(IF)               \
   X(ELSE)             \
   X(FOR)              \
+  X(DO)               \
   X(WHILE)            \
   X(SWITCH)           \
   X(CASE)             \
@@ -80,7 +82,7 @@ ternary:
   X(UNION)            \
   X(ENUM)             \
   X(STRING)           \
-  X(FN)               \
+  X(PROC)             \
   X(VAR)              \
   X(CONST)            \
   X(SIZE_OF)          \

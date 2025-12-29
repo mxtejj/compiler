@@ -3,6 +3,22 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+Type_Spec *
+type_alloc(Parser *p, Type_Spec_Kind kind)
+{
+  Type_Spec *t = push_struct(p->arena, Type_Spec);
+  t->kind = kind;
+  return t;
+}
+
+Decl *
+decl_alloc(Parser *p, Decl_Kind kind)
+{
+  Decl *decl = push_struct(p->arena, Decl);
+  decl->kind = kind;
+  return decl;
+}
+
 Expr *
 expr_alloc(Parser *p, Expr_Kind kind)
 {

@@ -420,6 +420,7 @@ lexer_parse_ident_or_keyword(Lexer *l)
     { .kind = TOKEN_IF,        .value = S("if") },
     { .kind = TOKEN_ELSE,      .value = S("else") },
     { .kind = TOKEN_FOR,       .value = S("for") },
+    { .kind = TOKEN_DO,        .value = S("do") },
     { .kind = TOKEN_WHILE,     .value = S("while") },
     { .kind = TOKEN_SWITCH,    .value = S("switch") },
     { .kind = TOKEN_CASE,      .value = S("case") },
@@ -432,7 +433,7 @@ lexer_parse_ident_or_keyword(Lexer *l)
     { .kind = TOKEN_ENUM,      .value = S("enum") },
     { .kind = TOKEN_STRING,    .value = S("string") },
 
-    { .kind = TOKEN_FN,        .value = S("fn") },
+    { .kind = TOKEN_PROC,      .value = S("proc") },
     { .kind = TOKEN_VAR,       .value = S("var") },
     { .kind = TOKEN_CONST,     .value = S("const") },
 
@@ -550,6 +551,11 @@ lexer_next(Lexer *l)
     {
       lexer_eat(l);
       t = lexer_make_token(l, TOKEN_SUB_ASSIGN);
+    }
+    else if (lexer_can_peek(l) && lexer_peek(l) == '>')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_ARROW);
     }
     else
     {

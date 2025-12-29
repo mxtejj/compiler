@@ -86,8 +86,8 @@ typedef double f64;
 #define int_from_ptr(p) (unsigned long long)((char*)p - (char*)0)
 #define ptr_from_int(n) (void*)((char*)0 + (n))
 
-#define member(T, m) (((T*)0)->m)
-#define offset_of_member(T, m) int_from_ptr(&member(T, m))
+#define Member(T, m) (((T*)0)->m)
+#define offset_of_member(T, m) int_from_ptr(&Member(T, m))
 #define cast_from_member(T, m)
 
 #define MIN(a, b) (((a)<(b))?(a):(b))

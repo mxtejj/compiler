@@ -91,7 +91,7 @@ main(int argc, char **argv)
     "}\n"
     "\n"
     "\n"
-    "fn main()\n"
+    "proc main()\n"
     "{\n"
    // "  var a = 18446744073709551616;\n"
     "  var hex = 0xCAFEBABE;\n"
@@ -179,8 +179,8 @@ main(int argc, char **argv)
 
     expect_token('}');
 
-    // fn main()
-    expect_token(TOKEN_FN);
+    // proc main()
+    expect_token(TOKEN_PROC);
     expect_token(TOKEN_IDENT);
     expect_token('(');
     expect_token(')');
@@ -338,7 +338,7 @@ main(int argc, char **argv)
       Lexer l = lexer_init(test.input);
       Parser p = parser_init(&l);
 
-      Expr *e = parse_expression(&p);
+      Expr *e = parse_expr(&p);
       usize n = print_expr(buf, sizeof(buf), e);
 
       printf("%.*s  " CLR_GRN "%-*s=>" CLR_YEL "  ", strf(l.source), (int)(padding - l.source.count), "");

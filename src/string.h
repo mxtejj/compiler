@@ -17,4 +17,5 @@ raddbg_type_view(String, array(data, count));
 
 String str_init(Arena *a, u64 count);
 String str_view(String s, u64 start, u64 end);
+String str_copy(Arena *a, String s);
 bool str_equal(String a, String b);

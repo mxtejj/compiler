@@ -37,6 +37,7 @@ enum Stmt_Kind
   STMT_NULL,
   STMT_BLOCK,
   STMT_IF,
+  STMT_DO_WHILE,
   STMT_WHILE,
   STMT_FOR,
   STMT_SWITCH,
@@ -50,6 +51,14 @@ enum Stmt_Kind
 
 typedef struct Stmt Stmt;
 typedef struct Expr Expr;
+typedef struct Stmt_List Stmt_List;
+typedef struct Decl Decl;
+
+struct Stmt_List
+{
+  Stmt *first;
+  Stmt *last;
+};
 
 struct Stmt
 {
@@ -60,21 +69,26 @@ struct Stmt
 
   union
   {
-    // struct
-    // {
-    //   // List of N statements
-    //   // Stmt_Node node;
-    // }
-    // block;
+    struct
+    {
+      Stmt_List stmts;
+    }
+    block;
 
     struct
     {
       Expr *cond;
-      Stmt *then_stmt;
-      Stmt *else_stmt;
-      Stmt *body; // BLOCK
+      Stmt *then_block;
+      Stmt *else_stmt; // NULL, STMT_IF or STMT_BLOCK
     }
     if0;
+
+    struct
+    {
+      Expr *cond;
+      Stmt *body;
+    }
+    do_while;
 
     struct
     {
@@ -94,12 +108,12 @@ struct Stmt
 
     struct
     {
-      Expr *value;
+      Expr *expr;
     }
     return0;
 
     Expr *expr;
-    // TODO: decl
+    Decl *decl;
   };
 };
 // raddbg_type_view(Stmt,
@@ -110,13 +124,6 @@ struct Stmt
 //                  kind == STMT_EXPR   ? expr :
 //                  $);
 
-typedef struct Stmt_List Stmt_List;
-struct Stmt_List
-{
-  Stmt *first;
-  Stmt *last;
-};
-
 Stmt *stmt_alloc(Parser *p, Stmt_Kind kind);
 Stmt *stmt_expr(Parser *p, Expr *e);
 
@@ -126,17 +133,63 @@ typedef enum Type_Spec_Kind Type_Spec_Kind;
 enum Type_Spec_Kind
 {
   TYPE_SPEC_NULL,
-  TYPE_SPEC_NAME,
-  TYPE_SPEC_FUNC,
-  TYPE_SPEC_ARRAY,
-  TYPE_SPEC_PTR,
+  TYPE_SPEC_NAME,  // en: Entity
+  TYPE_SPEC_PROC,  // update: proc(Entity)
+  TYPE_SPEC_ARRAY, // entity_pair: [2]Entity
+  TYPE_SPEC_SLICE, // entities: []Entity
+  TYPE_SPEC_PTR,   // en: *Entity
 };
 
 typedef struct Type_Spec Type_Spec;
+
+typedef struct Type_Spec_List Type_Spec_List;
+struct Type_Spec_List
+{
+  Type_Spec *first;
+  Type_Spec *last;
+};
+
 struct Type_Spec
 {
   Type_Spec_Kind kind;
+
+  Type_Spec *next;
+  Type_Spec *prev;
+
+  union
+  {
+    String name;
+
+    struct
+    {
+      Type_Spec_List params;
+      u32 param_count;
+      Type_Spec *ret;
+    }
+    proc;
+
+    struct
+    {
+      Expr      *count;
+      Type_Spec *elem;
+    }
+    array;
+
+    struct
+    {
+      Type_Spec *elem;
+    }
+    slice;
+
+    struct
+    {
+      Type_Spec *pointee;
+    }
+    ptr;
+  };
 };
+
+Type_Spec *type_alloc(Parser *p, Type_Spec_Kind kind);
 
 /////////////////////////////////////////////////////
 // DECLARATIONS
@@ -146,18 +199,37 @@ enum Decl_Kind
 {
   DECL_NULL,
   DECL_PROC,
-  DECL_AGGR, // union or struct
+  DECL_STRUCT,
+  DECL_UNION,
   DECL_ENUM,
   DECL_VAR,
   DECL_CONST,
 };
 
+typedef struct Proc_Param Proc_Param;
+struct Proc_Param
+{
+  Proc_Param *next;
+  Proc_Param *prev;
+
+  String     name;
+  Type_Spec *type;
+};
+
+typedef struct Param_List Param_List;
+struct Param_List
+{
+  Proc_Param *first;
+  Proc_Param *last;
+};
+
 typedef struct Decl_Proc Decl_Proc;
 struct Decl_Proc
 {
-  String name;
-  // Proc_Params
-  Type_Spec *ret;
+  String      name;
+  Param_List  params;
+  Type_Spec  *ret;
+  Stmt       *body;
 };
 
 typedef struct Decl_Aggr Decl_Aggr;
@@ -166,25 +238,45 @@ struct Decl_Aggr
   String name;
 };
 
+typedef struct Enum_Member Enum_Member;
+struct Enum_Member
+{
+  Enum_Member *next;
+  Enum_Member *prev;
+  String       name;
+  Expr        *value;
+};
+
+typedef struct Enum_Member_List Enum_Member_List;
+struct Enum_Member_List
+{
+  Enum_Member *first;
+  Enum_Member *last;
+};
+
 typedef struct Decl_Enum Decl_Enum;
 struct Decl_Enum
 {
-  String name;
+  String           name;
+  Enum_Member_List members;
 };
 
 typedef struct Decl_Var Decl_Var;
 struct Decl_Var
 {
-  String name;
+  String     name;
+  Type_Spec *type;
+  Expr      *expr;
 };
 
 typedef struct Decl_Const Decl_Const;
 struct Decl_Const
 {
-  String name;
+  String     name;
+  Type_Spec *type;
+  Expr      *expr;
 };
 
-typedef struct Decl Decl;
 struct Decl
 {
   Decl_Kind kind;
