@@ -72,7 +72,7 @@ expr_nil_lit(Parser *p)
 }
 
 Expr *
-expr_string_lit(Parser *p, String s)
+expr_string_lit(Parser *p, String8 s)
 {
   Expr *expr = expr_alloc(p, EXPR_STRING_LITERAL);
   expr->literal.string = s;
@@ -145,7 +145,7 @@ print_expr(char *buf, usize buf_size, Expr *e)
   {
   case EXPR_NULL: n += snprintf(buf + n, buf_size - n, "<NULL>\n"); break;
   case EXPR_IDENT:
-    n += snprintf(buf + n, buf_size - n, "%.*s", strf(e->ident));
+    n += snprintf(buf + n, buf_size - n, "%.*s", str8_varg(e->ident));
     break;
   case EXPR_UNARY:
     if (e->unary.op.kind < 128)
@@ -154,7 +154,7 @@ print_expr(char *buf, usize buf_size, Expr *e)
     }
     else
     {
-      n += snprintf(buf + n, buf_size - n, "(%.*s ", strf(e->unary.op.lexeme));
+      n += snprintf(buf + n, buf_size - n, "(%.*s ", str8_varg(e->unary.op.lexeme));
     }
     n += print_expr(buf + n, buf_size - n, e->unary.right);
     n += snprintf(buf + n, buf_size - n, ")");
@@ -166,7 +166,7 @@ print_expr(char *buf, usize buf_size, Expr *e)
     }
     else
     {
-      n += snprintf(buf + n, buf_size - n, "(%.*s ", strf(e->binary.op.lexeme));
+      n += snprintf(buf + n, buf_size - n, "(%.*s ", str8_varg(e->binary.op.lexeme));
     }
     n += print_expr(buf + n, buf_size - n, e->binary.left);
     n += snprintf(buf + n, buf_size - n, " ");
@@ -186,7 +186,7 @@ print_expr(char *buf, usize buf_size, Expr *e)
     n += snprintf(buf + n, buf_size - n, "nil");
     break;
   case EXPR_STRING_LITERAL:
-    n += snprintf(buf + n, buf_size - n, "%.*s", strf(e->literal.string));
+    n += snprintf(buf + n, buf_size - n, "%.*s", str8_varg(e->literal.string));
     break;
   case EXPR_INTEGER_LITERAL:
     n += snprintf(buf + n, buf_size - n, "%llu", e->literal.integer);

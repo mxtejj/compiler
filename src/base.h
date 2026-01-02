@@ -46,6 +46,8 @@ typedef double f64;
 # define BUILD_DEBUG 1
 #endif
 
+#include "modified_stb_sprintf.h"
+
 #define statement(s) do { s } while (0)
 
 #if COMPILER_MSVC
@@ -64,10 +66,10 @@ typedef double f64;
     if (!(x))                                                                    \
     {                                                                            \
       printf(CLR_RED "Assertion hit: " CLR_RESET "%s:%d\n", __FILE__, __LINE__); \
-      printf(CLR_YEL "\t%s\n" CLR_RESET, stringify(x));                          \
+      printf(CLR_YEL "\t%s\n" CLR_RESET, stringify((x)));                        \
       trap();                                                                    \
     }                                                                            \
-  } while (0);
+  } while (0)
 #else
 # define assert(c)
 #endif
@@ -137,6 +139,31 @@ typedef double f64;
                                          ((n)->next->prev=(n)->prev,\
                                          (n)->prev->next=(n)->next)))
 #define dll_remove(f,l,n) dll_remove_np(f,l,n,next,prev)
+
+// singly-linked, doubly-headed lists
+#define sll_queue_push_n(f,l,n,next) ((f)==0?\
+                                      (f)=(l)=(n):\
+                                      ((l)->next=(n),(l)=(n)),\
+                                      (n)->next=0)
+#define sll_queue_push(f,l,n) sll_queue_push_n(f,l,n,next)
+
+#define sll_queue_push_front_n(f,l,n,next) ((f)==0?\
+                                            ((f)=(l)=(n),(n)->next=0):\
+                                            ((n)->next=(f),(f)=(n)))
+#define sll_queue_push_front(f,l,n) sll_queue_push_front_n(f,l,n,next)
+
+#define sll_queue_pop_n(f,l,next) ((f)==(l)?\
+                                   (f)=(l)=0:\
+                                   (f)=(f)->next)
+#define sll_queue_pop(f,l) sll_queue_pop(f,l,next)
+
+// singly-linked, singly-headed lists
+#define sll_stack_push_n(f,l,next) ((n)->next=(f),(f)=(n))
+#define sll_stack_push(f,l) sll_stack_push_n(f,l,next)
+
+#define sll_stack_pop_n(f,next) ((f)==0?0:\
+                                ((f)=(f)->next))
+#define sll_stack_pop(f) sll_stack_pop(f,next)
 
 ////////////////////////////
 // :keywords

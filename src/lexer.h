@@ -1,26 +1,8 @@
 #pragma once
 
 #include "base.h"
-#include "string.h"
+#include "strings.h"
 #include "arena.h"
-
-/*
-
-name
-
-unary:
-+
--
-
-binary:
-/
-*
-[TODO: BIT OPS...]
-
-ternary:
-? :
-
-*/
 
 #define X_ENUM(name) name,
 #define X_STRING(name) #name,
@@ -101,22 +83,22 @@ enum Token_Kind
 #undef X
 };
 
-String str_from_token_kind(Token_Kind kind);
+internal String8 str_from_token_kind(Token_Kind kind);
 
 typedef union Literal_Value Literal_Value;
 union Literal_Value
 {
-  String string;
-  u64    integer;
-  f64    floating;
-  bool   boolean;
+  String8 string;
+  u64     integer;
+  f64     floating;
+  bool    boolean;
 };
 
 typedef struct Token Token;
 struct Token
 {
   Token_Kind kind;
-  String     lexeme;
+  String8     lexeme;
   Literal_Value value;
 };
 
@@ -124,14 +106,13 @@ typedef struct Lexer Lexer;
 struct Lexer
 {
   Arena *arena;
-  String source;
+  String8 source;
   u64 start;
   u64 cursor;
   u64 line;
   u64 bol; // beginning of line
 };
 
-Lexer lexer_init(String source);
-void  lexer_fini(Lexer *l);
-
-Token lexer_next(Lexer *l);
+internal Lexer lexer_init(String8 source);
+internal void  lexer_fini(Lexer *l);
+internal Token lexer_next(Lexer *l);

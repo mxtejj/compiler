@@ -72,7 +72,7 @@ expect(Parser *p, Token_Kind kind)
     advance(p);
     return true;
   }
-  printf("Expected '%.*s', got '%.*s'", strf(str_from_token_kind(kind)), strf(str_from_token_kind(p->curr.kind)));
+  printf("Expected '%.*s', got '%.*s'", str8_varg(str_from_token_kind(kind)), str8_varg(str_from_token_kind(p->curr.kind)));
   return false;
 }
 
@@ -87,15 +87,15 @@ match(Parser *p, Token_Kind kind)
   return false;
 }
 
-internal String
+internal String8
 parse_ident(Parser *p)
 {
   if (expect(p, TOKEN_IDENT))
   {
-    return str_copy(p->arena, p->prev.lexeme);
+    return str8_copy(p->arena, p->prev.lexeme);
   }
   assert(0);
-  return (String){0};
+  return (String8){0};
 }
 
 internal Expr *
@@ -136,7 +136,7 @@ parse_expr_primary(Parser *p)
     return expr_group(p, expr);
   }
 
-  printf("%.*s\n", strf(p->lexer->source));
+  printf("%.*s\n", str8_varg(p->lexer->source));
   assert(!"Expected expression");
   return NULL;
 }
@@ -496,7 +496,7 @@ parse_stmt_decl(Parser *p)
     assert(!"parse_stmt_decl called without var/const");
   }
 
-  String name = parse_ident(p);
+  String8 name = parse_ident(p);
 
   Type_Spec *type = NULL;
   Expr      *init = NULL;
@@ -522,17 +522,20 @@ parse_stmt_decl(Parser *p)
 
   if (is_const)
   {
-    s->decl->const0.name = name;
+    s->decl->kind = DECL_CONST;
+    s->decl->name = name;
     s->decl->const0.type = type;
     s->decl->const0.expr = init;
   }
   else
   {
-    s->decl->var.name = name;
+    s->decl->kind = DECL_VAR;
+    s->decl->name = name;
     s->decl->var.type = type;
     s->decl->var.expr = init;
   }
 
+  assert(s->decl);
   return s;
 }
 
@@ -579,12 +582,12 @@ parse_statements(Parser *p)
 internal Decl *
 parse_decl_enum(Parser *p)
 {
-  String name = parse_ident(p);
+  String8 name = parse_ident(p);
 
   expect(p, '{');
 
   Decl *decl = decl_alloc(p, DECL_ENUM);
-  decl->enum0.name = name;
+  decl->name = name;
 
   Enum_Member_List *members = &decl->enum0.members;
   while (!parser_check(p, '}'))
@@ -614,13 +617,13 @@ internal Decl *
 parse_decl_var(Parser *p)
 {
   // var a = EXPR;
-  String name = parse_ident(p);
+  String8 name = parse_ident(p);
   expect(p, '=');
   Expr *expr = parse_expr(p);
   expect(p, ';');
 
   Decl *decl = decl_alloc(p, DECL_VAR);
-  decl->var.name = name;
+  decl->name = name;
   decl->var.expr = expr;
 
   return decl;
@@ -638,7 +641,7 @@ parse_decl_proc_param(Parser *p)
   return param;
 }
 
-internal String
+internal String8
 parse_type_name(Parser *p)
 {
   switch (p->curr.kind)
@@ -661,13 +664,13 @@ parse_type_name(Parser *p)
   case TOKEN_STRING:
   // user-defined types
   case TOKEN_IDENT:
-    String name = p->curr.lexeme;
+    String8 name = p->curr.lexeme;
     advance(p);
-    return str_copy(p->arena, name);
+    return str8_copy(p->arena, name);
   }
 
   assert(!"Expected type name");
-  return (String){0};
+  return (String8){0};
 }
 
 internal Type_Spec *
@@ -746,11 +749,11 @@ parse_decl_proc(Parser *p)
   }
   */
   // proc main(argc: int, argv: []cstring) -> int { return 0; }
-  String name = parse_ident(p);
+  String8 name = parse_ident(p);
   expect(p, '(');
 
   Decl *decl = decl_alloc(p, DECL_PROC);
-  decl->proc.name = name;
+  decl->name = name;
 
   Param_List *params = &decl->proc.params;
 
@@ -781,7 +784,7 @@ parse_decl_proc(Parser *p)
 // internal Decl *
 // parse_decl_struct(Parser *p)
 // {
-//   String name = parse_ident(p);
+//   String8 name = parse_ident(p);
 
 //   expect(p, '{');
 
@@ -842,7 +845,7 @@ internal void
 parser_test()
 {
   {
-    String source = S(
+    String8 source = S(
       "x = 5 + 3;\n"
       "x = -a;\n"
       "x = (2 + 3) * 4;\n"
@@ -856,7 +859,7 @@ parser_test()
 
     Stmt_List list = parse_statements(&p);
 
-    for (Stmt *it = list.first; it != list.last; it = it->next)
+    for (Stmt *it = list.first; it != NULL; it = it->next)
     {
       char buf[128];
       usize buf_size = sizeof(buf);
@@ -869,7 +872,7 @@ parser_test()
   printf("\n");
 
   {
-    String source = S(
+    String8 source = S(
       // "var foo = a ? a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m <= n*(p+q)/r : 0;\n"
       // "var foo = a ? 1 : 0;\n"
       // "var foo = a ? b + c : 0;\n"
@@ -893,9 +896,9 @@ parser_test()
       "\n"
       "proc make_person(name: string, age: int) -> Person\n"
       "{\n"
-      "  var person = Person{};\n"
-      "  person.name = name;\n"
-      "  person.age  = age;\n"
+      "  var person: Person;\n"
+      // "  person.name = name;\n" // TODO
+      // "  person.age  = age;\n"
       "  return person;\n"
       "}\n"
     );
@@ -905,7 +908,9 @@ parser_test()
 
     Decl_List list = parse_declarations(&p);
 
-    for (Decl *it = list.first; it != list.last; it = it->next)
+    // IMPORTANT TODO: STMT_BLOCK has stmts list all NULL even though it was parsed????
+
+    for (Decl *it = list.first; it != NULL; it = it->next)
     {
       int a = 5;
       // char buf[128];

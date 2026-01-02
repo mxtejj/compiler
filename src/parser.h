@@ -5,7 +5,10 @@
 #include "base.h"
 #include "string.h"
 
-//////////////////////////////////////////////////
+// TODO:
+// [ ] use intrusive singly-linked list for AST nodes (stmt, expr, decl)
+
+////////////////////////////////
 // Parser
 typedef struct Parser Parser;
 struct Parser
@@ -18,7 +21,7 @@ struct Parser
 
 Parser parser_init(Lexer *l);
 
-//////////////////////////////////////////////////
+////////////////////////////////
 // AST
 
 // typedef enum AST_Kind AST_Kind;
@@ -127,7 +130,7 @@ struct Stmt
 Stmt *stmt_alloc(Parser *p, Stmt_Kind kind);
 Stmt *stmt_expr(Parser *p, Expr *e);
 
-/////////////////////////////////////////////////////
+///////////////////////////////////
 // TYPE SPECIFIERS
 typedef enum Type_Spec_Kind Type_Spec_Kind;
 enum Type_Spec_Kind
@@ -158,7 +161,7 @@ struct Type_Spec
 
   union
   {
-    String name;
+    String8 name;
 
     struct
     {
@@ -191,7 +194,7 @@ struct Type_Spec
 
 Type_Spec *type_alloc(Parser *p, Type_Spec_Kind kind);
 
-/////////////////////////////////////////////////////
+///////////////////////////////////
 // DECLARATIONS
 
 typedef enum Decl_Kind Decl_Kind;
@@ -212,7 +215,7 @@ struct Proc_Param
   Proc_Param *next;
   Proc_Param *prev;
 
-  String     name;
+  String8    name;
   Type_Spec *type;
 };
 
@@ -226,7 +229,6 @@ struct Param_List
 typedef struct Decl_Proc Decl_Proc;
 struct Decl_Proc
 {
-  String      name;
   Param_List  params;
   Type_Spec  *ret;
   Stmt       *body;
@@ -235,7 +237,7 @@ struct Decl_Proc
 typedef struct Decl_Aggr Decl_Aggr;
 struct Decl_Aggr
 {
-  String name;
+  int todo;
 };
 
 typedef struct Enum_Member Enum_Member;
@@ -243,7 +245,7 @@ struct Enum_Member
 {
   Enum_Member *next;
   Enum_Member *prev;
-  String       name;
+  String8      name;
   Expr        *value;
 };
 
@@ -257,14 +259,12 @@ struct Enum_Member_List
 typedef struct Decl_Enum Decl_Enum;
 struct Decl_Enum
 {
-  String           name;
   Enum_Member_List members;
 };
 
 typedef struct Decl_Var Decl_Var;
 struct Decl_Var
 {
-  String     name;
   Type_Spec *type;
   Expr      *expr;
 };
@@ -272,7 +272,6 @@ struct Decl_Var
 typedef struct Decl_Const Decl_Const;
 struct Decl_Const
 {
-  String     name;
   Type_Spec *type;
   Expr      *expr;
 };
@@ -280,6 +279,7 @@ struct Decl_Const
 struct Decl
 {
   Decl_Kind kind;
+  String8   name;
 
   Decl *next;
   Decl *prev;
@@ -303,7 +303,7 @@ struct Decl_List
 
 Decl *decl_alloc(Parser *p, Decl_Kind kind);
 
-/////////////////////////////////////////////////////
+///////////////////////////////////
 // EXPRESSIONS
 
 typedef enum Expr_Kind Expr_Kind;
@@ -328,7 +328,7 @@ struct Expr
 
   union
   {
-    String ident;
+    String8 ident;
 
     struct
     {
@@ -392,7 +392,7 @@ Expr *expr_unary(Parser *p, Token op, Expr *right);
 Expr *expr_binary(Parser *p, Expr *left, Token op, Expr *right);
 Expr *expr_ternary(Parser *p, Expr *cond, Expr *then, Expr *else_);
 Expr *expr_nil_lit(Parser *p);
-Expr *expr_string_lit(Parser *p, String s);
+Expr *expr_string_lit(Parser *p, String8 s);
 Expr *expr_integer_lit(Parser *p, u64 n);
 Expr *expr_float_lit(Parser *p, f64 f);
 Expr *expr_bool_lit(Parser *p, bool b);

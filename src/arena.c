@@ -107,8 +107,10 @@ arena_push_(Arena *arena, u64 size, b32 non_zero, u64 align)
   if (new_pos > curr->commit_pos)
   {
     u64 new_commit_pos = new_pos;
-    new_commit_pos += curr->commit_size - 1;
-    new_commit_pos -= new_commit_pos % curr->commit_size;
+    // new_commit_pos += curr->commit_size - 1;
+    // new_commit_pos -= new_commit_pos % curr->commit_size;
+    // (((u64)(new_commit_pos) + ((u64)(curr->commit_size) - 1)) & (~((u64)(curr->commit_size) - 1)))
+    new_commit_pos = align_up_pow2(new_commit_pos, curr->commit_size);
     new_commit_pos = MIN(new_commit_pos, curr->reserve_size);
 
     u64 commit_size = new_commit_pos - curr->commit_pos;

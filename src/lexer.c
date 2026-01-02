@@ -11,7 +11,7 @@
 // Floating literal
 // Character literal
 
-String
+internal String8
 str_from_token_kind(Token_Kind kind)
 {
   local_persist u8 buf[64];
@@ -19,9 +19,9 @@ str_from_token_kind(Token_Kind kind)
 
   switch (kind)
   {
-  case TOKEN_EOF: return str_comp("TOKEN_EOF");
+  case TOKEN_EOF: return str8_lit("TOKEN_EOF");
 
-  #define X(name) case TOKEN_##name: return str_comp(stringify(glue(TOKEN_, name)));
+  #define X(name) case TOKEN_##name: return str8_lit(stringify(glue(TOKEN_, name)));
     TOKEN_LIST(X)
   #undef X
 
@@ -35,7 +35,7 @@ str_from_token_kind(Token_Kind kind)
       n = snprintf(buf, sizeof(buf), "<ASCII %c>", kind);
     }
   }
-  return (String){ .data = buf, .count = n };
+  return str8(buf, n);
 }
 
 internal u64
@@ -74,8 +74,8 @@ lexer_syntax_error(Lexer *l, const char *fmt, ...)
   va_end(args);
 }
 
-Lexer
-lexer_init(String source)
+internal Lexer
+lexer_init(String8 source)
 {
   Lexer l = {0};
   l.arena  = arena_alloc(GB(1), MB(1), 0);
@@ -83,7 +83,7 @@ lexer_init(String source)
   return l;
 }
 
-void
+internal void
 lexer_fini(Lexer *l)
 {
   *l = (Lexer){0};
@@ -147,7 +147,7 @@ lexer_make_token(Lexer *l, Token_Kind kind)
   return (Token)
   {
     .kind = kind,
-    .lexeme = str_view(l->source, l->start, l->cursor),
+    .lexeme = str8_substr(l->source, l->start, l->cursor),
   };
 }
 
@@ -218,8 +218,7 @@ lexer_parse_string(Lexer *l)
   }
 
   Token t = lexer_make_token(l, TOKEN_STRING_LITERAL);
-  t.value.string = str_init(g_arena, string_len);
-  mem_copy(t.value.string.data, string_buf, string_len);
+  t.value.string = str8_copy(g_arena, str8(string_buf, string_len));
 
   arena_delete(string_arena);
 
@@ -387,7 +386,7 @@ lexer_parse_ident_or_keyword(Lexer *l)
   struct Keyword
   {
     Token_Kind kind;
-    String     value;
+    String8    value;
   };
 
   local_persist Keyword keywords[] =
@@ -453,7 +452,7 @@ lexer_parse_ident_or_keyword(Lexer *l)
   // TODO: String interning for faster string checks
   for (u32 i = 0; i < array_count(keywords); i++)
   {
-    if (str_equal(t.lexeme, keywords[i].value))
+    if (str8_equal(t.lexeme, keywords[i].value))
     {
       t.kind = keywords[i].kind;
       break;

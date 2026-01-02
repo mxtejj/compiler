@@ -5,7 +5,7 @@
 #include "base.h"
 #include "arena.h"
 #include "lexer.h"
-#include "string.h"
+#include "strings.h"
 #include "os.h"
 #include "parser.h"
 
@@ -15,12 +15,17 @@
 #define RADDBG_MARKUP_IMPLEMENTATION
 #include "raddbg_markup.h"
 
+#define STB_SPRINTF_IMPLEMENTATION
+#define STB_SPRINTF_STATIC
+#include "modified_stb_sprintf.h"
+
 // SOURCE INCLUDES
 #include "arena.c"
 #include "lexer.c"
-#include "string.c"
+#include "strings.c"
 #include "ast.c"
 #include "parser.c"
+#include "resolve.c"
 #ifdef _WIN32
 # include "os_win32.c"
 #else
@@ -83,7 +88,7 @@ main(int argc, char **argv)
 
   g_arena = arena_alloc(GB(1), MB(8), 0);
 
-  String source = S(
+  String8 source = S(
     "struct Person\n"
     "{\n"
     "  name: string;\n"
@@ -129,7 +134,7 @@ main(int argc, char **argv)
     Token t;
     while ((t = lexer_next(&l)).kind != TOKEN_EOF)
     {
-      printf("%.*s %.*s", strf(str_from_token_kind(t.kind)), strf(t.lexeme));
+      printf("%.*s %.*s", str8_varg(str_from_token_kind(t.kind)), str8_varg(t.lexeme));
       switch (t.kind)
       {
       case TOKEN_INTEGER_LITERAL:
@@ -139,7 +144,7 @@ main(int argc, char **argv)
         printf(" (value=%f)", t.value.floating);
         break;
       case TOKEN_STRING_LITERAL:
-        printf(" (value=%.*s)", strf(t.value.string));
+        printf(" (value=%.*s)", str8_varg(t.value.string));
         break;
       }
       printf("\n");
@@ -157,7 +162,7 @@ main(int argc, char **argv)
     #define expect_token(x) \
       do { \
         t = lexer_next(&l); \
-        printf("%3d: expecting %s, got %.*s (%.*s)\n", __LINE__, #x, strf(str_from_token_kind(t.kind)), strf(t.lexeme)); \
+        printf("%3d: expecting %s, got %.*s (%.*s)\n", __LINE__, #x, str8_varg(str_from_token_kind(t.kind)), str8_varg(t.lexeme)); \
         assert(t.kind == (x)); \
       } while (0); \
 
@@ -235,8 +240,8 @@ main(int argc, char **argv)
     typedef struct Expr_Test_Case Expr_Test_Case;
     struct Expr_Test_Case
     {
-      String input;
-      String output;
+      String8 input;
+      String8 output;
     };
 
     Expr_Test_Case expr_tests[] =
@@ -341,13 +346,13 @@ main(int argc, char **argv)
       Expr *e = parse_expr(&p);
       usize n = print_expr(buf, sizeof(buf), e);
 
-      printf("%.*s  " CLR_GRN "%-*s=>" CLR_YEL "  ", strf(l.source), (int)(padding - l.source.count), "");
+      printf("%.*s  " CLR_GRN "%-*s=>" CLR_YEL "  ", str8_varg(l.source), (int)(padding - l.source.count), "");
       printf("%.*s", (int)n, buf);
       printf("\n" CLR_RESET);
 
       if (!mem_equal(buf, test.output.data, n))
       {
-        printf("Expected " CLR_GRN "%.*s" CLR_RESET ", got " CLR_RED "%.*s\n" CLR_RESET, strf(test.output), (int)n, buf);
+        printf("Expected " CLR_GRN "%.*s" CLR_RESET ", got " CLR_RED "%.*s\n" CLR_RESET, str8_varg(test.output), (int)n, buf);
         assert(!"Expression test failed");
       }
     }
@@ -359,6 +364,12 @@ main(int argc, char **argv)
 
   {
     parser_test();
+  }
+
+  printf("\n");
+
+  {
+    resolve_test();
   }
 
   arena_delete(g_arena);
