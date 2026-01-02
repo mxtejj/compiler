@@ -19,7 +19,7 @@ struct Parser
   Token prev;
 };
 
-Parser parser_init(Lexer *l);
+internal Parser parser_init(Lexer *l);
 
 ////////////////////////////////
 // AST
@@ -127,8 +127,8 @@ struct Stmt
 //                  kind == STMT_EXPR   ? expr :
 //                  $);
 
-Stmt *stmt_alloc(Parser *p, Stmt_Kind kind);
-Stmt *stmt_expr(Parser *p, Expr *e);
+internal Stmt *stmt_alloc(Parser *p, Stmt_Kind kind);
+internal Stmt *stmt_expr(Parser *p, Expr *e);
 
 ///////////////////////////////////
 // TYPE SPECIFIERS
@@ -192,7 +192,7 @@ struct Type_Spec
   };
 };
 
-Type_Spec *type_alloc(Parser *p, Type_Spec_Kind kind);
+internal Type_Spec *type_spec_alloc(Parser *p, Type_Spec_Kind kind);
 
 ///////////////////////////////////
 // DECLARATIONS
@@ -385,15 +385,15 @@ struct Expr_List
   Expr *last;
 };
 
-Expr *expr_alloc(Parser *p, Expr_Kind kind);
+internal Expr *expr_alloc(Parser *p, Expr_Kind kind);
 
-Expr *expr_ident(Parser *p, Token ident);
-Expr *expr_unary(Parser *p, Token op, Expr *right);
-Expr *expr_binary(Parser *p, Expr *left, Token op, Expr *right);
-Expr *expr_ternary(Parser *p, Expr *cond, Expr *then, Expr *else_);
-Expr *expr_nil_lit(Parser *p);
-Expr *expr_string_lit(Parser *p, String8 s);
-Expr *expr_integer_lit(Parser *p, u64 n);
-Expr *expr_float_lit(Parser *p, f64 f);
-Expr *expr_bool_lit(Parser *p, bool b);
-Expr *expr_group(Parser *p, Expr *e);
+internal Expr *expr_ident(Parser *p, Token ident);
+internal Expr *expr_unary(Parser *p, Token op, Expr *right);
+internal Expr *expr_binary(Parser *p, Expr *left, Token op, Expr *right);
+internal Expr *expr_ternary(Parser *p, Expr *cond, Expr *then, Expr *else_);
+internal Expr *expr_nil_lit(Parser *p);
+internal Expr *expr_string_lit(Parser *p, String8 s);
+internal Expr *expr_integer_lit(Parser *p, u64 n);
+internal Expr *expr_float_lit(Parser *p, f64 f);
+internal Expr *expr_bool_lit(Parser *p, bool b);
+internal Expr *expr_group(Parser *p, Expr *e);

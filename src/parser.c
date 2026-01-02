@@ -27,7 +27,7 @@ advance(Parser *p);
 internal Type_Spec *
 parse_type(Parser *p);
 
-Parser
+internal Parser
 parser_init(Lexer *l)
 {
   Parser p = {0};
@@ -678,7 +678,7 @@ parse_type_prefix(Parser *p)
 {
   if (match(p, '*'))
   {
-    Type_Spec *t = type_alloc(p, TYPE_SPEC_PTR);
+    Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_PTR);
     t->ptr.pointee = parse_type_prefix(p);
     return t;
   }
@@ -686,7 +686,7 @@ parse_type_prefix(Parser *p)
   {
     if (!match(p, ']'))
     {
-      Type_Spec *t = type_alloc(p, TYPE_SPEC_ARRAY);
+      Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_ARRAY);
       t->array.count = parse_expr(p);
       expect(p, ']');
       t->array.elem  = parse_type_prefix(p);
@@ -694,14 +694,14 @@ parse_type_prefix(Parser *p)
     }
     else
     {
-      Type_Spec *t = type_alloc(p, TYPE_SPEC_SLICE);
+      Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_SLICE);
       t->slice.elem = parse_type_prefix(p);
       return t;
     }
   }
 
   // named type
-  Type_Spec *t = type_alloc(p, TYPE_SPEC_NAME);
+  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_NAME);
   t->name = parse_type_name(p);
   return t;
 }
@@ -710,7 +710,7 @@ internal Type_Spec *
 parse_type_proc(Parser *p)
 {
   // update: proc(...) -> [...]
-  Type_Spec *t = type_alloc(p, TYPE_SPEC_PROC);
+  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_PROC);
 
   expect(p, '(');
 

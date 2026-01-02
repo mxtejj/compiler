@@ -204,3 +204,19 @@ typedef double f64;
 #else
 # error no_inline not defined for this compiler.
 #endif
+
+#define STRUCT(name) \
+typedef struct name name; \
+struct name
+
+#define ENUM(name) \
+typedef enum name name; \
+enum name
+
+#define UNION(name) \
+typedef union name name; \
+union name
+
+#define ENUM_SIZE(name, backing) \
+typedef backing name; \
+enum

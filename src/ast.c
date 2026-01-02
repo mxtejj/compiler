@@ -3,15 +3,15 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-Type_Spec *
-type_alloc(Parser *p, Type_Spec_Kind kind)
+internal Type_Spec *
+type_spec_alloc(Parser *p, Type_Spec_Kind kind)
 {
   Type_Spec *t = push_struct(p->arena, Type_Spec);
   t->kind = kind;
   return t;
 }
 
-Decl *
+internal Decl *
 decl_alloc(Parser *p, Decl_Kind kind)
 {
   Decl *decl = push_struct(p->arena, Decl);
@@ -19,7 +19,7 @@ decl_alloc(Parser *p, Decl_Kind kind)
   return decl;
 }
 
-Expr *
+internal Expr *
 expr_alloc(Parser *p, Expr_Kind kind)
 {
   Expr *expr = push_struct(p->arena, Expr);
@@ -27,7 +27,7 @@ expr_alloc(Parser *p, Expr_Kind kind)
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_ident(Parser *p, Token ident)
 {
   Expr *expr = expr_alloc(p, EXPR_IDENT);
@@ -35,7 +35,7 @@ expr_ident(Parser *p, Token ident)
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_unary(Parser *p, Token op, Expr *right)
 {
   Expr *expr = expr_alloc(p, EXPR_UNARY);
@@ -44,7 +44,7 @@ expr_unary(Parser *p, Token op, Expr *right)
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_binary(Parser *p, Expr *left, Token op, Expr *right)
 {
   Expr *expr = expr_alloc(p, EXPR_BINARY);
@@ -54,7 +54,7 @@ expr_binary(Parser *p, Expr *left, Token op, Expr *right)
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_ternary(Parser *p, Expr *cond, Expr *then, Expr *else_)
 {
   Expr *expr = expr_alloc(p, EXPR_TERNARY);
@@ -64,14 +64,14 @@ expr_ternary(Parser *p, Expr *cond, Expr *then, Expr *else_)
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_nil_lit(Parser *p)
 {
   Expr *expr = expr_alloc(p, EXPR_NIL_LITERAL);
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_string_lit(Parser *p, String8 s)
 {
   Expr *expr = expr_alloc(p, EXPR_STRING_LITERAL);
@@ -79,7 +79,7 @@ expr_string_lit(Parser *p, String8 s)
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_integer_lit(Parser *p, u64 n)
 {
   Expr *expr = expr_alloc(p, EXPR_INTEGER_LITERAL);
@@ -87,7 +87,7 @@ expr_integer_lit(Parser *p, u64 n)
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_float_lit(Parser *p, f64 f)
 {
   Expr *expr = expr_alloc(p, EXPR_FLOAT_LITERAL);
@@ -95,7 +95,7 @@ expr_float_lit(Parser *p, f64 f)
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_bool_lit(Parser *p, bool b)
 {
   Expr *expr = expr_alloc(p, EXPR_BOOL_LITERAL);
@@ -103,7 +103,7 @@ expr_bool_lit(Parser *p, bool b)
   return expr;
 }
 
-Expr *
+internal Expr *
 expr_group(Parser *p, Expr *e)
 {
   Expr *expr = expr_alloc(p, EXPR_GROUP);
@@ -113,7 +113,7 @@ expr_group(Parser *p, Expr *e)
 
 /////////////////////////////////////////////////////
 // Statements
-Stmt *
+internal Stmt *
 stmt_alloc(Parser *p, Stmt_Kind kind)
 {
   Stmt *s = push_struct(p->arena, Stmt);
@@ -121,7 +121,7 @@ stmt_alloc(Parser *p, Stmt_Kind kind)
   return s;
 }
 
-Stmt *
+internal Stmt *
 stmt_expr(Parser *p, Expr *e)
 {
   Stmt *s = stmt_alloc(p, STMT_EXPR);
