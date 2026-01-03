@@ -83,8 +83,8 @@ report_error(Parser *p, const char *fmt, ...)
   va_end(args);
 
   // TODO: Make some errors non fatal
-  getchar();
-  os_exit(1);
+  // getchar();
+  // os_exit(1);
 }
 
 internal Token
@@ -116,7 +116,7 @@ expect(Parser *p, Token_Kind kind)
     advance(p);
     return true;
   }
-  printf("Expected '%.*s', got '%.*s'", str8_varg(str_from_token_kind(kind)), str8_varg(str_from_token_kind(p->curr.kind)));
+  report_error(p, "Expected '%.*s', got '%.*s'", str8_varg(str_from_token_kind(kind)), str8_varg(str_from_token_kind(p->curr.kind)));
   trap();
   return false;
 }
@@ -237,7 +237,7 @@ internal Expr *
 parse_expr_primary(Parser *p)
 {
   // implicit compound literals
-  if (match(p, '{'))
+  if ((p->expr_parse_flags & EXPR_ALLOW_COMPOUND) && match(p, '{'))
   {
     Compound_Arg_List args = {0};
 
@@ -259,7 +259,7 @@ parse_expr_primary(Parser *p)
   }
 
   // if (parser_check(p, TOKEN_IDENT) && peek(p, '{'))
-  if (is_type_start(p) && is_type_followed_by_lbrace(p))
+  if ((p->expr_parse_flags & EXPR_ALLOW_COMPOUND) && is_type_start(p) && is_type_followed_by_lbrace(p))
   {
     Type_Spec *type = parse_type(p);
     expect(p, '{');
@@ -663,6 +663,14 @@ parse_expr_assignment(Parser *p)
 }
 
 internal Expr *
+parse_expr_with_flags(Parser *p, Expr_Parse_Flags flags)
+{
+  p->expr_parse_flags = flags;
+  // return parse_expr(p);
+  return parse_expr_assignment(p);
+}
+
+internal Expr *
 parse_expr(Parser *p)
 {
   //
@@ -671,7 +679,8 @@ parse_expr(Parser *p)
   // In other words, detect a binary operator appearing at the beginning of an expression.
   // Report that as an error, but also parse and discard a right-hand operand with the appropriate precedence.
   //
-  return parse_expr_assignment(p);
+  // return parse_expr_assignment(p);
+  return parse_expr_with_flags(p, EXPR_ALLOW_COMPOUND);
 }
 
 /////////////////////////////////////////////////////
@@ -682,7 +691,8 @@ parse_stmt(Parser *p);
 internal Stmt *
 parse_stmt_expr(Parser *p)
 {
-  Expr *expr = parse_expr(p);
+  // Don't allow implicit compound literal
+  Expr *expr = parse_expr_with_flags(p, 0);
   expect(p, ';');
   return stmt_expr(p, expr);
 }
@@ -707,7 +717,7 @@ parse_stmt_if(Parser *p)
 {
   Stmt *s = stmt_alloc(p, STMT_IF);
 
-  s->if0.cond       = parse_expr(p);
+  s->if0.cond       = parse_expr_with_flags(p, 0);
   s->if0.then_block = parse_stmt_block(p);
   s->if0.else_stmt  = NULL;
 
@@ -733,7 +743,7 @@ parse_stmt_while(Parser *p)
 {
   Stmt *s = stmt_alloc(p, STMT_WHILE);
 
-  s->while0.cond = parse_expr(p);
+  s->while0.cond = parse_expr_with_flags(p, 0);
   s->while0.body = parse_stmt_block(p);
 
   return s;
@@ -753,7 +763,7 @@ parse_stmt_do_while(Parser *p)
 
   s->do_while.body = parse_stmt_block(p);
   expect(p, TOKEN_WHILE);
-  s->do_while.cond = parse_expr(p);
+  s->do_while.cond = parse_expr_with_flags(p, 0);
   expect(p, ';');
 
   return s;
@@ -853,6 +863,9 @@ parse_stmt_decl(Parser *p)
 internal Stmt *
 parse_stmt(Parser *p)
 {
+  if (parser_check(p, '{'))
+    return parse_stmt_block(p);
+
   // TODO switch-case
   if (match(p, TOKEN_IF))    return parse_stmt_if(p);
   if (match(p, TOKEN_DO))    return parse_stmt_do_while(p);
@@ -1028,7 +1041,8 @@ parse_type_proc(Parser *p)
   while (!match(p, ')'))
   {
     Type_Spec *param = parse_type(p);
-    assert(!"TODO: Push param list");
+    sll_queue_push(t->proc.params.first, t->proc.params.last, param);
+    t->proc.param_count += 1;
     match(p, ',');
   }
 
@@ -1164,6 +1178,48 @@ parser_test()
       "x = a > b ? 1 : 0;\n"
       "x = a && b;\n"
       "x = y = z = 42;\n"
+      "{\n"
+      "  a = 5;\n"
+      "  if a > b\n"
+      "  {\n"
+      "    x = a;\n"
+      "  }\n"
+      "  else if a > c\n"
+      "  {\n"
+      "    x = c;\n"
+      "  }\n"
+      "  else if c > a\n"
+      "  {\n"
+      "    x = a;\n"
+      "  }\n"
+      "  else\n"
+      "  {\n"
+      "    x = b;\n"
+      "  }\n"
+      "}\n"
+
+      "do\n"
+      "{\n"
+      "  a -= 1;\n"
+      "} while (a > b);\n"
+
+      "while !request_shutdown()\n"
+      "{\n"
+      "  var dt: f32 = 1.0 / 60.0;\n"
+      "  tick_game(dt);\n"
+      "}\n"
+
+      // TODO: This takes the array and gives me a slice of all elements
+      // or i can also do array[<lo>:<hi>]
+      // "return array[:];\n"
+      "return Person{\"Joe\", 53};\n"
+
+      "return [10]Person{};\n"
+
+      "var update_proc: proc(Entity);\n"
+
+      "break;\n"
+      "continue;\n"
     );
 
     Lexer l = lexer_init(source);
@@ -1173,11 +1229,17 @@ parser_test()
 
     for (Stmt *it = list.first; it != NULL; it = it->next)
     {
-      char buf[128];
-      usize buf_size = sizeof(buf);
-      usize n = print_stmt(buf, buf_size, it);
+      Arena_Temp scratch = arena_scratch_get(0, 0);
 
-      printf("%.*s\n", (int)n, buf);
+      String8List list = {0};
+
+      int indent = 0;
+      print_stmt(scratch.arena, &list, &indent, it);
+
+      String8 result = str8_list_join(scratch.arena, &list, NULL);
+      printf("%.*s\n", str8_varg(result));
+
+      arena_scratch_release(scratch);
     }
   }
 

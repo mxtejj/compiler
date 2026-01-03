@@ -396,16 +396,25 @@ main(int argc, char **argv)
       Lexer l = lexer_init(test.input);
       Parser p = parser_init(&l);
 
+      Arena_Temp scratch = arena_scratch_get(0, 0);
+
+      String8List list = {0};
+
+      int indent = 0;
       Expr *e = parse_expr(&p);
-      usize n = print_expr(buf, sizeof(buf), e);
+      print_expr(scratch.arena, &list, &indent, e);
+
+      String8 result = str8_list_join(scratch.arena, &list, NULL);
+
+      arena_scratch_release(scratch);
 
       printf("%.*s  " CLR_GRN "%-*s=>" CLR_YEL "  ", str8_varg(l.source), (int)(padding - l.source.count), "");
-      printf("%.*s", (int)n, buf);
+      printf("%.*s", str8_varg(result));
       printf("\n" CLR_RESET);
 
-      if (!mem_equal(buf, test.output.data, n))
+      if (!str8_equal(result, test.output))
       {
-        printf("Expected " CLR_GRN "%.*s" CLR_RESET ", got " CLR_RED "%.*s\n" CLR_RESET, str8_varg(test.output), (int)n, buf);
+        printf("Expected " CLR_GRN "%.*s" CLR_RESET ", got " CLR_RED "%.*s\n" CLR_RESET, str8_varg(test.output), str8_varg(result));
         assert(!"Expression test failed");
       }
     }

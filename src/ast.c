@@ -197,51 +197,64 @@ make_token(char c)
   return (Token){ .kind = c };
 }
 
-internal usize
-print_expr(char *buf, usize buf_size, Expr *e);
+internal void
+print_expr(Arena *arena, String8List *list, int *indent, Expr *e);
 
-internal usize
-print_type(char *buf, usize buf_size, Type_Spec *t)
+internal void
+print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
 {
-  usize n = 0;
+  // TODO: Use read_only nil_typespec instead of actual NULL
+  if (!t) return;
 
   switch (t->kind)
   {
   case TYPE_SPEC_NULL:
-    n += snprintf(buf + n, buf_size - n, "<NULL>");
+    str8_list_pushf(arena, list, "<NULL>");
     break;
   case TYPE_SPEC_NAME:
-    n += snprintf(buf + n, buf_size - n, "%.*s", str8_varg(t->name));
+    str8_list_pushf(arena, list, "%.*s", str8_varg(t->name));
     break;
-  // case TYPE_SPEC_PROC:
-  //   n += snprintf(buf + n, buf_size - n, "proc");
-  //   break;
+  case TYPE_SPEC_PROC:
+    str8_list_pushf(arena, list, "proc(");
+    if (t->proc.param_count > 0)
+    {
+      for (Type_Spec *it = t->proc.params.first;
+           it != 0;
+           it = it->next)
+      {
+        // if (it->name.count > 0)
+        // {
+        //   str8_list_pushf(arena, list, "%.*s ", str8_varg(it->name));
+        // }
+        print_type(arena, list, indent, it);
+      }
+    }
+    str8_list_pushf(arena, list, ")");
+    break;
   case TYPE_SPEC_ARRAY:
-    n += snprintf(buf + n, buf_size - n, "[");
-    n += print_expr(buf + n, buf_size - n, t->array.count);
-    n += snprintf(buf + n, buf_size - n, "]");
-    n += print_type(buf + n, buf_size - n, t->array.elem);
+    str8_list_pushf(arena, list, "[");
+    print_expr(arena, list, indent, t->array.count);
+    str8_list_pushf(arena, list, "]");
+    print_type(arena, list, indent, t->array.elem);
     break;
   case TYPE_SPEC_SLICE:
-    n += snprintf(buf + n, buf_size - n, "[]");
-    n += print_type(buf + n, buf_size - n, t->slice.elem);
+    str8_list_pushf(arena, list, "[]");
+    print_type(arena, list, indent, t->slice.elem);
     break;
   case TYPE_SPEC_PTR:
-    n += snprintf(buf + n, buf_size - n, "*");
-    n += print_type(buf + n, buf_size - n, t->ptr.pointee);
+    str8_list_pushf(arena, list, "*");
+    print_type(arena, list, indent, t->ptr.pointee);
     break;
   default:
     assert(0);
     break;
   }
-
-  return n;
 }
 
 internal void
 print_ln(Arena *arena, String8List *list, int *indent)
 {
-  str8_list_pushf(arena, list, "\n%.*s", (*indent), "                                     ");
+  str8_list_pushf(arena, list, "\n%.*s", 2 * (*indent), "                                     ");
 }
 
 internal void
@@ -253,16 +266,21 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
     str8_list_pushf(arena, list, "<NULL>");
     break;
   case DECL_PROC:
-    // d->proc.
     str8_list_pushf(arena, list, "(proc %.*s ", str8_varg(d->name));
     str8_list_pushf(arena, list, "(");
     for (Proc_Param *it = d->proc.params.first;
          it != 0;
          it = it->next)
     {
-      
+      str8_list_pushf(arena, list, "%.*s ", str8_varg(it->name));
+      print_type(arena, list, indent, it->type);
+      if (it != d->proc.params.last)
+      {
+        str8_list_pushf(arena, list, ", ");
+      }
     }
-    str8_list_pushf(arena, list, ")");
+    str8_list_pushf(arena, list, ") ");
+    print_type(arena, list, indent, d->proc.ret);
 
     str8_list_pushf(arena, list, ")");
     break;
@@ -272,7 +290,7 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
     break;
   case DECL_ENUM:
     str8_list_pushf(arena, list, "(enum %.*s ", str8_varg(d->name));
-    *indent++;
+    (*indent)++;
     for (Enum_Member *it = d->enum0.members.first;
          it != 0;
          it = it->next)
@@ -282,8 +300,8 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
       if (it->value)
       {
         //str8_list_pushf(arena, list, "(%.*s ", str8_varg(it->name));
-        // print_expr(arena, list, indent, it->value);
-        str8_list_pushf(arena, list, "TODO");
+        print_expr(arena, list, indent, it->value);
+        // str8_list_pushf(arena, list, "TODO");
       }
       else
       {
@@ -291,167 +309,255 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
       }
       str8_list_pushf(arena, list, ")");
     }
-    *indent--;
+    (*indent)--;
     str8_list_pushf(arena, list, ")");
     break;
   case DECL_VAR:
+    // (var (dt f32) (/ 1.0 60.0))
+    str8_list_pushf(arena, list, "(var ");
+    str8_list_pushf(arena, list, "(%.*s ", str8_varg(d->name));
+    print_type(arena, list, indent, d->var.type);
+    str8_list_pushf(arena, list, ") ");
+    print_expr(arena, list, indent, d->var.expr);
+    str8_list_pushf(arena, list, ")");
     break;
-  case DECL_CONST:
-    break;
+  // case DECL_CONST: break;
   default:
     assert(0);
     break;
   }
 }
 
-internal usize
-print_expr(char *buf, usize buf_size, Expr *e)
+internal void
+print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
 {
-  usize n = 0;
+  // TODO: Use read_only nil_expr instead of actual NULL
+  if (!e) return;
 
   switch (e->kind)
   {
-  case EXPR_NULL: n += snprintf(buf + n, buf_size - n, "<NULL>\n"); break;
+  case EXPR_NULL: str8_list_pushf(arena, list, "<NULL>\n"); break;
   case EXPR_IDENT:
-    n += snprintf(buf + n, buf_size - n, "%.*s", str8_varg(e->ident));
+    str8_list_pushf(arena, list, "%.*s", str8_varg(e->ident));
     break;
   case EXPR_UNARY:
     if (e->unary.op.kind < 128)
     {
-      n += snprintf(buf + n, buf_size - n, "(%c ", e->unary.op.kind);
+      str8_list_pushf(arena, list, "(%c ", e->unary.op.kind);
     }
     else
     {
-      n += snprintf(buf + n, buf_size - n, "(%.*s ", str8_varg(e->unary.op.lexeme));
+      str8_list_pushf(arena, list, "(%.*s ", str8_varg(e->unary.op.lexeme));
     }
-    n += print_expr(buf + n, buf_size - n, e->unary.right);
-    n += snprintf(buf + n, buf_size - n, ")");
+    print_expr(arena, list, indent, e->unary.right);
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_BINARY:
     if (e->binary.op.kind < 128)
     {
-      n += snprintf(buf + n, buf_size - n, "(%c ", e->binary.op.kind);
+      str8_list_pushf(arena, list, "(%c ", e->binary.op.kind);
     }
     else
     {
-      n += snprintf(buf + n, buf_size - n, "(%.*s ", str8_varg(e->binary.op.lexeme));
+      str8_list_pushf(arena, list, "(%.*s ", str8_varg(e->binary.op.lexeme));
     }
-    n += print_expr(buf + n, buf_size - n, e->binary.left);
-    n += snprintf(buf + n, buf_size - n, " ");
-    n += print_expr(buf + n, buf_size - n, e->binary.right);
-    n += snprintf(buf + n, buf_size - n, ")");
+    print_expr(arena, list, indent, e->binary.left);
+    str8_list_pushf(arena, list, " ");
+    print_expr(arena, list, indent, e->binary.right);
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_TERNARY:
-    n += snprintf(buf + n, buf_size - n, "(?: ");
-    n += print_expr(buf + n, buf_size - n, e->ternary.cond);
-    n += snprintf(buf + n, buf_size - n, " ");
-    n += print_expr(buf + n, buf_size - n, e->ternary.then);
-    n += snprintf(buf + n, buf_size - n, " ");
-    n += print_expr(buf + n, buf_size - n, e->ternary.else_);
-    n += snprintf(buf + n, buf_size - n, ")");
+    str8_list_pushf(arena, list, "(?: ");
+    print_expr(arena, list, indent, e->ternary.cond);
+    str8_list_pushf(arena, list, " ");
+    print_expr(arena, list, indent, e->ternary.then);
+    str8_list_pushf(arena, list, " ");
+    print_expr(arena, list, indent, e->ternary.else_);
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_NIL_LITERAL:
-    n += snprintf(buf + n, buf_size - n, "nil");
+    str8_list_pushf(arena, list, "nil");
     break;
   case EXPR_STRING_LITERAL:
-    n += snprintf(buf + n, buf_size - n, "%.*s", str8_varg(e->literal.string));
+    str8_list_pushf(arena, list, "%.*s", str8_varg(e->literal.string));
     break;
   case EXPR_INTEGER_LITERAL:
-    n += snprintf(buf + n, buf_size - n, "%llu", e->literal.integer);
+    str8_list_pushf(arena, list, "%llu", e->literal.integer);
     break;
   case EXPR_FLOAT_LITERAL:
-    n += snprintf(buf + n, buf_size - n, "%.2f", e->literal.floating);
+    str8_list_pushf(arena, list, "%.2f", e->literal.floating);
     break;
   case EXPR_BOOL_LITERAL:
-    n += snprintf(buf + n, buf_size - n, e->literal.boolean ? "true" : "false");
+    str8_list_pushf(arena, list, e->literal.boolean ? "true" : "false");
     break;
   case EXPR_GROUP:
-    n += snprintf(buf + n, buf_size - n, "(group ");
-    n += print_expr(buf + n, buf_size - n, e->group.expr);
-    n += snprintf(buf + n, buf_size - n, ")");
+    str8_list_pushf(arena, list, "(group ");
+    print_expr(arena, list, indent, e->group.expr);
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_CAST:
-    n += snprintf(buf + n, buf_size - n, "(cast ");
+    str8_list_pushf(arena, list, "(cast ");
     break;
   case EXPR_CALL:
-    n += snprintf(buf + n, buf_size - n, "(call ");
-    n += print_expr(buf + n, buf_size - n, e->call.expr);
+    str8_list_pushf(arena, list, "(call ");
+    print_expr(arena, list, indent, e->call.expr);
     for (Expr *arg = e->call.args.first;
          arg != 0;
          arg = arg->next)
     {
-      n += snprintf(buf + n, buf_size - n, " ");
-      n += print_expr(buf + n, buf_size - n, arg);
+      str8_list_pushf(arena, list, " ");
+      print_expr(arena, list, indent, arg);
     }
-    n += snprintf(buf + n, buf_size - n, ")");
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_INDEX:
-    n += snprintf(buf + n, buf_size - n, "(index ");
-    n += print_expr(buf + n, buf_size - n, e->index.expr);
-    n += snprintf(buf + n, buf_size - n, " ");
-    n += print_expr(buf + n, buf_size - n, e->index.index);
-    n += snprintf(buf + n, buf_size - n, ")");
+    str8_list_pushf(arena, list, "(index ");
+    print_expr(arena, list, indent, e->index.expr);
+    str8_list_pushf(arena, list, " ");
+    print_expr(arena, list, indent, e->index.index);
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_FIELD:
-    n += snprintf(buf + n, buf_size - n, "(field ");
-    n += print_expr(buf + n, buf_size - n, e->field.expr);
-    n += snprintf(buf + n, buf_size - n, " ");
-    n += snprintf(buf + n, buf_size - n, "%.*s", str8_varg(e->field.name));
-    n += snprintf(buf + n, buf_size - n, ")");
+    str8_list_pushf(arena, list, "(field ");
+    print_expr(arena, list, indent, e->field.expr);
+    str8_list_pushf(arena, list, " ");
+    str8_list_pushf(arena, list, "%.*s", str8_varg(e->field.name));
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_COMPOUND:
-    n += snprintf(buf + n, buf_size - n, "(compound");
+    str8_list_pushf(arena, list, "(compound");
     if (e->compound.type != TYPE_SPEC_NULL)
     {
-      n += snprintf(buf + n, buf_size - n, " ");
+      str8_list_pushf(arena, list, " ");
     }
-    n += print_type(buf + n, buf_size - n, e->compound.type);
+    print_type(arena, list, indent, e->compound.type);
     for (Compound_Arg *arg = e->compound.args.first;
          arg != 0;
          arg = arg->next)
     {
-      n += snprintf(buf + n, buf_size - n, " ");
+      str8_list_pushf(arena, list, " ");
       if (arg->optional_name.count > 0)
       {
-        n += snprintf(buf + n, buf_size - n, "%.*s=", str8_varg(arg->optional_name));
+        str8_list_pushf(arena, list, "%.*s=", str8_varg(arg->optional_name));
       }
-      n += print_expr(buf + n, buf_size - n, arg->expr);
+      print_expr(arena, list, indent, arg->expr);
     }
-    n += snprintf(buf + n, buf_size - n, ")");
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_SIZE_OF_EXPR:
-    n += snprintf(buf + n, buf_size - n, "(sizeof_expr ");
-    n += snprintf(buf + n, buf_size - n, ")");
+    str8_list_pushf(arena, list, "(sizeof_expr ");
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_SIZE_OF_TYPE:
-    n += snprintf(buf + n, buf_size - n, "(sizeof_type ");
-    n += snprintf(buf + n, buf_size - n, ")");
+    str8_list_pushf(arena, list, "(sizeof_type ");
+    str8_list_pushf(arena, list, ")");
     break;
   default:
     assert(!"TODO");
     break;
   }
-
-  return n;
 }
 
-internal usize
-print_stmt(char *buf, usize buf_size, Stmt *s)
+internal void
+print_stmt(Arena *arena, String8List *list, int *indent, Stmt *s)
 {
-  usize n = 0;
+  // TODO: Use read_only nil_stmt instead of actual NULL
+  if (!s) return;
 
   switch (s->kind)
   {
-  case STMT_NULL: assert(!"NULL Statement"); break;
+  case STMT_NULL:
+    str8_list_pushf(arena, list, "<NULL>");
+    break;
+  case STMT_BLOCK:
+    str8_list_pushf(arena, list, "(block ");
+    (*indent)++;
+    for (Stmt *it = s->block.stmts.first;
+         it != 0;
+         it = it->next)
+    {
+      print_ln(arena, list, indent);
+      print_stmt(arena, list, indent, it);
+    }
+    (*indent)--;
+    str8_list_pushf(arena, list, ")");
+    break;
+  case STMT_IF:
+    str8_list_pushf(arena, list, "(if ");
+    print_expr(arena, list, indent, s->if0.cond);
+    (*indent)++;
+    print_ln(arena, list, indent);
+    print_stmt(arena, list, indent, s->if0.then_block);
+    (*indent)--;
+    print_ln(arena, list, indent);
+    if (s->if0.else_stmt != NULL)
+    {
+      if (s->if0.else_stmt->kind == STMT_BLOCK)
+      {
+        (*indent)++;
+        str8_list_pushf(arena, list, "(else ");
+        print_ln(arena, list, indent);
+        print_stmt(arena, list, indent, s->if0.else_stmt);
+        str8_list_pushf(arena, list, ")");
+        (*indent)--;
+      }
+      else
+      {
+        assert(s->if0.else_stmt->kind == STMT_IF);
+        str8_list_pushf(arena, list, "(else ");
+        print_stmt(arena, list, indent, s->if0.else_stmt);
+        str8_list_pushf(arena, list, ")");
+      }
+    }
+    break;
+  case STMT_DO_WHILE:
+    str8_list_pushf(arena, list, "(do ");
+    (*indent)++;
+    print_ln(arena, list, indent);
+    print_stmt(arena, list, indent, s->do_while.body);
+    print_ln(arena, list, indent);
+    (*indent)--;
+    str8_list_pushf(arena, list, "(while ");
+    print_expr(arena, list, indent, s->do_while.cond);
+    str8_list_pushf(arena, list, ")");
+    str8_list_pushf(arena, list, ")");
+    break;
+  case STMT_WHILE:
+    str8_list_pushf(arena, list, "(while ");
+    print_expr(arena, list, indent, s->while0.cond);
+    (*indent)++;
+    print_ln(arena, list, indent);
+    print_stmt(arena, list, indent, s->while0.body);
+    (*indent)--;
+    str8_list_pushf(arena, list, ")");
+    break;
+  // case STMT_FOR:      break;
+  // case STMT_SWITCH:   break;
+  case STMT_RETURN:
+    str8_list_pushf(arena, list, "(return");
+    if (s->return0.expr)
+    {
+      str8_list_pushf(arena, list, " ");
+      print_expr(arena, list, indent, s->return0.expr);
+    }
+    str8_list_pushf(arena, list, ")");
+    break;
+  case STMT_BREAK:
+    str8_list_pushf(arena, list, "(break)");
+    break;
+  case STMT_CONTINUE:
+    str8_list_pushf(arena, list, "(continue)");
+    break;
   case STMT_EXPR:
-    n += print_expr(buf, buf_size, s->expr);
+    print_expr(arena, list, indent, s->expr);
+    break;
+  case STMT_DECL:
+    print_decl(arena, list, indent, s->decl);
     break;
   default:
     assert(!"TODO");
     break;
   }
-
-  return n;
 }
 
 internal void

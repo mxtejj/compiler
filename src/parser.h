@@ -8,6 +8,11 @@
 // TODO:
 // [ ] use intrusive singly-linked list for AST nodes (stmt, expr, decl)
 
+ENUM_SIZE(Expr_Parse_Flags, u32)
+{
+  EXPR_ALLOW_COMPOUND = 1 << 0,
+};
+
 ////////////////////////////////
 // Parser
 typedef struct Parser Parser;
@@ -18,6 +23,7 @@ struct Parser
   Token prev;
   Token curr;
   Token next;
+  Expr_Parse_Flags expr_parse_flags;
 };
 
 internal Parser parser_init(Lexer *l);
