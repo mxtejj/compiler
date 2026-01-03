@@ -91,8 +91,8 @@ main(int argc, char **argv)
   String8 source = S(
     "struct Person\n"
     "{\n"
-    "  name: string;\n"
-    "  age:  int;\n"
+    "  name: string,\n"
+    "  age:  int,\n"
     "}\n"
     "\n"
     "\n"
@@ -424,15 +424,9 @@ main(int argc, char **argv)
 
   printf("\n");
 
-  {
-    parser_test();
-  }
-
-  printf("\n");
-
-  {
-    resolve_test();
-  }
+  // parser_test();
+  // resolve_test();
+  order_test();
 
   arena_delete(g_arena);
 

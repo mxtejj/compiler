@@ -260,6 +260,8 @@ print_ln(Arena *arena, String8List *list, int *indent)
 internal void
 print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
 {
+  Arena_Temp scratch = arena_scratch_get(&arena, 1);
+
   switch (d->kind)
   {
   case DECL_NULL:
@@ -285,8 +287,37 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
     str8_list_pushf(arena, list, ")");
     break;
   case DECL_STRUCT:
-    break;
   case DECL_UNION:
+    str8_list_pushf(arena, list, "(");
+    if (d->kind == DECL_STRUCT)
+    {
+      str8_list_pushf(arena, list, "struct ");
+    }
+    else
+    {
+      str8_list_pushf(arena, list, "union ");
+    }
+
+    str8_list_pushf(arena, list, "%.*s", str8_varg(d->name));
+
+    for (Aggr_Field *it = d->aggr.fields.first;
+         it != 0;
+         it = it->next)
+    {
+      (*indent)++;
+      print_ln(arena, list, indent);
+      StringJoin join = {
+        .mid = S(" "),
+      };
+      String8 names = str8_list_join(scratch.arena, &it->names, &join);
+      str8_list_pushf(arena, list, "(%.*s ", str8_varg(names));
+      print_type(arena, list, indent, it->type);
+      str8_list_pushf(arena, list, ")");
+      // (x y z f32)
+      (*indent)--;
+    }
+
+    str8_list_pushf(arena, list, ")");
     break;
   case DECL_ENUM:
     str8_list_pushf(arena, list, "(enum %.*s ", str8_varg(d->name));
@@ -326,6 +357,8 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
     assert(0);
     break;
   }
+
+  arena_scratch_release(scratch);
 }
 
 internal void

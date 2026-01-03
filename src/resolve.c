@@ -282,19 +282,33 @@ STRUCT(Const_Entity)
 
 ENUM(Sym_State)
 {
-  SYM_UNRESOLVED,
-  SYM_RESOLVING,
-  SYM_RESOLVED,
+  SYM_UNORDERED,
+  SYM_ORDERING,
+  SYM_ORDERED,
+};
+
+ENUM(Sym_Kind)
+{
+  SYM_INVALID,
+  SYM_DECL,
+  SYM_BUILTIN,
+  SYM_ENUM_CONST,
 };
 
 STRUCT(Sym)
 {
   Sym *next;
 
+  Sym_Kind   kind;
   String8    name;
-  Decl      *decl;
+  // Decl      *decl;
   Sym_State  state;
   // Resolved  *resolved;
+
+  union
+  {
+    Decl *decl;
+  };
 };
 
 STRUCT(Sym_List)
@@ -306,6 +320,7 @@ STRUCT(Sym_List)
 
 // TODO: hash table
 Sym_List sym_list;
+Decl_List ordered_decls;
 
 internal Sym *
 sym_get(String8 name)
@@ -322,14 +337,70 @@ sym_get(String8 name)
 }
 
 internal void
+fatal(char *fmt, ...)
+{
+  Arena_Temp scratch = arena_scratch_get(0, 0);
+
+  va_list args;
+  va_start(args, fmt);
+  String8 s = str8fv(scratch.arena, fmt, args);
+  printf(CLR_RED "%.*s\n" CLR_RESET, str8_varg(s));
+  va_end(args);
+
+  arena_scratch_release(scratch);
+}
+
+internal void
+order_decl(Decl *decl);
+
+internal void
 order_name(String8 name)
 {
+  Sym *sym = sym_get(name);
+  if (!sym)
+  {
+    fatal("Non-existent name '%.*s'", str8_varg(name));
+    return;
+  }
 
+  if (sym->state == SYM_ORDERED)
+  {
+    return;
+  }
+
+  if (sym->state == SYM_ORDERING)
+  {
+    fatal("Cyclic dependency");
+    return;
+  }
+
+  sym->state = SYM_ORDERING;
+  sym->state = SYM_ORDERED;
+
+  if (sym->kind == SYM_DECL)
+  {
+    // @CLEANUP
+    order_decl(sym->decl);
+    sll_queue_push(ordered_decls.first, ordered_decls.last, sym->decl);
+  }
+  else if (sym->kind == SYM_ENUM_CONST)
+  {
+    order_name(sym->decl->name);
+  }
+  else
+  {
+    assert(0);
+  }
 }
+
+internal void
+order_typespec(Type_Spec *typespec);
 
 internal void
 order_expr(Expr *expr)
 {
+  if (!expr) return; // @CLEANUP
+
   switch (expr->kind)
   {
   case EXPR_IDENT:
@@ -355,6 +426,48 @@ order_expr(Expr *expr)
     // Do nothing
     break;
   case EXPR_GROUP:
+    order_expr(expr->group.expr);
+    break;
+  case EXPR_CAST:
+    order_typespec(expr->cast.type);
+    order_expr(expr->cast.expr);
+    break;
+  case EXPR_CALL:
+    order_expr(expr->call.expr);
+    for (Expr *it = expr->call.args.first;
+         it != 0;
+         it = it->next)
+    {
+      order_expr(it);
+    }
+    break;
+  case EXPR_INDEX:
+    order_expr(expr->index.expr);
+    order_expr(expr->index.index);
+    break;
+  case EXPR_FIELD:
+    order_expr(expr->field.expr);
+    order_name(expr->field.name);
+    break;
+  case EXPR_COMPOUND:
+    if (expr->compound.type)
+    {
+      order_typespec(expr->compound.type);
+    }
+    for (Compound_Arg *it = expr->compound.args.first;
+         it != 0;
+         it = it->next)
+    {
+      // TODO: name?
+      // order_name(it->optional_name);
+      order_expr(it->expr);
+    }
+    break;
+  case EXPR_SIZE_OF_EXPR:
+    order_expr(expr->size_of_expr);
+    break;
+  case EXPR_SIZE_OF_TYPE:
+    order_typespec(expr->size_of_type);
     break;
   default:
     assert(0);
@@ -365,6 +478,8 @@ order_expr(Expr *expr)
 internal void
 order_typespec(Type_Spec *typespec)
 {
+  if (!typespec) return; // @CLEANUP
+
   switch (typespec->kind)
   {
   case TYPE_SPEC_NAME:
@@ -388,7 +503,6 @@ order_typespec(Type_Spec *typespec)
     break;
   case TYPE_SPEC_PTR:
     // TODO: Think about forward declaration, etc
-    order_typespec(typespec->ptr.pointee);
     break;
   default:
     assert(0);
@@ -399,17 +513,38 @@ order_typespec(Type_Spec *typespec)
 internal void
 order_decl(Decl *decl)
 {
+  if (!decl) return; // @CLEANUP
+
   switch (decl->kind)
   {
   case DECL_PROC:
-    // Don't need to handle it here
+    // Do nothing
     break;
   case DECL_STRUCT:
   case DECL_UNION:
-    // for each aggr item do order_typespec
+    for (Aggr_Field *it = decl->aggr.fields.first;
+         it != 0;
+         it = it->next)
+    {
+      // for (String8Node *name = it->names.first;
+      //      name != 0;
+      //      name = name->next)
+      // {
+      //   order_name(name->string);
+      // }
+      order_typespec(it->type);
+    }
     break;
   case DECL_ENUM:
-    order_decl_enum(decl);
+    for (Enum_Member *it = decl->enum0.members.first;
+         it != 0;
+         it = it->next)
+    {
+      if (it->value)
+      {
+        order_expr(it->value);
+      }
+    }
     break;
   case DECL_VAR:
     order_typespec(decl->var.type);
@@ -425,22 +560,52 @@ order_decl(Decl *decl)
 }
 
 internal void
-sym_put(Decl *decl)
+sym_put(Sym_Kind kind, String8 name, Sym_State state, Decl *decl)
 {
   if (sym_arena == NULL)
   {
     sym_arena = arena_alloc(GB(1), MB(1), 0);
   }
 
-  assert(decl->name.data);
-  assert(!sym_get(decl->name));
+  if (sym_get(name))
+  {
+    assert(!"Duplicate name");
+  }
 
   Sym *sym = push_struct(sym_arena, Sym);
-  sym->name  = decl->name;
+  sym->kind  = kind;
+  sym->name  = name;
+  sym->state = state;
   sym->decl  = decl;
-  sym->state = SYM_UNRESOLVED;
 
   sll_queue_push(sym_list.first, sym_list.last, sym);
+}
+
+internal void
+sym_builtin(String8 name)
+{
+  sym_put(SYM_BUILTIN, name, SYM_ORDERED, NULL);
+}
+
+internal void
+sym_enum_const(String8 name, Decl *decl)
+{
+  sym_put(SYM_ENUM_CONST, name, SYM_UNORDERED, decl);
+}
+
+internal void
+sym_decl(Decl *decl)
+{
+  sym_put(SYM_DECL, decl->name, SYM_UNORDERED, decl);
+  if (decl->kind == DECL_ENUM)
+  {
+    for (Enum_Member *it = decl->enum0.members.first;
+         it != 0;
+         it = it->next)
+    {
+      sym_enum_const(it->name, decl);
+    }
+  }
 }
 
 internal void
@@ -461,8 +626,8 @@ resolve_decl(Decl *decl)
 internal void
 resolve_sym(Sym *sym)
 {
-  if (sym->state == SYM_RESOLVED) return;
-  if (sym->state == SYM_RESOLVING)
+  if (sym->state == SYM_ORDERED) return;
+  if (sym->state == SYM_ORDERING)
   {
     assert(!"Cyclic dependency");
     return;
@@ -483,6 +648,7 @@ resolve_name(String8 name)
 internal void
 resolve_test()
 {
+#if 0
   assert(sym_get(str8_lit("foo")) == NULL);
 
   Decl decl = {0};
@@ -492,10 +658,10 @@ resolve_test()
   Expr expr = {0};
   expr.kind = EXPR_INTEGER_LITERAL;
   expr.literal.integer = 42;
-  
+
   decl.const0.expr = &expr;
 
-  sym_put(&decl);
+  sym_decl(&decl);
 
   assert(sym_get(str8_lit("foo")) && sym_get(str8_lit("foo"))->decl == &decl);
 
@@ -530,4 +696,86 @@ resolve_test()
   assert(proc_int == type_proc(NULL, 0, type_int));
 
   printf("resolve test OK\n");
+#endif
+}
+
+internal void
+order_test()
+{
+  // local_persist String8 decls_tests[] =
+  // {
+  //   S("var a = b;"),
+  //   S("var b = 1;"),
+  // };
+
+  printf("\n");
+
+  String8 source = S(
+    // "var a = b;\n"
+    // "var b = 1;\n"
+    // "struct Person { name: string, }\n"
+
+    // "struct S { t: T, }\n"
+    // "struct T { i: [N]int, }\n"
+    // "const N = 1024;\n"
+
+    "struct S { t: [B]T, }\n"
+    "struct T { s: *S, }\n"
+    "enum E { A, B, C, }\n"
+  );
+
+  {
+    sym_builtin(str8_lit("u8"));
+    sym_builtin(str8_lit("u16"));
+    sym_builtin(str8_lit("u32"));
+    sym_builtin(str8_lit("u64"));
+    sym_builtin(str8_lit("s8"));
+    sym_builtin(str8_lit("s16"));
+    sym_builtin(str8_lit("s32"));
+    sym_builtin(str8_lit("s64"));
+    sym_builtin(str8_lit("bool"));
+    sym_builtin(str8_lit("string"));
+    sym_builtin(str8_lit("uintptr"));
+    sym_builtin(str8_lit("int"));
+    sym_builtin(str8_lit("uint"));
+    sym_builtin(str8_lit("f32"));
+    sym_builtin(str8_lit("f64"));
+  }
+
+  Lexer l = lexer_init(source);
+  Parser p = parser_init(&l);
+
+  Decl_List list = parse_declarations(&p);
+  for (Decl *it = list.first; it != NULL; it = it->next)
+  {
+    sym_decl(it);
+  }
+
+  // for (u32 i = 0; i < array_count(decls_tests); i += 1)
+  // {
+  //   String8 source = decls_tests[i];
+
+  //   Decl *decl = parse_decl(&p);
+  //   // sym_decl(decl);
+  //   // resolve_decl(decl);
+  //   sym_decl(decl);
+  // }
+
+  for (Sym *it = sym_list.first;
+       it != 0;
+       it = it->next)
+  {
+    // resolve_sym(it);
+    order_name(it->name);
+    // order_name(it->decl->name);
+  }
+
+  for (Decl *it = ordered_decls.first;
+       it != 0;
+       it = it->next)
+  {
+    printf("%.*s\n", str8_varg(it->name));
+  }
+
+  printf("order test OK\n");
 }

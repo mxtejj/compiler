@@ -953,6 +953,21 @@ parse_decl_var(Parser *p)
   return decl;
 }
 
+internal Decl *
+parse_decl_const(Parser *p)
+{
+  String8 name = parse_ident(p);
+  expect(p, '=');
+  Expr *expr = parse_expr(p);
+  expect(p, ';');
+
+  Decl *decl = decl_alloc(p, DECL_CONST);
+  decl->name = name;
+  decl->const0.expr = expr;
+
+  return decl;
+}
+
 internal Proc_Param *
 parse_decl_proc_param(Parser *p)
 {
@@ -993,7 +1008,8 @@ parse_type_name(Parser *p)
     return str8_copy(p->arena, name);
   }
 
-  assert(!"Expected type name");
+  // assert(!"Expected type name");
+  report_error(p, "Expected type name");
   return (String8){0};
 }
 
@@ -1106,49 +1122,58 @@ parse_decl_proc(Parser *p)
   return decl;
 }
 
-// internal Decl *
-// parse_decl_struct(Parser *p)
-// {
-//   String8 name = parse_ident(p);
+internal Decl *
+parse_decl_aggregate(Parser *p, Decl_Kind kind)
+{
+  String8 name = parse_ident(p);
+  expect(p, '{');
 
-//   expect(p, '{');
+  Decl *decl = decl_alloc(p, kind);
+  decl->name = name;
+  Aggr_Field_List *fields = &decl->aggr.fields;
 
-//   Decl *decl = decl_alloc(p, DECL_STRUCT);
-//   decl->struct0.name = name;
+  while (!parser_check(p, '}'))
+  {
+    Aggr_Field *field = push_struct(p->arena, Aggr_Field);
+    while (true)
+    {
+      String8 field_name = parse_ident(p);
+      str8_list_push(p->arena, &field->names, field_name);
 
-//   Enum_Member_List *members = &decl->struct0.members;
-//   while (!parser_check(p, '}'))
-//   {
-//     Enum_Member *member = push_struct(p->arena, Enum_Member);
+      if (match(p, ',')) continue;
+      if (match(p, ':')) break;
 
-//     member->name = parse_ident(p);
-//     if (match(p, '='))
-//     {
-//       member->value = parse_expr(p);
-//     }
+      // if (!match(p, ':'))
+      // {
+      //   break;
+      // }
 
-//     dll_push_back(members->first, members->last, member);
+      assert(!"Expected ',' or ':' after field name");
+    }
 
-//     if (!match(p, ','))
-//     {
-//       break;
-//     }
-//   }
+    field->type = parse_type(p);
+    sll_queue_push(fields->first, fields->last, field);
 
-//   expect(p, '}');
+    if (match(p, ','))
+    {
+      continue;
+    }
+  }
 
-//   return decl;
-// }
+  expect(p, '}');
+
+  return decl;
+}
 
 internal Decl *
 parse_decl(Parser *p)
 {
-  if (match(p, TOKEN_PROC)) return parse_decl_proc(p);
-  // aggr
-  if (match(p, TOKEN_ENUM)) return parse_decl_enum(p);
-  if (match(p, TOKEN_VAR))  return parse_decl_var(p);
-  // const
-  // assert(!"Expected declaration keyword");
+  if (match(p, TOKEN_PROC))   return parse_decl_proc(p);
+  if (match(p, TOKEN_STRUCT)) return parse_decl_aggregate(p, DECL_STRUCT);
+  if (match(p, TOKEN_UNION))  return parse_decl_aggregate(p, DECL_UNION);
+  if (match(p, TOKEN_ENUM))   return parse_decl_enum(p);
+  if (match(p, TOKEN_VAR))    return parse_decl_var(p);
+  if (match(p, TOKEN_CONST))  return parse_decl_const(p);
   report_error(p, "Expected declaration keyword");
   return NULL;
 }
@@ -1253,8 +1278,8 @@ parser_test()
       // "var foo = a ? b + c << d : 0;\n"
       // "var foo = a ? b == c : 0;\n"
       // "var foo = a ? +u : 0;\n"
-      // // "var foo = a ? h(x) : 0;\n" // proc call
-      // // "var foo = a ? k[x] : 0;\n" // indexing
+      "var foo = a ? h(x) : 0;\n" // proc call
+      "var foo = a ? k[x] : 0;\n" // indexing
       "enum Color\n"
       "{\n"
       "  Red = 3,\n"
@@ -1262,21 +1287,41 @@ parser_test()
       "  Blue = 0\n"
       "}\n"
       // "\n"
-      // "struct Person\n"
-      // "{\n"
-      // "  name: string,\n"
-      // "  age:  int,\n"
-      // "}\n"
+      "struct Person\n"
+      "{\n"
+      "  name:  string,\n"
+      "  x,y,z: f32,\n"
+      "  age:   int,\n"
+      "}\n"
       "\n"
       "var x = Point{1,2};\n"
       "\n"
       "proc make_person(name: string, age: int) -> Person\n"
       "{\n"
       "  var person: Person;\n"
-      "  person.name = name;\n" // TODO
+      "  person.name = name;\n"
       "  person.age  = age;\n"
       "  return person;\n"
       "}\n"
+
+      // "const n = size_of(:[16]*int);\n"
+      // "const n = sizeof(1+2);\n"
+      "var x = b == 1 ? 1+2 : 3-4;\n"
+      "proc fact(n: int) -> int { trace(\"fact\"); if n == 0 { return 1; } else { return n * fact(n-1); } }\n"
+      // "proc fact(n: int) -> int { var p = 1; for var i = 1; i n; i += 1 { p *= i; } return p; }\n"
+      // "var foo = a ? a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m <= n*(p+q)/r : 0;\n"
+      // "proc f(x: int) -> bool { switch x { case 0: case 1: return true; case 2: default: return false; } }\n"
+      "enum Color { RED = 3, GREEN, BLUE = 0 }\n"
+      // "const pi = 3.14\n"
+      "struct Vector { x, y: f32, }\n"
+      "var v = Vector{1.0, -1.0};\n"
+      // "var v: Vector = {1.0. -1.0};\n"
+      "union Int_Or_Float { i: int, f: f32, }\n"
+      // "typedef Vectors = Vector[1+2]\n"
+      "proc f() { do { print(42); } while (1); }\n"
+      // "typedef T = [16]proc(int) -> int\n"
+      // "proc f() { enum E { A, B, C } return; }\n"
+      "proc f() { if (1) { return 1; } else if (2) { return 2; } else { return 3; } }\n"
     );
     /*
     

@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "raddebugger",
+      "request": "launch",
+      // "preLaunchTask": "Build Debug",
+      "name": "Build & Run Debug",
+      "program": "${workspaceFolder}/kk.exe",
+    }
+  ]
+}

@@ -244,10 +244,24 @@ struct Decl_Proc
   Stmt       *body;
 };
 
+STRUCT(Aggr_Field)
+{
+  Aggr_Field *next;
+  String8List names;
+  Type_Spec  *type;
+};
+
+STRUCT(Aggr_Field_List)
+{
+  Aggr_Field *first;
+  Aggr_Field *last;
+  u64 count;
+};
+
 typedef struct Decl_Aggr Decl_Aggr;
 struct Decl_Aggr
 {
-  int todo;
+  Aggr_Field_List fields;
 };
 
 typedef struct Enum_Member Enum_Member;
@@ -317,7 +331,11 @@ struct Decl_List
   Decl *last;
 };
 
-Decl *decl_alloc(Parser *p, Decl_Kind kind);
+internal Decl *decl_alloc(Parser *p, Decl_Kind kind);
+
+// TODO order this properly
+internal Decl *parse_decl(Parser *p);
+internal Decl_List parse_declarations(Parser *p);
 
 ///////////////////////////////////
 // EXPRESSIONS
