@@ -66,7 +66,7 @@ typedef double f64;
     if (!(x))                                                                    \
     {                                                                            \
       printf(CLR_RED "Assertion hit: " CLR_RESET "%s:%d\n", __FILE__, __LINE__); \
-      printf(CLR_YEL "\t%s\n" CLR_RESET, stringify((x)));                        \
+      printf(CLR_YEL "\t%s\n" CLR_RESET, stringify(x))  ;                        \
       trap();                                                                    \
     }                                                                            \
   } while (0)

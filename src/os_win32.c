@@ -33,3 +33,8 @@ os_release(void *ptr, usize size)
 {
   return VirtualFree(ptr, size, MEM_RELEASE);
 }
+
+void os_exit(u32 code)
+{
+  ExitProcess(code);
+}

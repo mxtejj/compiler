@@ -1,5 +1,8 @@
 #include "parser.h"
 #include "base.h"
+#include <stdio.h>
+
+// TODO parser_synchronize https://craftinginterpreters.com/parsing-expressions.html#synchronizing-a-recursive-descent-parser
 
 /*
 
@@ -33,8 +36,19 @@ parser_init(Lexer *l)
   Parser p = {0};
   p.arena = arena_alloc(GB(1), MB(1), 0);
   p.lexer = l;
-  advance(&p);
+  // advance(&p);
+
+  p.curr = lexer_next(l);
+  p.next = lexer_next(l);
+
   return p;
+}
+
+internal void
+push_compound_arg(Compound_Arg_List *list, Compound_Arg *arg)
+{
+  sll_queue_push(list->first, list->last, arg);
+  list->count += 1;
 }
 
 // TODO: `parser_fini` destroy arena
@@ -43,17 +57,47 @@ internal Expr *
 parse_expr(Parser *p);
 
 internal void
-report(Parser *p)
+report_error(Parser *p, const char *fmt, ...)
 {
+  // TODO: duplicate of lexer_syntax_error
+  Lexer *l = p->lexer;
 
+  va_list args;
+  va_start(args, fmt);
+
+  // printf(WHT "%.*s(%llu:%llu) ", strf(l->file_path), lexer_row(l), lexer_col(l));
+  printf(CLR_WHT "(%llu:%llu) ", lexer_row(l), lexer_col(l));
+  printf(CLR_RED "Syntax Error: " CLR_RESET);
+  vprintf(fmt, args);
+  printf("\n");
+
+  u64 line_start = l->bol;
+  u64 line_end = line_start;
+  while (line_end < l->source.count && l->source.data[line_end] != '\n' && l->source.data[line_end] != '\r')
+    line_end++;
+
+  printf(CLR_CYN "%.*s\n", (int)(line_end - line_start), &l->source.data[line_start]);
+  u64 col = lexer_col(l);
+  printf("%*s" CLR_GRN "^\n" CLR_RESET, (int)col, "");
+
+  va_end(args);
+
+  // TODO: Make some errors non fatal
+  getchar();
+  os_exit(1);
 }
 
 internal Token
 advance(Parser *p)
 {
-  Token curr = p->curr;
-  p->curr = lexer_next(p->lexer);
-  p->prev = curr;
+  p->prev = p->curr;
+  p->curr = p->next;
+  p->next = lexer_next(p->lexer);
+
+  // Token curr = p->curr;
+  // p->curr = lexer_next(p->lexer);
+  // p->prev = curr;
+  // p->next = lexer_next(p->lexer);
   return p->prev;
 }
 
@@ -73,6 +117,7 @@ expect(Parser *p, Token_Kind kind)
     return true;
   }
   printf("Expected '%.*s', got '%.*s'", str8_varg(str_from_token_kind(kind)), str8_varg(str_from_token_kind(p->curr.kind)));
+  trap();
   return false;
 }
 
@@ -98,9 +143,181 @@ parse_ident(Parser *p)
   return (String8){0};
 }
 
+internal b32
+peek(Parser *p, Token_Kind kind)
+{
+  return p->next.kind == kind;
+}
+
+internal b32
+is_named_arg(Parser *p)
+{
+  return parser_check(p, TOKEN_IDENT) && peek(p, '=');
+}
+
+internal bool
+is_type_start(Parser *p)
+{
+  // TODO: Support inline types thingy
+  // like a := [2]struct{ name: string, age: int }{}
+  //      a := [2]Person{}
+  switch (p->curr.kind)
+  {
+  case TOKEN_IDENT:
+  case TOKEN_STRING:
+  case TOKEN_S8:
+  case TOKEN_S16:
+  case TOKEN_S32:
+  case TOKEN_S64:
+  case TOKEN_U8:
+  case TOKEN_U16:
+  case TOKEN_U32:
+  case TOKEN_U64:
+  case TOKEN_UINTPTR:
+  case TOKEN_INT:
+  case TOKEN_UINT:
+  case TOKEN_F32:
+  case TOKEN_F64:
+  case TOKEN_BOOL:
+  case TOKEN_PROC:
+  case '*':
+  case '[':
+    return true;
+  }
+  return false;
+}
+
+internal b32
+is_type_followed_by_lbrace(Parser *p)
+{
+  Arena_Temp scratch = arena_scratch_get(0, 0);
+
+  Parser temp_parser = *p;
+  Lexer temp_lexer = *p->lexer;
+
+  temp_parser.arena = scratch.arena;
+  temp_parser.lexer = &temp_lexer;
+
+  parse_type(&temp_parser);
+  b32 result = temp_parser.curr.kind == '{';
+
+  arena_scratch_release(scratch);
+  return result;
+}
+
+internal Expr *
+parse_compound_element(Parser *p)
+{
+  if (is_type_start(p) && is_type_followed_by_lbrace(p))
+  {
+    Type_Spec *type = parse_type(p);
+    expect(p, '{');
+
+    Compound_Arg_List args = {0};
+
+    if (!match(p, '}'))
+    {
+      do
+      {
+        Expr *elem = parse_compound_element(p);
+        Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
+        arg->expr = elem;
+        push_compound_arg(&args, arg);
+      } while (match(p, ','));
+
+      expect(p, '}');
+    }
+
+    return expr_compound(p, type, args);
+  }
+  return parse_expr(p);
+}
+
 internal Expr *
 parse_expr_primary(Parser *p)
 {
+  // implicit compound literals
+  if (match(p, '{'))
+  {
+    Compound_Arg_List args = {0};
+
+    if (!match(p, '}'))
+    {
+      do
+      {
+        Expr *value = parse_expr(p);
+        Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
+        arg->expr = value;
+        push_compound_arg(&args, arg);
+      } while (match(p, ','));
+
+      expect(p, '}');
+    }
+
+    local_persist Type_Spec null_type = { .kind = TYPE_SPEC_NULL };
+    return expr_compound(p, &null_type, args);
+  }
+
+  // if (parser_check(p, TOKEN_IDENT) && peek(p, '{'))
+  if (is_type_start(p) && is_type_followed_by_lbrace(p))
+  {
+    Type_Spec *type = parse_type(p);
+    expect(p, '{');
+    Compound_Arg_List args = {0};
+
+    if (!match(p, '}'))
+    {
+      b32 is_named, decided = false;
+
+      do
+      {
+        if (!decided)
+        {
+          is_named = is_named_arg(p);
+          decided  = true;
+        }
+
+        if (is_named)
+        {
+          if (!parser_check(p, TOKEN_IDENT) || !peek(p, '='))
+          {
+            // TODO:
+            // Person{name = "Bob", 5}
+            //                        ^
+            // arrow should be under 5???
+            report_error(p, "Expected field name");
+          }
+          // named field
+          String8 name = parse_ident(p);
+          expect(p, '=');
+          Expr *value = parse_compound_element(p);
+
+          Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
+          arg->expr = value;
+          arg->optional_name = name;
+          push_compound_arg(&args, arg);
+        }
+        else
+        {
+          if (is_named_arg(p))
+          {
+            report_error(p, "Named fields not allowed after positional fields");
+          }
+          // positional field
+          Expr *value = parse_compound_element(p);
+
+          Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
+          arg->expr = value;
+          push_compound_arg(&args, arg);
+        }
+      } while (match(p, ','));
+
+      expect(p, '}');
+    }
+
+    return expr_compound(p, type, args);
+  }
+
   if (match(p, TOKEN_TRUE))
   {
     return expr_bool_lit(p, true);
@@ -136,21 +353,116 @@ parse_expr_primary(Parser *p)
     return expr_group(p, expr);
   }
 
-  printf("%.*s\n", str8_varg(p->lexer->source));
-  assert(!"Expected expression");
+error:
+  // printf("%.*s\n", str8_varg(p->lexer->source));
+  // assert(!"Expected expression");
+  report_error(p, "Expected expression");
   return NULL;
+}
+
+// primary
+internal Expr *
+parse_expr_postfix(Parser *p)
+{
+  Expr *expr = parse_expr_primary(p);
+
+  while (true)
+  {
+    // CALL: foo(...)
+    if (match(p, '('))
+    {
+      Expr_List args = {0};
+
+      if (!match(p, ')'))
+      {
+        do
+        {
+          Expr *arg = parse_expr(p);
+          sll_queue_push(args.first, args.last, arg);
+        } while (match(p, ','));
+        expect(p, ')');
+      }
+
+      expr = expr_call(p, expr, args);
+      continue;
+    }
+
+    // INDEX: a[b]
+    if (match(p, '['))
+    {
+      Expr *index = parse_expr(p);
+      expect(p, ']');
+      expr = expr_index(p, expr, index);
+      continue;
+    }
+
+    // FIELD person.name
+    if (match(p, '.'))
+    {
+      String8 name = parse_ident(p);
+      expr = expr_field(p, expr, name);
+      continue;
+    }
+
+    // POSTFIX ++ --
+    // if (match(p, TOKEN_INCREMENT) || match(p, TOKEN_DECREMENT))
+    // {
+    //   Token op = p->prev;
+    //   expr = expr_postfix(p, expr, op);
+    //   continue;
+    // }
+
+    break;
+  }
+
+  return expr;
 }
 
 internal Expr *
 parse_expr_unary(Parser *p)
 {
+  if (match(p, TOKEN_CAST))
+  {
+    // cast(f32)a
+    expect(p, '(');
+    Type_Spec *type = parse_type(p);
+    expect(p, ')');
+    Expr *expr = parse_expr_unary(p);
+    return expr_cast(p, type, expr);
+  }
+
+  if (match(p, TOKEN_SIZE_OF))
+  {
+    Expr *expr = NULL;
+
+    expect(p, '(');
+    if (match(p, ':'))
+    {
+      // size_of(:Entity) TYPE
+      Type_Spec *type = parse_type(p);
+      expect(p, ')');
+      expr = expr_size_of_type(p, type);
+    }
+    else
+    {
+      // size_of(f32)     EXPR
+      Expr *expr = parse_expr(p);
+      expect(p, ')');
+      expr = expr_size_of_expr(p, expr);
+    }
+    return expr;
+  }
+
+  // prefix operators
+  // TODO(mxtej) add?: increment, decrement
   while (match(p, '!') || match(p, '-') || match(p, '+') || match(p, '~'))
   {
     Token op = p->prev;
     Expr *right = parse_expr_unary(p);
     return expr_unary(p, op, right);
   }
-  return parse_expr_primary(p);
+  return parse_expr_postfix(p);
+  // return parse_expr_primary(p);
 }
 
 internal Expr *
@@ -383,7 +695,8 @@ parse_stmt_block(Parser *p)
   while (!parser_check(p, '}'))
   {
     Stmt *stmt = parse_stmt(p);
-    dll_push_back(s->block.stmts.first, s->block.stmts.last, stmt);
+    sll_queue_push(s->block.stmts.first, s->block.stmts.last, stmt);
+    s->block.stmts.count += 1;
   }
   expect(p, '}');
   return s;
@@ -524,7 +837,6 @@ parse_stmt_decl(Parser *p)
   {
     s->decl->kind = DECL_CONST;
     s->decl->name = name;
-    s->decl->const0.type = type;
     s->decl->const0.expr = init;
   }
   else
@@ -535,7 +847,6 @@ parse_stmt_decl(Parser *p)
     s->decl->var.expr = init;
   }
 
-  assert(s->decl);
   return s;
 }
 
@@ -570,7 +881,7 @@ parse_statements(Parser *p)
   while (lexer_can_peek(p->lexer))
   {
     Stmt *stmt = parse_stmt(p);
-    dll_push_back(list.first, list.last, stmt);
+    sll_queue_push(list.first, list.last, stmt);
   }
 
   return list;
@@ -600,7 +911,7 @@ parse_decl_enum(Parser *p)
       member->value = parse_expr(p);
     }
 
-    dll_push_back(members->first, members->last, member);
+    sll_queue_push(members->first, members->last, member);
 
     if (!match(p, ','))
     {
@@ -823,7 +1134,8 @@ parse_decl(Parser *p)
   if (match(p, TOKEN_ENUM)) return parse_decl_enum(p);
   if (match(p, TOKEN_VAR))  return parse_decl_var(p);
   // const
-  assert(!"Expected declaration keyword");
+  // assert(!"Expected declaration keyword");
+  report_error(p, "Expected declaration keyword");
   return NULL;
 }
 
@@ -881,12 +1193,12 @@ parser_test()
       // "var foo = a ? +u : 0;\n"
       // // "var foo = a ? h(x) : 0;\n" // proc call
       // // "var foo = a ? k[x] : 0;\n" // indexing
-      // "enum Color\n"
-      // "{\n"
-      // "  Red = 3,\n"
-      // "  Green,\n"
-      // "  Blue = 0\n"
-      // "}\n"
+      "enum Color\n"
+      "{\n"
+      "  Red = 3,\n"
+      "  Green,\n"
+      "  Blue = 0\n"
+      "}\n"
       // "\n"
       // "struct Person\n"
       // "{\n"
@@ -894,30 +1206,48 @@ parser_test()
       // "  age:  int,\n"
       // "}\n"
       "\n"
+      "var x = Point{1,2};\n"
+      "\n"
       "proc make_person(name: string, age: int) -> Person\n"
       "{\n"
       "  var person: Person;\n"
-      // "  person.name = name;\n" // TODO
-      // "  person.age  = age;\n"
+      "  person.name = name;\n" // TODO
+      "  person.age  = age;\n"
       "  return person;\n"
       "}\n"
     );
+    /*
+    
+    (proc (make_person (name string, age int) Person)
+      (var (person Person) value)
+      (return person)
+    )
+    
+    */
 
     Lexer l = lexer_init(source);
     Parser p = parser_init(&l);
 
     Decl_List list = parse_declarations(&p);
 
-    // IMPORTANT TODO: STMT_BLOCK has stmts list all NULL even though it was parsed????
-
     for (Decl *it = list.first; it != NULL; it = it->next)
     {
+      Arena_Temp scratch = arena_scratch_get(0, 0);
+
+      String8List list = {0};
+
       int a = 5;
       // char buf[128];
       // usize buf_size = sizeof(buf);
       // usize n = print_stmt(buf, buf_size, it);
+      int indent = 0;
+      print_decl(scratch.arena, &list, &indent, it);
+
+      String8 result = str8_list_join(scratch.arena, &list, NULL);
+      printf("%.*s\n", str8_varg(result));
 
       // printf("%.*s\n", (int)n, buf);
+      arena_scratch_release(scratch);
     }
   }
 

@@ -15,8 +15,9 @@ struct Parser
 {
   Arena *arena;
   Lexer *lexer;
-  Token curr;
   Token prev;
+  Token curr;
+  Token next;
 };
 
 internal Parser parser_init(Lexer *l);
@@ -61,6 +62,7 @@ struct Stmt_List
 {
   Stmt *first;
   Stmt *last;
+  u64 count;
 };
 
 struct Stmt
@@ -68,7 +70,6 @@ struct Stmt
   Stmt_Kind kind;
 
   Stmt *next;
-  Stmt *prev;
 
   union
   {
@@ -120,11 +121,14 @@ struct Stmt
   };
 };
 // raddbg_type_view(Stmt,
+//                  kind == STMT_BLOCK  ? block :
 //                  kind == STMT_IF     ? if0 :
+//                  kind == STMT_DO_WHILE ? do_while :
 //                  kind == STMT_WHILE  ? while0 :
 //                  kind == STMT_FOR    ? for0 :
 //                  kind == STMT_RETURN ? return0 :
 //                  kind == STMT_EXPR   ? expr :
+//                  kind == STMT_DECL   ? decl :
 //                  $);
 
 internal Stmt *stmt_alloc(Parser *p, Stmt_Kind kind);
@@ -157,7 +161,7 @@ struct Type_Spec
   Type_Spec_Kind kind;
 
   Type_Spec *next;
-  Type_Spec *prev;
+  Type_Spec *prev; // TODO
 
   union
   {
@@ -165,7 +169,7 @@ struct Type_Spec
 
     struct
     {
-      Type_Spec_List params;
+      Type_Spec_List params; // TODO: replace with array?
       u32 param_count;
       Type_Spec *ret;
     }
@@ -174,7 +178,7 @@ struct Type_Spec
     struct
     {
       Expr      *count;
-      Type_Spec *elem;
+      Type_Spec *elem; // TODO: rename to base
     }
     array;
 
@@ -244,7 +248,6 @@ typedef struct Enum_Member Enum_Member;
 struct Enum_Member
 {
   Enum_Member *next;
-  Enum_Member *prev;
   String8      name;
   Expr        *value;
 };
@@ -265,15 +268,14 @@ struct Decl_Enum
 typedef struct Decl_Var Decl_Var;
 struct Decl_Var
 {
-  Type_Spec *type;
+  Type_Spec *type; // TODO rename to typespec
   Expr      *expr;
 };
 
 typedef struct Decl_Const Decl_Const;
 struct Decl_Const
 {
-  Type_Spec *type;
-  Expr      *expr;
+  Expr *expr;
 };
 
 struct Decl
@@ -293,6 +295,14 @@ struct Decl
     Decl_Const const0;
   };
 };
+// raddbg_type_view(Decl,
+//                  kind == DECL_PROC   ? proc :
+//                  kind == DECL_STRUCT ? struct0 :
+//                  kind == DECL_UNION  ? union0 :
+//                  kind == DECL_ENUM   ? enum0 :
+//                  kind == DECL_VAR    ? var :
+//                  kind == DECL_CONST  ? const0 :
+//                  $);
 
 typedef struct Decl_List Decl_List;
 struct Decl_List
@@ -320,11 +330,43 @@ enum Expr_Kind
   EXPR_FLOAT_LITERAL,
   EXPR_BOOL_LITERAL,
   EXPR_GROUP,
+  EXPR_CAST,         // unary
+  EXPR_CALL,         // postfix
+  EXPR_INDEX,        // postfix
+  EXPR_FIELD,        // postfix
+  EXPR_COMPOUND,     // primary/postfix hybrid | Type{}, [5]Type{...}, proc(a: int) -> float {}, &something
+  EXPR_SIZE_OF_EXPR, // unary
+  EXPR_SIZE_OF_TYPE, // unary
+};
+
+STRUCT(Compound_Arg)
+{
+  Compound_Arg *next;
+
+  String8 optional_name;
+  Expr *expr;
+};
+
+STRUCT(Compound_Arg_List)
+{
+  Compound_Arg *first;
+  Compound_Arg *last;
+  u64 count;
+};
+
+internal void push_compound_arg(Compound_Arg_List *list, Compound_Arg *arg);
+
+STRUCT(Expr_List)
+{
+  Expr *first;
+  Expr *last;
 };
 
 struct Expr
 {
   Expr_Kind kind;
+
+  Expr *next;
 
   union
   {
@@ -360,6 +402,44 @@ struct Expr
       Expr *expr;
     }
     group;
+
+    struct
+    {
+      Type_Spec *type;
+      Expr *expr;
+    }
+    cast;
+
+    struct
+    {
+      Expr *expr;
+      Expr_List args;
+    }
+    call;
+
+    struct
+    {
+      Expr *expr;
+      Expr *index;
+    }
+    index;
+
+    struct
+    {
+      Expr *expr;
+      String8 name;
+    }
+    field;
+
+    struct
+    {
+      Type_Spec *type;
+      Compound_Arg_List args;
+    }
+    compound;
+
+    Expr      *size_of_expr;
+    Type_Spec *size_of_type;
   };
 };
 // raddbg_type_view(Expr,
@@ -378,13 +458,6 @@ struct Expr
 //                  kind == Expr_Kind.EXPR_GROUP           ? group :
 //                  $);
 
-typedef struct Expr_List Expr_List;
-struct Expr_List
-{
-  Expr *first;
-  Expr *last;
-};
-
 internal Expr *expr_alloc(Parser *p, Expr_Kind kind);
 
 internal Expr *expr_ident(Parser *p, Token ident);
@@ -397,3 +470,10 @@ internal Expr *expr_integer_lit(Parser *p, u64 n);
 internal Expr *expr_float_lit(Parser *p, f64 f);
 internal Expr *expr_bool_lit(Parser *p, bool b);
 internal Expr *expr_group(Parser *p, Expr *e);
+internal Expr *expr_cast(Parser *p, Type_Spec *type, Expr *e);
+internal Expr *expr_call(Parser *p, Expr *e, Expr_List args);
+internal Expr *expr_index(Parser *p, Expr *e, Expr *index);
+internal Expr *expr_field(Parser *p, Expr *e, String8 field);
+internal Expr *expr_compound(Parser *p, Type_Spec *type, Compound_Arg_List args);
+internal Expr *expr_size_of_expr(Parser *p, Expr *e);
+internal Expr *expr_size_of_type(Parser *p, Type_Spec *type);

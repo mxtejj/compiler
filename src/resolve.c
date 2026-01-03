@@ -294,6 +294,7 @@ STRUCT(Sym)
   String8    name;
   Decl      *decl;
   Sym_State  state;
+  // Resolved  *resolved;
 };
 
 STRUCT(Sym_List)
@@ -318,6 +319,109 @@ sym_get(String8 name)
     }
   }
   return NULL;
+}
+
+internal void
+order_name(String8 name)
+{
+
+}
+
+internal void
+order_expr(Expr *expr)
+{
+  switch (expr->kind)
+  {
+  case EXPR_IDENT:
+    order_name(expr->ident);
+    break;
+  case EXPR_UNARY:
+    order_expr(expr->unary.right);
+    break;
+  case EXPR_BINARY:
+    order_expr(expr->binary.left);
+    order_expr(expr->binary.right);
+    break;
+  case EXPR_TERNARY:
+    order_expr(expr->ternary.cond);
+    order_expr(expr->ternary.then);
+    order_expr(expr->ternary.else_);
+    break;
+  case EXPR_NIL_LITERAL:
+  case EXPR_STRING_LITERAL:
+  case EXPR_INTEGER_LITERAL:
+  case EXPR_FLOAT_LITERAL:
+  case EXPR_BOOL_LITERAL:
+    // Do nothing
+    break;
+  case EXPR_GROUP:
+    break;
+  default:
+    assert(0);
+    break;
+  }
+}
+
+internal void
+order_typespec(Type_Spec *typespec)
+{
+  switch (typespec->kind)
+  {
+  case TYPE_SPEC_NAME:
+    order_name(typespec->name);
+    break;
+  case TYPE_SPEC_PROC:
+    for (Type_Spec *param = typespec->proc.params.first;
+         param != 0;
+         param = param->next)
+    {
+      order_typespec(param);
+    }
+    order_typespec(typespec->proc.ret);
+    break;
+  case TYPE_SPEC_ARRAY:
+    order_expr(typespec->array.count);
+    order_typespec(typespec->array.elem);
+    break;
+  case TYPE_SPEC_SLICE:
+    order_typespec(typespec->slice.elem);
+    break;
+  case TYPE_SPEC_PTR:
+    // TODO: Think about forward declaration, etc
+    order_typespec(typespec->ptr.pointee);
+    break;
+  default:
+    assert(0);
+    break;
+  }
+}
+
+internal void
+order_decl(Decl *decl)
+{
+  switch (decl->kind)
+  {
+  case DECL_PROC:
+    // Don't need to handle it here
+    break;
+  case DECL_STRUCT:
+  case DECL_UNION:
+    // for each aggr item do order_typespec
+    break;
+  case DECL_ENUM:
+    order_decl_enum(decl);
+    break;
+  case DECL_VAR:
+    order_typespec(decl->var.type);
+    order_expr(decl->var.expr);
+    break;
+  case DECL_CONST:
+    order_expr(decl->const0.expr);
+    break;
+  default:
+    assert(0);
+    break;
+  }
 }
 
 internal void

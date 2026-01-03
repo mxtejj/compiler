@@ -111,6 +111,67 @@ expr_group(Parser *p, Expr *e)
   return expr;
 }
 
+internal Expr *
+expr_cast(Parser *p, Type_Spec *type, Expr *e)
+{
+  Expr *expr = expr_alloc(p, EXPR_CAST);
+  expr->cast.type = type;
+  expr->cast.expr = e;
+  return expr;
+}
+
+internal Expr *
+expr_call(Parser *p, Expr *e, Expr_List args)
+{
+  Expr *expr = expr_alloc(p, EXPR_CALL);
+  expr->call.expr = e;
+  expr->call.args = args;
+  return expr;
+}
+
+internal Expr *
+expr_index(Parser *p, Expr *e, Expr *index)
+{
+  Expr *expr = expr_alloc(p, EXPR_INDEX);
+  expr->index.expr = e;
+  expr->index.index = index;
+  return expr;
+}
+
+internal Expr *
+expr_field(Parser *p, Expr *e, String8 field)
+{
+  Expr *expr = expr_alloc(p, EXPR_FIELD);
+  expr->field.expr = e;
+  expr->field.name = field;
+  return expr;
+}
+
+internal Expr *
+expr_compound(Parser *p, Type_Spec *type, Compound_Arg_List args)
+{
+  Expr *expr = expr_alloc(p, EXPR_COMPOUND);
+  expr->compound.type = type;
+  expr->compound.args = args;
+  return expr;
+}
+
+internal Expr *
+expr_size_of_expr(Parser *p, Expr *e)
+{
+  Expr *expr = expr_alloc(p, EXPR_SIZE_OF_EXPR);
+  expr->size_of_expr = e;
+  return expr;
+}
+
+internal Expr *
+expr_size_of_type(Parser *p, Type_Spec *type)
+{
+  Expr *expr = expr_alloc(p, EXPR_SIZE_OF_TYPE);
+  expr->size_of_type = type;
+  return expr;
+}
+
 /////////////////////////////////////////////////////
 // Statements
 internal Stmt *
@@ -134,6 +195,113 @@ internal Token
 make_token(char c)
 {
   return (Token){ .kind = c };
+}
+
+internal usize
+print_expr(char *buf, usize buf_size, Expr *e);
+
+internal usize
+print_type(char *buf, usize buf_size, Type_Spec *t)
+{
+  usize n = 0;
+
+  switch (t->kind)
+  {
+  case TYPE_SPEC_NULL:
+    n += snprintf(buf + n, buf_size - n, "<NULL>");
+    break;
+  case TYPE_SPEC_NAME:
+    n += snprintf(buf + n, buf_size - n, "%.*s", str8_varg(t->name));
+    break;
+  // case TYPE_SPEC_PROC:
+  //   n += snprintf(buf + n, buf_size - n, "proc");
+  //   break;
+  case TYPE_SPEC_ARRAY:
+    n += snprintf(buf + n, buf_size - n, "[");
+    n += print_expr(buf + n, buf_size - n, t->array.count);
+    n += snprintf(buf + n, buf_size - n, "]");
+    n += print_type(buf + n, buf_size - n, t->array.elem);
+    break;
+  case TYPE_SPEC_SLICE:
+    n += snprintf(buf + n, buf_size - n, "[]");
+    n += print_type(buf + n, buf_size - n, t->slice.elem);
+    break;
+  case TYPE_SPEC_PTR:
+    n += snprintf(buf + n, buf_size - n, "*");
+    n += print_type(buf + n, buf_size - n, t->ptr.pointee);
+    break;
+  default:
+    assert(0);
+    break;
+  }
+
+  return n;
+}
+
+internal void
+print_ln(Arena *arena, String8List *list, int *indent)
+{
+  str8_list_pushf(arena, list, "\n%.*s", (*indent), "                                     ");
+}
+
+internal void
+print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
+{
+  switch (d->kind)
+  {
+  case DECL_NULL:
+    str8_list_pushf(arena, list, "<NULL>");
+    break;
+  case DECL_PROC:
+    // d->proc.
+    str8_list_pushf(arena, list, "(proc %.*s ", str8_varg(d->name));
+    str8_list_pushf(arena, list, "(");
+    for (Proc_Param *it = d->proc.params.first;
+         it != 0;
+         it = it->next)
+    {
+      
+    }
+    str8_list_pushf(arena, list, ")");
+
+    str8_list_pushf(arena, list, ")");
+    break;
+  case DECL_STRUCT:
+    break;
+  case DECL_UNION:
+    break;
+  case DECL_ENUM:
+    str8_list_pushf(arena, list, "(enum %.*s ", str8_varg(d->name));
+    *indent++;
+    for (Enum_Member *it = d->enum0.members.first;
+         it != 0;
+         it = it->next)
+    {
+      print_ln(arena, list, indent);
+      str8_list_pushf(arena, list, "(%.*s ", str8_varg(it->name));
+      if (it->value)
+      {
+        //str8_list_pushf(arena, list, "(%.*s ", str8_varg(it->name));
+        // print_expr(arena, list, indent, it->value);
+        str8_list_pushf(arena, list, "TODO");
+      }
+      else
+      {
+        str8_list_pushf(arena, list, "nil");
+      }
+      str8_list_pushf(arena, list, ")");
+    }
+    *indent--;
+    str8_list_pushf(arena, list, ")");
+    break;
+  case DECL_VAR:
+    break;
+  case DECL_CONST:
+    break;
+  default:
+    assert(0);
+    break;
+  }
 }
 
 internal usize
@@ -200,6 +368,63 @@ print_expr(char *buf, usize buf_size, Expr *e)
   case EXPR_GROUP:
     n += snprintf(buf + n, buf_size - n, "(group ");
     n += print_expr(buf + n, buf_size - n, e->group.expr);
+    n += snprintf(buf + n, buf_size - n, ")");
+    break;
+  case EXPR_CAST:
+    n += snprintf(buf + n, buf_size - n, "(cast ");
+    break;
+  case EXPR_CALL:
+    n += snprintf(buf + n, buf_size - n, "(call ");
+    n += print_expr(buf + n, buf_size - n, e->call.expr);
+    for (Expr *arg = e->call.args.first;
+         arg != 0;
+         arg = arg->next)
+    {
+      n += snprintf(buf + n, buf_size - n, " ");
+      n += print_expr(buf + n, buf_size - n, arg);
+    }
+    n += snprintf(buf + n, buf_size - n, ")");
+    break;
+  case EXPR_INDEX:
+    n += snprintf(buf + n, buf_size - n, "(index ");
+    n += print_expr(buf + n, buf_size - n, e->index.expr);
+    n += snprintf(buf + n, buf_size - n, " ");
+    n += print_expr(buf + n, buf_size - n, e->index.index);
+    n += snprintf(buf + n, buf_size - n, ")");
+    break;
+  case EXPR_FIELD:
+    n += snprintf(buf + n, buf_size - n, "(field ");
+    n += print_expr(buf + n, buf_size - n, e->field.expr);
+    n += snprintf(buf + n, buf_size - n, " ");
+    n += snprintf(buf + n, buf_size - n, "%.*s", str8_varg(e->field.name));
+    n += snprintf(buf + n, buf_size - n, ")");
+    break;
+  case EXPR_COMPOUND:
+    n += snprintf(buf + n, buf_size - n, "(compound");
+    if (e->compound.type != TYPE_SPEC_NULL)
+    {
+      n += snprintf(buf + n, buf_size - n, " ");
+    }
+    n += print_type(buf + n, buf_size - n, e->compound.type);
+    for (Compound_Arg *arg = e->compound.args.first;
+         arg != 0;
+         arg = arg->next)
+    {
+      n += snprintf(buf + n, buf_size - n, " ");
+      if (arg->optional_name.count > 0)
+      {
+        n += snprintf(buf + n, buf_size - n, "%.*s=", str8_varg(arg->optional_name));
+      }
+      n += print_expr(buf + n, buf_size - n, arg->expr);
+    }
+    n += snprintf(buf + n, buf_size - n, ")");
+    break;
+  case EXPR_SIZE_OF_EXPR:
+    n += snprintf(buf + n, buf_size - n, "(sizeof_expr ");
+    n += snprintf(buf + n, buf_size - n, ")");
+    break;
+  case EXPR_SIZE_OF_TYPE:
+    n += snprintf(buf + n, buf_size - n, "(sizeof_type ");
     n += snprintf(buf + n, buf_size - n, ")");
     break;
   default:
