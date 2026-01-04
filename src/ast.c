@@ -1,4 +1,5 @@
 #include "parser.h"
+#include "print.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -198,13 +199,14 @@ make_token(char c)
 }
 
 internal void
-print_expr(Arena *arena, String8List *list, int *indent, Expr *e);
-
-internal void
 print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
 {
   // TODO: Use read_only nil_typespec instead of actual NULL
-  if (!t) return;
+  if (!t)
+  {
+    str8_list_pushf(arena, list, "nil");
+    return;
+  }
 
   switch (t->kind)
   {
@@ -352,7 +354,12 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
     print_expr(arena, list, indent, d->var.expr);
     str8_list_pushf(arena, list, ")");
     break;
-  // case DECL_CONST: break;
+  case DECL_CONST:
+    str8_list_pushf(arena, list, "(const ");
+    str8_list_pushf(arena, list, "%.*s ", str8_varg(d->name));
+    print_expr(arena, list, indent, d->const0.expr);
+    str8_list_pushf(arena, list, ")");
+    break;
   default:
     assert(0);
     break;
@@ -365,7 +372,11 @@ internal void
 print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
 {
   // TODO: Use read_only nil_expr instead of actual NULL
-  if (!e) return;
+  if (!e)
+  {
+    str8_list_pushf(arena, list, "nil");
+    return;
+  }
 
   switch (e->kind)
   {
@@ -479,10 +490,12 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
     break;
   case EXPR_SIZE_OF_EXPR:
     str8_list_pushf(arena, list, "(sizeof_expr ");
+    print_expr(arena, list, indent, e->size_of_expr);
     str8_list_pushf(arena, list, ")");
     break;
   case EXPR_SIZE_OF_TYPE:
     str8_list_pushf(arena, list, "(sizeof_type ");
+    print_type(arena, list, indent, e->size_of_type);
     str8_list_pushf(arena, list, ")");
     break;
   default:
@@ -495,7 +508,11 @@ internal void
 print_stmt(Arena *arena, String8List *list, int *indent, Stmt *s)
 {
   // TODO: Use read_only nil_stmt instead of actual NULL
-  if (!s) return;
+  if (!s)
+  {
+    str8_list_pushf(arena, list, "nil");
+    return;
+  }
 
   switch (s->kind)
   {

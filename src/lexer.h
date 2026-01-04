@@ -10,6 +10,7 @@
 #define TOKEN_LIST(X) \
   X(IDENT)            \
   X(ARROW)            \
+  X(DEREF)            \
   X(EQ)               \
   X(NEQ)              \
   X(GTEQ)             \
@@ -48,6 +49,7 @@
   X(F32)              \
   X(F64)              \
   X(BOOL)             \
+  X(STRING)           \
   X(TRUE)             \
   X(FALSE)            \
   X(IF)               \
@@ -63,7 +65,6 @@
   X(STRUCT)           \
   X(UNION)            \
   X(ENUM)             \
-  X(STRING)           \
   X(PROC)             \
   X(VAR)              \
   X(CONST)            \
@@ -83,7 +84,7 @@ enum Token_Kind
 #undef X
 };
 
-internal String8 str_from_token_kind(Token_Kind kind);
+internal String8 str_from_token_kind(Arena *arena, Token_Kind kind);
 
 typedef union Literal_Value Literal_Value;
 union Literal_Value
@@ -97,8 +98,8 @@ union Literal_Value
 typedef struct Token Token;
 struct Token
 {
-  Token_Kind kind;
-  String8     lexeme;
+  Token_Kind    kind;
+  String8       lexeme;
   Literal_Value value;
 };
 

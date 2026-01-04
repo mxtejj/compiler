@@ -6,17 +6,9 @@
 #include <math.h>
 #include "globals.h"
 
-// TODO:
-// Integer literal
-// Floating literal
-// Character literal
-
 internal String8
-str_from_token_kind(Token_Kind kind)
+str_from_token_kind(Arena *arena, Token_Kind kind)
 {
-  local_persist u8 buf[64];
-  u64 n = 0;
-
   switch (kind)
   {
   case TOKEN_EOF: return str8_lit("TOKEN_EOF");
@@ -26,16 +18,25 @@ str_from_token_kind(Token_Kind kind)
   #undef X
 
   default:
+  {
+    u8 *buf = push_array(arena, u8, 16);
+    u64 n = 0;
+
     if (kind < 128 && isprint(kind))
     {
-      n = snprintf(buf, sizeof(buf), "%c", kind);
+      n = snprintf((char *)buf, 16, "%c", kind);
     }
     else
     {
-      n = snprintf(buf, sizeof(buf), "<ASCII %c>", kind);
+      n = snprintf((char *)buf, 16, "<ASCII %c>", kind);
     }
+
+    return str8(buf, n);
   }
-  return str8(buf, n);
+  }
+
+  assert(!"Unreachable");
+  return (String8){0};
 }
 
 internal u64
@@ -501,6 +502,19 @@ lexer_next(Lexer *l)
     {
       l->cursor = l->start;
       t = lexer_parse_integer(l);
+    }
+    break;
+
+  case '.':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '*')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TOKEN_DEREF);
+    }
+    else
+    {
+      t = lexer_make_token(l, '.');
     }
     break;
 

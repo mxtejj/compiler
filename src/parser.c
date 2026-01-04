@@ -116,7 +116,15 @@ expect(Parser *p, Token_Kind kind)
     advance(p);
     return true;
   }
-  report_error(p, "Expected '%.*s', got '%.*s'", str8_varg(str_from_token_kind(kind)), str8_varg(str_from_token_kind(p->curr.kind)));
+
+  Arena_Temp scratch = arena_scratch_get(0, 0);
+
+  String8 expected = str_from_token_kind(scratch.arena, kind);
+  String8 got      = str_from_token_kind(scratch.arena, p->curr.kind);
+
+  report_error(p, "Expected '%.*s', got '%.*s'", str8_varg(expected), str8_varg(got));
+
+  arena_scratch_release(scratch);
   trap();
   return false;
 }
@@ -187,28 +195,101 @@ is_type_start(Parser *p)
   return false;
 }
 
+// internal b32
+// ok i re(Parser *p)
+// {
+//   Arena_Temp scratch = arena_scratch_get(0, 0);
+
+//   Parser temp_parser = *p;
+//   Lexer temp_lexer = *p->lexer;
+
+//   temp_parser.arena = scratch.arena;
+//   temp_parser.lexer = &temp_lexer;
+
+//   parse_type(&temp_parser);
+//   b32 result = temp_parser.curr.kind == '{';
+
+//   arena_scratch_release(scratch);
+//   return result;
+// }
+
+internal Type_Spec *parse_type_base(Parser *p);
+
 internal b32
-is_type_followed_by_lbrace(Parser *p)
+looks_like_compound_literal(Parser *p)
 {
   Arena_Temp scratch = arena_scratch_get(0, 0);
 
-  Parser temp_parser = *p;
+  // Clone temporary parser state
+  Parser tmp = *p;
   Lexer temp_lexer = *p->lexer;
+  tmp.arena = scratch.arena;
+  tmp.lexer = &temp_lexer;
 
-  temp_parser.arena = scratch.arena;
-  temp_parser.lexer = &temp_lexer;
-
-  parse_type(&temp_parser);
-  b32 result = temp_parser.curr.kind == '{';
+  // A compound literal MUST start with a type.
+  // We try to parse a type specifier speculatively.
+  Type_Spec *type = parse_type(&tmp);
+  
+  // If after the type we see a '{', it's definitely a compound literal.
+  b32 result = (type != NULL && tmp.curr.kind == '{');
 
   arena_scratch_release(scratch);
   return result;
 }
+// looks_like_compound_literal(Parser *p)
+// {
+//   Arena_Temp scratch = arena_scratch_get(0, 0);
+
+//   Parser tmp = *p;
+//   Lexer  temp_lexer = *p->lexer;
+
+//   tmp.arena = scratch.arena;
+//   tmp.lexer = &temp_lexer;
+
+//   // skip leading array prefix
+//   while (tmp.curr.kind == '[')
+//   {
+//     advance(&tmp);
+//     while (tmp.curr.kind != ']' && tmp.curr.kind != TOKEN_EOF)
+//       advance(&tmp);
+//     if (tmp.curr.kind != ']') return false;
+//     advance(&tmp);
+//   }
+
+//   // parse only type BASE + SUFFIXES (no exprs)
+//   if (!parse_type_base(&tmp)) return false;
+
+//   while (tmp.curr.kind == '[' || tmp.curr.kind == '*')
+//   {
+//     if (tmp.curr.kind == '[')
+//     {
+//       advance(&tmp);
+//       if (tmp.curr.kind != ']')
+//       {
+//         // skip tokens, NOT parse expressions
+//         while (tmp.curr.kind != ']' && tmp.curr.kind != TOKEN_EOF)
+//           advance(&tmp);
+//       }
+//       if (tmp.curr.kind != ']') return false;
+//       advance(&tmp);
+//     }
+//     else
+//     {
+//       advance(&tmp); // *
+//     }
+//   }
+
+//   b32 result = tmp.curr.kind == '{';
+
+//   arena_scratch_release(scratch);
+//   return result;
+// }
 
 internal Expr *
 parse_compound_element(Parser *p)
 {
-  if (is_type_start(p) && is_type_followed_by_lbrace(p))
+  // if (is_type_start(p) && is_type_followed_by_lbrace(p))
+  if (is_type_start(p) && looks_like_compound_literal(p))
   {
     Type_Spec *type = parse_type(p);
     expect(p, '{');
@@ -259,7 +340,8 @@ parse_expr_primary(Parser *p)
   }
 
   // if (parser_check(p, TOKEN_IDENT) && peek(p, '{'))
-  if ((p->expr_parse_flags & EXPR_ALLOW_COMPOUND) && is_type_start(p) && is_type_followed_by_lbrace(p))
+  // if ((p->expr_parse_flags & EXPR_ALLOW_COMPOUND) && is_type_start(p) && is_type_followed_by_lbrace(p))
+  if ((p->expr_parse_flags & EXPR_ALLOW_COMPOUND) && is_type_start(p) && looks_like_compound_literal(p))
   {
     Type_Spec *type = parse_type(p);
     expect(p, '{');
@@ -396,7 +478,15 @@ parse_expr_postfix(Parser *p)
       continue;
     }
 
-    // FIELD person.name
+    // DEREF: ptr.*
+    if (match(p, TOKEN_DEREF))
+    {
+      Token op = p->prev;
+      expr = expr_unary(p, op, expr);
+      continue;
+    }
+
+    // FIELD: person.name
     if (match(p, '.'))
     {
       String8 name = parse_ident(p);
@@ -446,16 +536,16 @@ parse_expr_unary(Parser *p)
     else
     {
       // size_of(f32)     EXPR
-      Expr *expr = parse_expr(p);
+      Expr *e = parse_expr(p);
       expect(p, ')');
-      expr = expr_size_of_expr(p, expr);
+      expr = expr_size_of_expr(p, e);
     }
     return expr;
   }
 
   // prefix operators
   // TODO(mxtej) add?: increment, decrement
-  while (match(p, '!') || match(p, '-') || match(p, '+') || match(p, '~'))
+  while (match(p, '!') || match(p, '-') || match(p, '+') || match(p, '~') || match(p, '&'))
   {
     Token op = p->prev;
     Expr *right = parse_expr_unary(p);
@@ -836,6 +926,12 @@ parse_stmt_decl(Parser *p)
     init = parse_expr(p);
   }
 
+  if (!type && !init)
+  {
+    // if its `var x;`
+    report_error(p, "Variables must have a type or an initializer");
+  }
+
   expect(p, ';');
 
   // TODO: CLEANUP
@@ -940,14 +1036,32 @@ parse_decl_enum(Parser *p)
 internal Decl *
 parse_decl_var(Parser *p)
 {
-  // var a = EXPR;
+  // var name: type = expr;
   String8 name = parse_ident(p);
-  expect(p, '=');
-  Expr *expr = parse_expr(p);
+  Type_Spec *type = NULL;
+  Expr *expr = NULL;
+
+  if (match(p, ':'))
+  {
+    type = parse_type(p);
+  }
+
+  if (match(p, '='))
+  {
+    expr = parse_expr(p);
+  }
+
+  if (!type && !expr)
+  {
+    report_error(p, "Variables must have a type or an initializer");
+    trap();
+  }
+
   expect(p, ';');
 
   Decl *decl = decl_alloc(p, DECL_VAR);
   decl->name = name;
+  decl->var.type = type;
   decl->var.expr = expr;
 
   return decl;
@@ -957,12 +1071,32 @@ internal Decl *
 parse_decl_const(Parser *p)
 {
   String8 name = parse_ident(p);
-  expect(p, '=');
-  Expr *expr = parse_expr(p);
+  // Type_Spec *type = NULL;
+  Expr *expr = NULL;
+
+  // if (match(p, ':'))
+  // {
+  //   type = parse_type(p);
+  // }
+
+  if (match(p, '='))
+  {
+    expr = parse_expr(p);
+  }
+
+  // if (!type && !expr)
+  if (!expr)
+  {
+    // report_error(p, "Constants must have a type or an initializer");
+    report_error(p, "Constants must have an initializer");
+    trap();
+  }
+
   expect(p, ';');
 
   Decl *decl = decl_alloc(p, DECL_CONST);
   decl->name = name;
+  // decl->const0.type = type;
   decl->const0.expr = expr;
 
   return decl;
@@ -1071,10 +1205,95 @@ parse_type_proc(Parser *p)
 }
 
 internal Type_Spec *
+parse_type_base(Parser *p)
+{
+  if (parser_check(p, TOKEN_IDENT) || (p->curr.kind >= TOKEN_S8 && p->curr.kind <= TOKEN_STRING))
+  {
+    Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_NAME);
+    t->name = parse_type_name(p);
+    return t;
+  }
+  else if (match(p, TOKEN_PROC))
+  {
+    Type_Spec *t = parse_type_proc(p);
+    return t;
+  }
+  else if (match(p, '('))
+  {
+    Type_Spec *t = parse_type(p);
+    expect(p, ')'); // ?
+    return t;
+  }
+  Arena_Temp scratch = arena_scratch_get(0, 0);
+  report_error(p, "Unexpected token %.*s in type", str8_varg(str_from_token_kind(scratch.arena, p->curr.kind)));
+  arena_scratch_release(scratch);
+  return NULL;
+}
+
+internal Type_Spec *
 parse_type(Parser *p)
 {
-  if (match(p, TOKEN_PROC)) return parse_type_proc(p);
-  return parse_type_prefix(p);
+  if (match(p, '*'))
+  {
+    Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_PTR);
+    t->ptr.pointee = parse_type(p); // Recursive call to handle **int
+    return t;
+  }
+  
+  if (match(p, '['))
+  {
+    // Check if it's a slice []int or array [N]int
+    if (match(p, ']'))
+    {
+      Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_SLICE);
+      t->slice.elem = parse_type(p);
+      return t;
+    }
+    else
+    {
+      Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_ARRAY);
+      t->array.count = parse_expr(p); // Parse the '2' in [2]
+      expect(p, ']');
+      t->array.elem = parse_type(p);
+      return t;
+    }
+  }
+
+  // Base case: Builtins or Identifiers
+  return parse_type_base(p);
+
+  // Type_Spec *type = parse_type_base(p);
+  // while (parser_check(p, '[') || parser_check(p, '*'))
+  // {
+  //   if (match(p, '['))
+  //   {
+  //     Expr *expr = NULL;
+  //     if (!parser_check(p, ']'))
+  //     {
+  //       expr = parse_expr(p);
+  //     }
+  //     expect(p, ']');
+
+  //     Type_Spec *elem = type;
+
+  //     type = type_spec_alloc(p, TYPE_SPEC_ARRAY);
+  //     type->array.elem = elem;
+  //     type->array.count = expr;
+  //   }
+  //   else
+  //   {
+  //     assert(parser_check(p, '*'));
+  //     advance(p);
+  //     Type_Spec *elem = type;
+  //     type = type_spec_alloc(p, TYPE_SPEC_PTR);
+  //     type->ptr.pointee = elem;
+  //   }
+  // }
+
+  // return type;
+
+  // if (match(p, TOKEN_PROC)) return parse_type_proc(p);
+  // return parse_type_prefix(p);
 }
 
 internal Decl *
@@ -1153,6 +1372,7 @@ parse_decl_aggregate(Parser *p, Decl_Kind kind)
 
     field->type = parse_type(p);
     sll_queue_push(fields->first, fields->last, field);
+    fields->count += 1;
 
     if (match(p, ','))
     {

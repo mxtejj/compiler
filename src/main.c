@@ -87,6 +87,7 @@ main(int argc, char **argv)
 #endif
 
   g_arena = arena_alloc(GB(1), MB(8), 0);
+  Arena_Temp scratch = arena_scratch_get(0, 0);
 
   String8 source = S(
     "struct Person\n"
@@ -134,7 +135,7 @@ main(int argc, char **argv)
     Token t;
     while ((t = lexer_next(&l)).kind != TOKEN_EOF)
     {
-      printf("%.*s %.*s", str8_varg(str_from_token_kind(t.kind)), str8_varg(t.lexeme));
+      printf("%.*s %.*s", str8_varg(str_from_token_kind(scratch.arena, t.kind)), str8_varg(t.lexeme));
       switch (t.kind)
       {
       case TOKEN_INTEGER_LITERAL:
@@ -162,7 +163,7 @@ main(int argc, char **argv)
     #define expect_token(x) \
       do { \
         t = lexer_next(&l); \
-        printf("%3d: expecting %s, got %.*s (%.*s)\n", __LINE__, #x, str8_varg(str_from_token_kind(t.kind)), str8_varg(t.lexeme)); \
+        printf("%3d: expecting %s, got %.*s (%.*s)\n", __LINE__, #x, str8_varg(str_from_token_kind(scratch.arena, t.kind)), str8_varg(t.lexeme)); \
         assert(t.kind == (x)); \
       } while (0); \
 
@@ -369,6 +370,10 @@ main(int argc, char **argv)
       { .input = S("Person{name = \"Alice\"}.name"), .output = S("(field (compound Person name=Alice) name)") },
       { .input = S("[2]int{1, 2}[0]"),               .output = S("(index (compound [2]int 1 2) 0)") },
 
+      // Dereference pointer
+      { .input = S("ptr.* = 5;"),     .output = S("(= (.* ptr) 5)") },
+      { .input = S("ptr.*.age = 5;"), .output = S("(= (field (.* ptr) age) 5)") },
+
       // "a.b(c)[i].d++\n"
       // "foo()\n"
 
@@ -425,9 +430,10 @@ main(int argc, char **argv)
   printf("\n");
 
   // parser_test();
-  // resolve_test();
-  order_test();
+  resolve_test();
+  // order_test();
 
+  arena_scratch_release(scratch);
   arena_delete(g_arena);
 
   return 0;
