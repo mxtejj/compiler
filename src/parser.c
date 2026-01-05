@@ -335,8 +335,9 @@ parse_expr_primary(Parser *p)
       expect(p, '}');
     }
 
-    local_persist Type_Spec null_type = { .kind = TYPE_SPEC_NULL };
-    return expr_compound(p, &null_type, args);
+    // TODO
+    // local_persist Type_Spec null_type = { .kind = TYPE_SPEC_NULL };
+    return expr_compound(p, NULL, args);
   }
 
   // if (parser_check(p, TOKEN_IDENT) && peek(p, '{'))
@@ -454,6 +455,7 @@ parse_expr_postfix(Parser *p)
     if (match(p, '('))
     {
       Expr_List args = {0};
+      u64 count = 0;
 
       if (!match(p, ')'))
       {
@@ -461,11 +463,25 @@ parse_expr_postfix(Parser *p)
         {
           Expr *arg = parse_expr(p);
           sll_queue_push(args.first, args.last, arg);
+          count += 1;
         } while (match(p, ','));
         expect(p, ')');
       }
 
-      expr = expr_call(p, expr, args);
+      Expr_Array arg_array = {0};
+      if (count > 0)
+      {
+        arg_array.count = count;
+        arg_array.v = push_array(p->arena, Expr*, count);
+
+        u32 i = 0;
+        for (Expr *it = args.first; it != 0; it = it->next)
+        {
+          arg_array.v[i++] = it;
+        }
+      }
+
+      expr = expr_call(p, expr, arg_array);
       continue;
     }
 
@@ -1523,9 +1539,11 @@ parser_test()
       "typedef T = [16]proc(int, f32, string, Vector, string, f32, int, uint) -> int;\n"
       // "proc f() { enum E { A, B, C }; return; }\n"
       "proc f() { if (1) { return 1; } else if (2) { return 2; } else { return 3; } }\n"
+
+      "union Int_Or_Ptr { i: int, p: *int, }\n"
     );
     /*
-    
+
     (proc (make_person (name string, age int) Person)
       (var (person Person) value)
       (return person)

@@ -408,6 +408,13 @@ STRUCT(Expr_List)
   Expr *last;
 };
 
+STRUCT(Expr_Array)
+{
+  Expr **v;
+  u64 count;
+};
+raddbg_type_view(Expr_Array, array(v, count));
+
 struct Expr
 {
   Expr_Kind kind;
@@ -459,7 +466,7 @@ struct Expr
     struct
     {
       Expr *expr;
-      Expr_List args;
+      Expr_Array args;
     }
     call;
 
@@ -517,7 +524,7 @@ internal Expr *expr_float_lit(Parser *p, f64 f);
 internal Expr *expr_bool_lit(Parser *p, bool b);
 internal Expr *expr_group(Parser *p, Expr *e);
 internal Expr *expr_cast(Parser *p, Type_Spec *type, Expr *e);
-internal Expr *expr_call(Parser *p, Expr *e, Expr_List args);
+internal Expr *expr_call(Parser *p, Expr *e, Expr_Array args);
 internal Expr *expr_index(Parser *p, Expr *e, Expr *index);
 internal Expr *expr_field(Parser *p, Expr *e, String8 field);
 internal Expr *expr_compound(Parser *p, Type_Spec *type, Compound_Arg_List args);

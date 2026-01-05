@@ -181,7 +181,7 @@ expr_cast(Parser *p, Type_Spec *type, Expr *e)
 }
 
 internal Expr *
-expr_call(Parser *p, Expr *e, Expr_List args)
+expr_call(Parser *p, Expr *e, Expr_Array args)
 {
   Expr *expr = expr_alloc(p, EXPR_CALL);
   expr->call.expr = e;
@@ -579,12 +579,10 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
   case EXPR_CALL:
     str8_list_pushf(arena, list, "(call ");
     print_expr(arena, list, indent, e->call.expr);
-    for (Expr *arg = e->call.args.first;
-         arg != 0;
-         arg = arg->next)
+    for (Expr **it = e->call.args.v; it != e->call.args.v + e->call.args.count; it += 1)
     {
       str8_list_pushf(arena, list, " ");
-      print_expr(arena, list, indent, arg);
+      print_expr(arena, list, indent, *it);
     }
     str8_list_pushf(arena, list, ")");
     break;
@@ -603,11 +601,7 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
     str8_list_pushf(arena, list, ")");
     break;
   case EXPR_COMPOUND:
-    str8_list_pushf(arena, list, "(compound");
-    if (e->compound.type != TYPE_SPEC_NULL)
-    {
-      str8_list_pushf(arena, list, " ");
-    }
+    str8_list_pushf(arena, list, "(compound ");
     print_type(arena, list, indent, e->compound.type);
     for (Compound_Arg *arg = e->compound.args.first;
          arg != 0;

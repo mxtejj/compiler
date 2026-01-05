@@ -2,6 +2,7 @@
 #include "arena.h"
 #include "parser.h"
 #include "print.h"
+#include "os.h"
 
 internal void
 fatal(char *fmt, ...)
@@ -15,6 +16,8 @@ fatal(char *fmt, ...)
   va_end(args);
 
   arena_scratch_release(scratch);
+  trap();
+  os_exit(1);
 }
 
 ENUM(Type_Kind)
@@ -330,7 +333,6 @@ ENUM(Entity_Kind)// 176
   ENTITY_PROC,
   ENTITY_TYPE,
   ENTITY_ENUM_CONST,
-  ENTITY_TYPEDEF,
 };
 
 ENUM(Entity_State)
@@ -508,7 +510,7 @@ resolved_const(s64 const_value)
 
 internal Entity *resolve_name(String8 name);
 internal s64 resolve_int_const_expr(Expr *expr);
-internal Resolved_Expr resolve_expr(Expr *expr);
+internal Resolved_Expr resolve_expr(Expr *expr, Type *expected_type);
 
 internal Type *
 resolve_typespec(Type_Spec *typespec)
@@ -565,7 +567,7 @@ resolve_typespec(Type_Spec *typespec)
     return NULL;
   }
 
-  assert(!"Unreachable");
+  // assert(!"Unreachable");
   return NULL;
 }
 
@@ -601,8 +603,6 @@ complete_type(Type *type)
     fatal("No fields");
   }
 
-  printf("total_field_count: %lu\n", total_field_count);
-
   Type_Field_Array fields = {0};
   fields.count = total_field_count;
   fields.v = push_array(resolve_arena, Type_Field, fields.count);
@@ -613,7 +613,7 @@ complete_type(Type *type)
   u32 i = 0;
   for (Aggr_Field *it = decl->aggr.fields.first;
        it != 0;
-       it = it->next)
+       it = it->next, i += 1)
   {
     Type *field_type = resolve_typespec(it->type);
     complete_type(field_type);
@@ -662,7 +662,7 @@ resolve_decl_var(Decl *decl)
   }
   if (decl->var.expr)
   {
-    Resolved_Expr result = resolve_expr(decl->var.expr);
+    Resolved_Expr result = resolve_expr(decl->var.expr, type);
     if (type && result.type != type)
     {
       fatal("Declared var type does not match inferred type");
@@ -677,9 +677,39 @@ internal Type *
 resolve_decl_const(Decl *decl, s64 *const_value)
 {
   assert(decl->kind == DECL_CONST);
-  Resolved_Expr result = resolve_expr(decl->const0.expr);
+  Resolved_Expr result = resolve_expr(decl->const0.expr, NULL);
   *const_value = result.const_value;
   return result.type;
+}
+
+internal Type *
+resolve_decl_proc(Decl *decl)
+{
+  assert(decl->kind == DECL_PROC);
+
+  // TODO: make decl.proc.params be a array
+  u64 params_count = 0;
+  for (Proc_Param *it = decl->proc.params.first;
+       it != 0;
+       it = it->next)
+  {
+    params_count += 1;
+  }
+
+  Type_Param_Array param_types = {0};
+  param_types.count = params_count;
+  param_types.v = push_array(resolve_arena, Type_Param, param_types.count);
+
+  u64 i = 0;
+  for (Proc_Param *it = decl->proc.params.first;
+       it != 0;
+       it = it->next)
+  {
+    param_types.v[i] = resolve_typespec(it->type);
+    i += 1;
+  }
+
+  return type_proc(param_types, resolve_typespec(decl->proc.ret));
 }
 
 internal void
@@ -709,8 +739,11 @@ resolve_entity(Entity *en)
   case ENTITY_CONST:
     en->type = resolve_decl_const(en->decl, &en->const_value);
     break;
-  case ENTITY_TYPEDEF:
-    en->type = resolve_decl_type(en->decl);
+  // case ENTITY_TYPEDEF:
+    // en->type = resolve_decl_type(en->decl);
+    // break;
+  case ENTITY_PROC:
+    en->type = resolve_decl_proc(en->decl);
     break;
   default:
     assert(0);
@@ -748,7 +781,7 @@ internal Resolved_Expr
 resolve_expr_field(Expr *expr)
 {
   assert(expr->kind == EXPR_FIELD);
-  Resolved_Expr left = resolve_expr(expr->field.expr);
+  Resolved_Expr left = resolve_expr(expr->field.expr, NULL);
   Type *type = left.type;
   complete_type(type);
   if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION)
@@ -781,7 +814,8 @@ resolve_expr_name(Expr *expr)
     return resolved_lvalue(en->type);
   case ENTITY_CONST:
     return resolved_const(en->const_value);
-  // TODO: PROC
+  case ENTITY_PROC:
+    return resolved_rvalue(en->type);
   default:
     fatal("%.*s must be a var or const", str8_varg(expr->ident));
     return nil_resolved_expr;
@@ -795,7 +829,7 @@ internal Resolved_Expr
 resolve_expr_unary(Expr *expr)
 {
   assert(expr->kind == EXPR_UNARY);
-  Resolved_Expr operand = resolve_expr(expr->unary.right);
+  Resolved_Expr operand = resolve_expr(expr->unary.right, NULL);
   Type *type = operand.type;
   switch (expr->unary.op.kind)
   {
@@ -826,8 +860,8 @@ resolve_expr_binary(Expr *expr)
   assert(expr->kind == EXPR_BINARY);
   assert(expr->binary.op.kind == '+');
 
-  Resolved_Expr left  = resolve_expr(expr->binary.left);
-  Resolved_Expr right = resolve_expr(expr->binary.right);
+  Resolved_Expr left  = resolve_expr(expr->binary.left, NULL);
+  Resolved_Expr right = resolve_expr(expr->binary.right, NULL);
 
   if (left.type != type_int)
   {
@@ -845,7 +879,127 @@ resolve_expr_binary(Expr *expr)
 }
 
 internal Resolved_Expr
-resolve_expr(Expr *expr)
+resolve_expr_compound(Expr *expr, Type *expected_type)
+{
+  assert(expr->kind == EXPR_COMPOUND);
+
+  if (!expected_type && !expr->compound.type)
+  {
+    fatal("Implicitly typed compound literal used in context without expected type");
+  }
+
+  Type *type = NULL;
+  if (expr->compound.type)
+  {
+    type = resolve_typespec(expr->compound.type);
+    if (expected_type && expected_type != type)
+    {
+      fatal("Explicit compound literal type does not match expected type");
+    }
+  }
+  else
+  {
+    type = expected_type;
+  }
+  complete_type(type);
+
+  assert(expr->compound.args.count > 0);
+
+  if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION && type->kind != TYPE_ARRAY)
+  {
+    // TODO: slices
+    fatal("Compound literals can only be used with struct, union and array types");
+  }
+
+  if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION)
+  {
+
+    assert(type->aggregate.fields.count > 0);
+    if (expr->compound.args.count > type->aggregate.fields.count)
+    {
+      fatal("Compound literal has too many fields");
+    }
+
+    // TODO(mxtej): convert expr->compound args to array
+    u32 i = 0;
+    for (Compound_Arg *arg = expr->compound.args.first;
+        arg != 0;
+        arg = arg->next)
+    {
+      Resolved_Expr field = resolve_expr(arg->expr, NULL);
+      if (field.type != type->aggregate.fields.v[i].type)
+      {
+        fatal("Compound literal field type mismatch");
+      }
+      if (arg->optional_name.count > 0 && !str8_equal(arg->optional_name, type->aggregate.fields.v[i].name))
+      {
+        // TODO: Make it so u can specify the named fields out of order
+        fatal("Compound literal field name mismatch");
+      }
+
+      i += 1;
+    }
+  }
+  else
+  {
+    // assert(0);
+    assert(type->kind == TYPE_ARRAY);
+    if (expr->compound.args.count > type->array.length)
+    {
+      fatal("Compound literal has too many elements");
+    }
+    u32 i = 0;
+    for (Compound_Arg *arg = expr->compound.args.first;
+        arg != 0;
+        arg = arg->next)
+    {
+      Resolved_Expr element = resolve_expr(arg->expr, NULL);
+      if (element.type != type->array.base)
+      {
+        fatal("Compound literal element type mismatch");
+      }
+    }
+  }
+
+  return resolved_rvalue(type);
+}
+
+internal Resolved_Expr
+resolve_expr_call(Expr *expr)
+{
+  assert(expr->kind == EXPR_CALL);
+
+  Resolved_Expr proc = resolve_expr(expr->call.expr, NULL);
+  complete_type(proc.type);
+
+  if (proc.type->kind != TYPE_PROC)
+  {
+    fatal("Trying to call non-procedure value");
+  }
+  if (expr->call.args.count < proc.type->proc.params.count)
+  {
+    fatal("Too few arguments for procedure call");
+  }
+  else if (expr->call.args.count > proc.type->proc.params.count)
+  {
+    fatal("Too many arguments for procedure call");
+  }
+
+  for (u32 i = 0; i < expr->call.args.count; i += 1)
+  {
+    Type *param_type = proc.type->proc.params.v[i];
+    Resolved_Expr arg = resolve_expr(expr->call.args.v[i], param_type);
+    if (arg.type != param_type)
+    {
+      fatal("Procedure call argument type mismatch");
+    }
+  }
+
+  return resolved_rvalue(proc.type->proc.ret);
+}
+
+internal Resolved_Expr
+resolve_expr(Expr *expr, Type *expected_type)
 {
   switch (expr->kind)
   {
@@ -853,15 +1007,19 @@ resolve_expr(Expr *expr)
     return resolved_const(expr->literal.integer);
   case EXPR_IDENT:
     return resolve_expr_name(expr);
+  case EXPR_COMPOUND:
+    return resolve_expr_compound(expr, expected_type);
   case EXPR_FIELD:
     return resolve_expr_field(expr);
   case EXPR_UNARY:
     return resolve_expr_unary(expr);
   case EXPR_BINARY:
     return resolve_expr_binary(expr);
+  case EXPR_CALL:
+    return resolve_expr_call(expr);
   case EXPR_SIZE_OF_EXPR:
   {
-    Resolved_Expr result = resolve_expr(expr->size_of_expr);
+    Resolved_Expr result = resolve_expr(expr->size_of_expr, NULL);
     Type *type = result.type;
     complete_type(type);
     return resolved_const(type_size_of(type));
@@ -884,7 +1042,7 @@ resolve_expr(Expr *expr)
 internal s64
 resolve_int_const_expr(Expr *expr)
 {
-  Resolved_Expr result = resolve_expr(expr);
+  Resolved_Expr result = resolve_expr(expr, NULL);
   if (!result.is_const)
   {
     fatal("Expected constant expression");
@@ -895,19 +1053,33 @@ resolve_int_const_expr(Expr *expr)
 internal void
 resolve_test()
 {
+  printf("\n");
+  printf("--- RESOLVE TEST\n");
+  printf("\n");
+
   entity_install_type(str8_lit("int"), type_int);
 
   String8 source = S(
-    "const N = 1 + size_of(p);\n" // 9
-    "var p: *T;\n" // 4
-    "var u = p.*;\n" // deref
-    "struct T { a: [N]int, }\n"
-    "var r = &t.a;\n"
-    "var t: T;\n"
-    "typedef S = [N+M]int;\n"
-    "const M = size_of(t.a);\n" // 36
-    "var i = N+M;\n" // [9 + 36] = 45
-    "var q = &i;\n"
+    "struct Vector { x, y: int, }\n"
+    "proc add(a: Vector, b: Vector) -> Vector { return { a.x + b.x, a.y + b.y }; }\n"
+    "var v = add(Vector{1,2}, Vector{3,4});\n"
+    // "var a: [3]int = {1,2,3};\n"
+    // "var v: Vector = {1,2};\n"
+    // "var w = Vector{3,4};\n"
+    // "union Int_Or_Ptr { i: int, p: *int, }\n"
+    // "var i = 42;\n"
+    // "var u = Int_Or_Ptr{ i, &i };\n"
+
+    // "const N = 1 + size_of(p);\n" // 9
+    // "var p: *T;\n" // 4
+    // "var u = p.*;\n" // deref
+    // "struct T { a: [N]int, }\n"
+    // "var r = &t.a;\n"
+    // "var t: T;\n"
+    // "typedef S = [N+M]int;\n"
+    // "const M = size_of(t.a);\n" // 36
+    // "var i = N+M;\n" // [9 + 36] = 45
+    // "var q = &i;\n"
   );
 
   Lexer l = lexer_init(source);

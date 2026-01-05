@@ -337,7 +337,7 @@ main(int argc, char **argv)
       #endif
       { .input = S("[2]int{69, 420}"),             .output = S("(compound [2]int 69 420)") },
       { .input = S("[2]*int{}"),                   .output = S("(compound [2]*int)") },
-      { .input = S("[2][2]int{ {1, 2}, {3, 4} }"), .output = S("(compound [2][2]int (compound <NULL> 1 2) (compound <NULL> 3 4))") },
+      { .input = S("[2][2]int{ {1, 2}, {3, 4} }"), .output = S("(compound [2][2]int (compound nil 1 2) (compound nil 3 4))") },
 
       // Slice compound literals
       { .input = S("[]int{1, 2, 3}"),                .output = S("(compound []int 1 2 3)") },
@@ -429,7 +429,6 @@ main(int argc, char **argv)
 
   printf("\n");
   parser_test();
-  printf("\n");
   resolve_test();
   // order_test();
 
