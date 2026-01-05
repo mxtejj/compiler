@@ -70,6 +70,7 @@
   X(CONST)            \
   X(SIZE_OF)          \
   X(CAST)             \
+  X(TYPEDEF)          \
   X(TRANSMUTE)        \
   X(KEYWORD_END)      \
 

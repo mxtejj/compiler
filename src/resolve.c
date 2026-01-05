@@ -330,6 +330,7 @@ ENUM(Entity_Kind)// 176
   ENTITY_PROC,
   ENTITY_TYPE,
   ENTITY_ENUM_CONST,
+  ENTITY_TYPEDEF,
 };
 
 ENUM(Entity_State)
@@ -400,7 +401,7 @@ entity_decl(Decl *decl)
   {
   case DECL_STRUCT:
   case DECL_UNION:
-  // case DECL_TYPEDEF:
+  case DECL_TYPEDEF:
   case DECL_ENUM: // TODO
     kind = ENTITY_TYPE;
     break;
@@ -646,11 +647,8 @@ internal Type *
 resolve_decl_type(Decl *decl)
 {
   // TODO add typedef
-  // assert(decl->kind == DECL_TYPEDEF);
-  // return resolve_typespec(decl->typedef_decl.type);
-  // typedef Vec2 = [2]f32
-  assert(!"TODO: implement typedef");
-  return NULL;
+  assert(decl->kind == DECL_TYPEDEF);
+  return resolve_typespec(decl->typedef0.type);
 }
 
 internal Type *
@@ -710,6 +708,9 @@ resolve_entity(Entity *en)
     break;
   case ENTITY_CONST:
     en->type = resolve_decl_const(en->decl, &en->const_value);
+    break;
+  case ENTITY_TYPEDEF:
+    en->type = resolve_decl_type(en->decl);
     break;
   default:
     assert(0);
@@ -903,7 +904,7 @@ resolve_test()
     "struct T { a: [N]int, }\n"
     "var r = &t.a;\n"
     "var t: T;\n"
-    // "typedef S = [N+M]int;\n"
+    "typedef S = [N+M]int;\n"
     "const M = size_of(t.a);\n" // 36
     "var i = N+M;\n" // [9 + 36] = 45
     "var q = &i;\n"

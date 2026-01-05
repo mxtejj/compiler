@@ -439,6 +439,7 @@ lexer_parse_ident_or_keyword(Lexer *l)
 
     { .kind = TOKEN_SIZE_OF,   .value = S("size_of") },
     { .kind = TOKEN_CAST,      .value = S("cast") },
+    { .kind = TOKEN_TYPEDEF,   .value = S("typedef") },
     { .kind = TOKEN_TRANSMUTE, .value = S("transmute") },
   };
   static_assert(array_count(keywords) == (TOKEN_KEYWORD_END - TOKEN_KEYWORD_BEGIN - 1));

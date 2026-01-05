@@ -428,8 +428,8 @@ main(int argc, char **argv)
   }
 
   printf("\n");
-
-  // parser_test();
+  parser_test();
+  printf("\n");
   resolve_test();
   // order_test();
 

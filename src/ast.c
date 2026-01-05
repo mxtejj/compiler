@@ -12,13 +12,72 @@ type_spec_alloc(Parser *p, Type_Spec_Kind kind)
   return t;
 }
 
+////////////////////////////////
+//- Declarations
+
 internal Decl *
-decl_alloc(Parser *p, Decl_Kind kind)
+decl_alloc(Parser *p, String8 name, Decl_Kind kind)
 {
   Decl *decl = push_struct(p->arena, Decl);
   decl->kind = kind;
+  decl->name = name;
   return decl;
 }
+
+internal Decl *
+decl_proc(Parser *p, String8 name, Param_List params, Type_Spec *ret, Stmt *body)
+{
+  Decl *decl = decl_alloc(p, name, DECL_PROC);
+  decl->proc.params = params;
+  decl->proc.ret    = ret;
+  decl->proc.body   = body;
+  return decl;
+}
+
+internal Decl *
+decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_List fields)
+{
+  assert(kind == DECL_STRUCT || kind == DECL_UNION);
+  Decl *decl = decl_alloc(p, name, kind);
+  decl->aggr.fields = fields;
+  return decl;
+}
+
+internal Decl *
+decl_enum(Parser *p, String8 name, Enum_Member_List members)
+{
+  Decl *decl = decl_alloc(p, name, DECL_ENUM);
+  decl->enum0.members = members;
+  return decl;
+}
+
+internal Decl *
+decl_var(Parser *p, String8 name, Type_Spec *type, Expr *expr)
+{
+  Decl *decl = decl_alloc(p, name, DECL_VAR);
+  decl->var.type = type;
+  decl->var.expr = expr;
+  return decl;
+}
+
+internal Decl *
+decl_const(Parser *p, String8 name, Expr *expr)
+{
+  Decl *decl = decl_alloc(p, name, DECL_CONST);
+  decl->const0.expr = expr;
+  return decl;
+}
+
+internal Decl *
+decl_typedef(Parser *p, String8 name, Type_Spec *type)
+{
+  Decl *decl = decl_alloc(p, name, DECL_TYPEDEF);
+  decl->typedef0.type = type;
+  return decl;
+}
+
+////////////////////////////////
+//- Expressions
 
 internal Expr *
 expr_alloc(Parser *p, Expr_Kind kind)
@@ -174,7 +233,7 @@ expr_size_of_type(Parser *p, Type_Spec *type)
 }
 
 /////////////////////////////////////////////////////
-// Statements
+//- Statements
 internal Stmt *
 stmt_alloc(Parser *p, Stmt_Kind kind)
 {
@@ -184,11 +243,74 @@ stmt_alloc(Parser *p, Stmt_Kind kind)
 }
 
 internal Stmt *
-stmt_expr(Parser *p, Expr *e)
+stmt_block(Parser *p, Stmt_List stmts)
 {
-  Stmt *s = stmt_alloc(p, STMT_EXPR);
-  s->expr = e;
-  return s;
+  Stmt *stmt = stmt_alloc(p, STMT_BLOCK);
+  stmt->block.stmts = stmts;
+  return stmt;
+}
+
+internal Stmt *
+stmt_if(Parser *p, Expr *cond, Stmt *then_block, Stmt *else_stmt)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_IF);
+  stmt->if0.cond = cond;
+  stmt->if0.then_block = then_block;
+  stmt->if0.else_stmt = else_stmt;
+  return stmt;
+}
+
+internal Stmt *
+stmt_do_while(Parser *p, Expr *cond, Stmt *body)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_DO_WHILE);
+  stmt->do_while.cond = cond;
+  stmt->do_while.body = body;
+  return stmt;
+}
+
+internal Stmt *
+stmt_while(Parser *p, Expr *cond, Stmt *body)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_WHILE);
+  stmt->while0.cond = cond;
+  stmt->while0.body = body;
+  return stmt;
+}
+
+internal Stmt *
+stmt_for(Parser *p, Stmt *init, Expr *cond, Expr *loop, Stmt *body)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_FOR);
+  stmt->for0.init = init;
+  stmt->for0.cond = cond;
+  stmt->for0.loop = loop;
+  stmt->for0.body = body;
+  return stmt;
+}
+
+internal Stmt *
+stmt_return(Parser *p, Expr *expr)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_RETURN);
+  stmt->return0.expr = expr;
+  return stmt;
+}
+
+internal Stmt *
+stmt_expr(Parser *p, Expr *expr)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_EXPR);
+  stmt->expr = expr;
+  return stmt;
+}
+
+internal Stmt *
+stmt_decl(Parser *p, Decl *decl)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_DECL);
+  stmt->decl = decl;
+  return stmt;
 }
 
 // TODO: for testing
@@ -229,9 +351,15 @@ print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
         //   str8_list_pushf(arena, list, "%.*s ", str8_varg(it->name));
         // }
         print_type(arena, list, indent, it);
+        if (it != t->proc.params.last)
+        {
+          str8_list_pushf(arena, list, ", ");
+        }
       }
     }
     str8_list_pushf(arena, list, ")");
+    str8_list_pushf(arena, list, " -> ");
+    print_type(arena, list, indent, t->proc.ret);
     break;
   case TYPE_SPEC_ARRAY:
     str8_list_pushf(arena, list, "[");
@@ -358,6 +486,12 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
     str8_list_pushf(arena, list, "(const ");
     str8_list_pushf(arena, list, "%.*s ", str8_varg(d->name));
     print_expr(arena, list, indent, d->const0.expr);
+    str8_list_pushf(arena, list, ")");
+    break;
+  case DECL_TYPEDEF:
+    str8_list_pushf(arena, list, "(typedef ");
+    str8_list_pushf(arena, list, "%.*s ", str8_varg(d->name));
+    print_type(arena, list, indent, d->typedef0.type);
     str8_list_pushf(arena, list, ")");
     break;
   default:

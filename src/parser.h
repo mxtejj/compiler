@@ -138,7 +138,15 @@ struct Stmt
 //                  $);
 
 internal Stmt *stmt_alloc(Parser *p, Stmt_Kind kind);
-internal Stmt *stmt_expr(Parser *p, Expr *e);
+
+internal Stmt *stmt_block(Parser *p, Stmt_List stmts);
+internal Stmt *stmt_if(Parser *p, Expr *cond, Stmt *then_block, Stmt *else_stmt);
+internal Stmt *stmt_do_while(Parser *p, Expr *cond, Stmt *body);
+internal Stmt *stmt_while(Parser *p, Expr *cond, Stmt *body);
+internal Stmt *stmt_for(Parser *p, Stmt *init, Expr *cond, Expr *loop, Stmt *body);
+internal Stmt *stmt_return(Parser *p, Expr *expr);
+internal Stmt *stmt_expr(Parser *p, Expr *expr);
+internal Stmt *stmt_decl(Parser *p, Decl *decl);
 
 ///////////////////////////////////
 // TYPE SPECIFIERS
@@ -217,6 +225,7 @@ enum Decl_Kind
   DECL_ENUM,
   DECL_VAR,
   DECL_CONST,
+  DECL_TYPEDEF,
 };
 
 typedef struct Proc_Param Proc_Param;
@@ -298,6 +307,11 @@ struct Decl_Const
   Expr *expr;
 };
 
+STRUCT(Decl_Typedef)
+{
+  Type_Spec *type;
+};
+
 struct Decl
 {
   Decl_Kind kind;
@@ -313,6 +327,7 @@ struct Decl
     Decl_Enum  enum0;
     Decl_Var   var;
     Decl_Const const0;
+    Decl_Typedef typedef0;
   };
 };
 // raddbg_type_view(Decl,
@@ -331,7 +346,14 @@ struct Decl_List
   Decl *last;
 };
 
-internal Decl *decl_alloc(Parser *p, Decl_Kind kind);
+internal Decl *decl_alloc(Parser *p, String8 name, Decl_Kind kind);
+
+internal Decl *decl_proc(Parser *p, String8 name, Param_List params, Type_Spec *ret, Stmt *body);
+internal Decl *decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_List fields); // TODO: Field_Array
+internal Decl *decl_enum(Parser *p, String8 name, Enum_Member_List members);
+internal Decl *decl_var(Parser *p, String8 name, Type_Spec *type, Expr *expr);
+internal Decl *decl_const(Parser *p, String8 name, Expr *expr);
+internal Decl *decl_typedef(Parser *p, String8 name, Type_Spec *type);
 
 // TODO order this properly
 internal Decl *parse_decl(Parser *p);

@@ -791,81 +791,65 @@ internal Stmt *
 parse_stmt_block(Parser *p)
 {
   expect(p, '{');
-  Stmt *s = stmt_alloc(p, STMT_BLOCK);
+  Stmt_List stmts = {0};
   while (!parser_check(p, '}'))
   {
     Stmt *stmt = parse_stmt(p);
-    sll_queue_push(s->block.stmts.first, s->block.stmts.last, stmt);
-    s->block.stmts.count += 1;
+    sll_queue_push(stmts.first, stmts.last, stmt);
+    stmts.count += 1;
   }
   expect(p, '}');
-  return s;
+  return stmt_block(p, stmts);
 }
 
 internal Stmt *
 parse_stmt_if(Parser *p)
 {
-  Stmt *s = stmt_alloc(p, STMT_IF);
-
-  s->if0.cond       = parse_expr_with_flags(p, 0);
-  s->if0.then_block = parse_stmt_block(p);
-  s->if0.else_stmt  = NULL;
+  Expr *cond       = parse_expr_with_flags(p, 0);
+  Stmt *then_block = parse_stmt_block(p);
+  Stmt *else_stmt  = NULL;
 
   if (match(p, TOKEN_ELSE))
   {
     if (match(p, TOKEN_IF))
     {
       // else if -> recurse
-      s->if0.else_stmt = parse_stmt_if(p);
+      else_stmt = parse_stmt_if(p);
     }
     else
     {
       // else -> block
-      s->if0.else_stmt = parse_stmt_block(p);
+      else_stmt = parse_stmt_block(p);
     }
   }
 
-  return s;
+  return stmt_if(p, cond, then_block, else_stmt);
 }
 
 internal Stmt *
 parse_stmt_while(Parser *p)
 {
-  Stmt *s = stmt_alloc(p, STMT_WHILE);
-
-  s->while0.cond = parse_expr_with_flags(p, 0);
-  s->while0.body = parse_stmt_block(p);
-
-  return s;
+  Expr *cond = parse_expr_with_flags(p, 0);
+  Stmt *body = parse_stmt_block(p);
+  return stmt_while(p, cond, body);
 }
 
 internal Stmt *
 parse_stmt_do_while(Parser *p)
 {
-  Stmt *s = stmt_alloc(p, STMT_DO_WHILE);
-
-  /*
-  do
-  {
-    body;
-  } while cond;
-  */
-
-  s->do_while.body = parse_stmt_block(p);
+  Stmt *body = parse_stmt_block(p);
   expect(p, TOKEN_WHILE);
-  s->do_while.cond = parse_expr_with_flags(p, 0);
+  Expr *cond = parse_expr_with_flags(p, 0);
   expect(p, ';');
-
-  return s;
+  return stmt_do_while(p, cond, body);
 }
 
 internal Stmt *
 parse_stmt_return(Parser *p)
 {
-  Stmt *s = stmt_alloc(p, STMT_RETURN);
-  s->return0.expr = parse_expr(p);
+  Expr *expr = parse_expr(p);
   expect(p, ';');
-  return s;
+  return stmt_return(p, expr);
 }
 
 internal Stmt *
@@ -935,6 +919,7 @@ parse_stmt_decl(Parser *p)
   expect(p, ';');
 
   // TODO: CLEANUP
+  // TODO: use stmt_decl()
   Stmt *s = stmt_alloc(p, STMT_DECL);
   // @HACK
   s->decl = push_struct(p->arena, Decl);
@@ -959,9 +944,7 @@ parse_stmt_decl(Parser *p)
 internal Stmt *
 parse_stmt(Parser *p)
 {
-  if (parser_check(p, '{'))
-    return parse_stmt_block(p);
-
+  if (parser_check(p, '{')) return parse_stmt_block(p);
   // TODO switch-case
   if (match(p, TOKEN_IF))    return parse_stmt_if(p);
   if (match(p, TOKEN_DO))    return parse_stmt_do_while(p);
@@ -972,6 +955,7 @@ parse_stmt(Parser *p)
   if (match(p, TOKEN_BREAK))    return parse_stmt_break(p);
   if (match(p, TOKEN_VAR))      return parse_stmt_decl(p);
   if (match(p, TOKEN_CONST))    return parse_stmt_decl(p);
+  // TODO: parse statement decl: struct, union etc (locally scoped aggregates)
 
   /*
   STMT_FOR,
@@ -1006,10 +990,7 @@ parse_decl_enum(Parser *p)
 
   expect(p, '{');
 
-  Decl *decl = decl_alloc(p, DECL_ENUM);
-  decl->name = name;
-
-  Enum_Member_List *members = &decl->enum0.members;
+  Enum_Member_List members = {0};
   while (!parser_check(p, '}'))
   {
     Enum_Member *member = push_struct(p->arena, Enum_Member);
@@ -1020,7 +1001,7 @@ parse_decl_enum(Parser *p)
       member->value = parse_expr(p);
     }
 
-    sll_queue_push(members->first, members->last, member);
+    sll_queue_push(members.first, members.last, member);
 
     if (!match(p, ','))
     {
@@ -1030,7 +1011,7 @@ parse_decl_enum(Parser *p)
 
   expect(p, '}');
 
-  return decl;
+  return decl_enum(p, name, members);
 }
 
 internal Decl *
@@ -1059,12 +1040,7 @@ parse_decl_var(Parser *p)
 
   expect(p, ';');
 
-  Decl *decl = decl_alloc(p, DECL_VAR);
-  decl->name = name;
-  decl->var.type = type;
-  decl->var.expr = expr;
-
-  return decl;
+  return decl_var(p, name, type, expr);
 }
 
 internal Decl *
@@ -1094,12 +1070,7 @@ parse_decl_const(Parser *p)
 
   expect(p, ';');
 
-  Decl *decl = decl_alloc(p, DECL_CONST);
-  decl->name = name;
-  // decl->const0.type = type;
-  decl->const0.expr = expr;
-
-  return decl;
+  return decl_const(p, name, expr);
 }
 
 internal Proc_Param *
@@ -1107,6 +1078,8 @@ parse_decl_proc_param(Parser *p)
 {
   Proc_Param *param = push_struct(p->arena, Proc_Param);
 
+  // TODO: Support multiname param
+  // eg;   x, y: f32
   param->name = parse_ident(p);
   expect(p, ':');
   param->type = parse_type(p);
@@ -1312,15 +1285,11 @@ parse_decl_proc(Parser *p)
   String8 name = parse_ident(p);
   expect(p, '(');
 
-  Decl *decl = decl_alloc(p, DECL_PROC);
-  decl->name = name;
-
-  Param_List *params = &decl->proc.params;
-
+  Param_List params = {0};
   while (!match(p, ')'))
   {
     Proc_Param *param = parse_decl_proc_param(p);
-    dll_push_back(params->first, params->last, param);
+    dll_push_back(params.first, params.last, param);
     match(p, ',');
   }
   // if (!match(p, ')'))
@@ -1332,13 +1301,14 @@ parse_decl_proc(Parser *p)
   //   } while (match(p, ','));
   // }
   // expect(p, ')');
+  Type_Spec *ret = NULL;
   if (match(p, TOKEN_ARROW))
   {
-    decl->proc.ret = parse_type(p);
+    ret = parse_type(p);
   }
-  decl->proc.body = parse_stmt_block(p);
-
-  return decl;
+  
+  Stmt *body = parse_stmt_block(p);
+  return decl_proc(p, name, params, ret, body);
 }
 
 internal Decl *
@@ -1347,10 +1317,7 @@ parse_decl_aggregate(Parser *p, Decl_Kind kind)
   String8 name = parse_ident(p);
   expect(p, '{');
 
-  Decl *decl = decl_alloc(p, kind);
-  decl->name = name;
-  Aggr_Field_List *fields = &decl->aggr.fields;
-
+  Aggr_Field_List fields = {0};
   while (!parser_check(p, '}'))
   {
     Aggr_Field *field = push_struct(p->arena, Aggr_Field);
@@ -1371,8 +1338,8 @@ parse_decl_aggregate(Parser *p, Decl_Kind kind)
     }
 
     field->type = parse_type(p);
-    sll_queue_push(fields->first, fields->last, field);
-    fields->count += 1;
+    sll_queue_push(fields.first, fields.last, field);
+    fields.count += 1;
 
     if (match(p, ','))
     {
@@ -1382,18 +1349,30 @@ parse_decl_aggregate(Parser *p, Decl_Kind kind)
 
   expect(p, '}');
 
-  return decl;
+  return decl_aggregate(p, name, kind, fields);
+}
+
+internal Decl *
+parse_decl_typedef(Parser *p)
+{
+  // typedef name = type;
+  String8 name = parse_ident(p);
+  expect(p, '=');
+  Type_Spec *type = parse_type(p);
+  expect(p, ';');
+  return decl_typedef(p, name, type);
 }
 
 internal Decl *
 parse_decl(Parser *p)
 {
-  if (match(p, TOKEN_PROC))   return parse_decl_proc(p);
-  if (match(p, TOKEN_STRUCT)) return parse_decl_aggregate(p, DECL_STRUCT);
-  if (match(p, TOKEN_UNION))  return parse_decl_aggregate(p, DECL_UNION);
-  if (match(p, TOKEN_ENUM))   return parse_decl_enum(p);
-  if (match(p, TOKEN_VAR))    return parse_decl_var(p);
-  if (match(p, TOKEN_CONST))  return parse_decl_const(p);
+  if (match(p, TOKEN_PROC))    return parse_decl_proc(p);
+  if (match(p, TOKEN_STRUCT))  return parse_decl_aggregate(p, DECL_STRUCT);
+  if (match(p, TOKEN_UNION))   return parse_decl_aggregate(p, DECL_UNION);
+  if (match(p, TOKEN_ENUM))    return parse_decl_enum(p);
+  if (match(p, TOKEN_VAR))     return parse_decl_var(p);
+  if (match(p, TOKEN_CONST))   return parse_decl_const(p);
+  if (match(p, TOKEN_TYPEDEF)) return parse_decl_typedef(p);
   report_error(p, "Expected declaration keyword");
   return NULL;
 }
@@ -1489,6 +1468,8 @@ parser_test()
   }
 
   printf("\n");
+  printf("--- DECLARATIONS\n");
+  printf("\n");
 
   {
     String8 source = S(
@@ -1537,10 +1518,10 @@ parser_test()
       "var v = Vector{1.0, -1.0};\n"
       // "var v: Vector = {1.0. -1.0};\n"
       "union Int_Or_Float { i: int, f: f32, }\n"
-      // "typedef Vectors = Vector[1+2]\n"
+      "typedef Vectors = [1+2]Vector;\n"
       "proc f() { do { print(42); } while (1); }\n"
-      // "typedef T = [16]proc(int) -> int\n"
-      // "proc f() { enum E { A, B, C } return; }\n"
+      "typedef T = [16]proc(int, f32, string, Vector, string, f32, int, uint) -> int;\n"
+      // "proc f() { enum E { A, B, C }; return; }\n"
       "proc f() { if (1) { return 1; } else if (2) { return 2; } else { return 3; } }\n"
     );
     /*
