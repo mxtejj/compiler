@@ -25,6 +25,8 @@ ENUM(Type_Kind)
   TYPE_NONE,
   TYPE_INCOMPLETE,
   TYPE_COMPLETING,
+  TYPE_VOID,
+  TYPE_CHAR,
   TYPE_INT,
   TYPE_FLOAT,
   TYPE_PTR,
@@ -108,24 +110,23 @@ STRUCT(Type_Field)
 //   u64 count;
 // };
 
-Arena *sym_arena;
+Arena *resolve_arena;
 
 internal void complete_type(Type *type);
 
 internal Type *
 type_alloc(Type_Kind kind)
 {
-  if (!sym_arena) sym_arena = arena_alloc(GB(1), MB(1), 0);
-  Type *t = push_struct(sym_arena, Type);
+  if (!resolve_arena) resolve_arena = arena_alloc(GB(1), MB(1), 0);
+  Type *t = push_struct(resolve_arena, Type);
   t->kind = kind;
   return t;
 }
 
-Type type_int_val   = { .kind = TYPE_INT, .size = 4 };
-Type type_float_val = { .kind = TYPE_FLOAT, .size = 4 };
-
-Type *type_int   = &type_int_val;
-Type *type_float = &type_float_val;
+Type *type_void  = &(Type){ .kind = TYPE_VOID,  .size = 0 };
+Type *type_char  = &(Type){ .kind = TYPE_CHAR,  .size = 1 };
+Type *type_int   = &(Type){ .kind = TYPE_INT,   .size = 4 };
+Type *type_float = &(Type){ .kind = TYPE_FLOAT, .size = 4 };
 const usize PTR_SIZE = 8;
 
 internal usize
@@ -170,7 +171,7 @@ type_ptr(Type *base)
   Type t = (Type){ .kind = TYPE_PTR, .ptr.base = base };
   t.size = PTR_SIZE;
 
-  Cached_Ptr_Type *cached = push_struct(sym_arena, Cached_Ptr_Type);
+  Cached_Ptr_Type *cached = push_struct(resolve_arena, Cached_Ptr_Type);
   cached->v = t;
 
   sll_queue_push(cached_ptr_types.first, cached_ptr_types.last, cached);
@@ -214,7 +215,7 @@ type_array(Type *base, u64 length)
   Type t = (Type){ .kind = TYPE_ARRAY, .array.base = base, .array.length = length };
   t.size = length * type_size_of(base);
 
-  Cached_Array_Type *cached = push_struct(sym_arena, Cached_Array_Type);
+  Cached_Array_Type *cached = push_struct(resolve_arena, Cached_Array_Type);
   cached->v = t;
 
   sll_queue_push(cached_array_types.first, cached_array_types.last, cached);
@@ -268,12 +269,12 @@ type_proc(Type_Param_Array params, Type *ret)
   // TODO: do we need to copy?
   Type t = (Type){ .kind = TYPE_PROC };
   t.size = PTR_SIZE;
-  t.proc.params.v = push_array_nz(sym_arena, Type_Param, params.count);
+  t.proc.params.v = push_array_nz(resolve_arena, Type_Param, params.count);
   t.proc.params.count = params.count;
   t.proc.ret = ret;
   mem_copy(t.proc.params.v, params.v, params.count * sizeof(Type_Param));
 
-  Cached_Proc_Type *cached = push_struct(sym_arena, Cached_Proc_Type);
+  Cached_Proc_Type *cached = push_struct(resolve_arena, Cached_Proc_Type);
   cached->v = t;
 
   sll_queue_push(cached_proc_types.first, cached_proc_types.last, cached);
@@ -295,7 +296,7 @@ type_complete_struct(Type *type, Type_Field_Array fields)
     type->size += type_size_of(it.type);
   }
 
-  type->aggregate.fields.v = push_array_nz(sym_arena, Type_Field, fields.count);
+  type->aggregate.fields.v = push_array_nz(resolve_arena, Type_Field, fields.count);
   type->aggregate.fields.count = fields.count;
 
   mem_copy(type->aggregate.fields.v, fields.v, fields.count * sizeof(Type_Field));
@@ -313,7 +314,7 @@ type_complete_union(Type *type, Type_Field_Array fields)
     type->size = max(type->size, type_size_of(it->type));
   }
 
-  type->aggregate.fields.v = push_array_nz(sym_arena, Type_Field, fields.count);
+  type->aggregate.fields.v = push_array_nz(resolve_arena, Type_Field, fields.count);
   type->aggregate.fields.count = fields.count;
 
   mem_copy(type->aggregate.fields.v, fields.v, fields.count * sizeof(Type_Field));
@@ -367,7 +368,6 @@ STRUCT(Entity_List)
   u64 count;
 };
 
-Arena *resolve_arena;
 Entity_List entities;
 
 internal void
@@ -511,7 +511,8 @@ resolved_const(s64 const_value)
 
 internal Entity *resolve_name(String8 name);
 internal s64 resolve_int_const_expr(Expr *expr);
-internal Resolved_Expr resolve_expr(Expr *expr, Type *expected_type);
+internal Resolved_Expr resolve_expr(Expr *expr);
+internal Resolved_Expr resolve_expected_expr(Expr *expr, Type *expected_type);
 
 internal Type *
 resolve_typespec(Type_Spec *typespec)
@@ -656,7 +657,7 @@ resolve_decl_var(Decl *decl)
   }
   if (decl->var.expr)
   {
-    Resolved_Expr result = resolve_expr(decl->var.expr, type);
+    Resolved_Expr result = resolve_expected_expr(decl->var.expr, type);
     if (type && result.type != type)
     {
       fatal("Declared var type does not match inferred type");
@@ -671,7 +672,11 @@ internal Type *
 resolve_decl_const(Decl *decl, s64 *const_value)
 {
   assert(decl->kind == DECL_CONST);
-  Resolved_Expr result = resolve_expr(decl->const0.expr, NULL);
+  Resolved_Expr result = resolve_expr(decl->const0.expr);
+  if (!result.is_const)
+  {
+    fatal("Initializer for const is not a constant expression");
+  }
   *const_value = result.const_value;
   return result.type;
 }
@@ -775,7 +780,7 @@ internal Resolved_Expr
 resolve_expr_field(Expr *expr)
 {
   assert(expr->kind == EXPR_FIELD);
-  Resolved_Expr left = resolve_expr(expr->field.expr, NULL);
+  Resolved_Expr left = resolve_expr(expr->field.expr);
   Type *type = left.type;
   complete_type(type);
   if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION)
@@ -819,11 +824,34 @@ resolve_expr_name(Expr *expr)
   return nil_resolved_expr;
 }
 
+internal s64
+eval_int_unary(Token_Kind op, s64 value)
+{
+  switch (op)
+  {
+  case '+':
+    return +value;
+  case '-':
+    return -value;
+  case '!':
+    return !value;
+  case '~':
+    return ~value;
+  default:
+    assert(0);
+    break;
+  }
+  return 0;
+}
+
 internal Resolved_Expr
 resolve_expr_unary(Expr *expr)
 {
   assert(expr->kind == EXPR_UNARY);
-  Resolved_Expr operand = resolve_expr(expr->unary.right, NULL);
+
+  Arena_Temp scratch = arena_scratch_get(0, 0);
+
+  Resolved_Expr operand = resolve_expr(expr->unary.right);
   Type *type = operand.type;
   switch (expr->unary.op.kind)
   {
@@ -839,35 +867,103 @@ resolve_expr_unary(Expr *expr)
       fatal("Cannot take address of non-lvalue");
     }
     return resolved_rvalue(type_ptr(type));
+  case '+':
+  case '-':
+  case '!':
+  case '~':
+    if (type->kind != TYPE_INT)
+    {
+      fatal("Can use unary %.*s with ints only", str8_varg(str_from_token_kind(scratch.arena, expr->unary.op.kind)));
+    }
+    if (operand.is_const)
+    {
+      return resolved_const(eval_int_unary(expr->unary.op.kind, operand.const_value));
+    }
+    return resolved_rvalue(type);
+    break;
   default:
     assert(0);
     return nil_resolved_expr;
   }
 
+  arena_scratch_release(scratch);
+
   assert(!"Unreachable");
   return nil_resolved_expr;
+}
+
+internal s64
+eval_int_binary(Token_Kind op, s64 left, s64 right)
+{
+  switch (op)
+  {
+  case '*': return left * right;
+  case '/':
+  {
+    if (right == 0)
+    {
+      // fatal("Divide by zero in constant expression");
+      return 0;
+    }
+    return left / right;
+  }
+  case '%':
+  {
+    if (right == 0)
+    {
+      // fatal("Divide by zero in constant expression");
+      return 0;
+    }
+    return left % right;
+  }
+  // TODO: Handle UB in shifts etc.
+  case TOKEN_LSHIFT: return left << right; // TODO: handle signed vs unsigned
+  case TOKEN_RSHIFT: return left >> right;
+  case '+': return left + right;
+  case '-': return left - right;
+  // TODO: %%
+  case '^':          return left ^ right;
+  case '&':          return left & right;
+  case '|':          return left | right;
+  // TODO: comparison operators
+  case TOKEN_EQ:          return left == right;
+  case TOKEN_NEQ:         return left != right;
+  case TOKEN_GTEQ:        return left >= right;
+  case TOKEN_LTEQ:        return left <= right;
+  case '>':               return left > right;
+  case '<':               return left < right;
+  case TOKEN_LOGICAL_OR:  return (left != 0) || (right != 0); // TODO: handle separately = short circuiting
+  case TOKEN_LOGICAL_AND: return (left != 0) && (right != 0);
+  default:
+    assert(0);
+    break;
+  }
+  return 0;
 }
 
 internal Resolved_Expr
 resolve_expr_binary(Expr *expr)
 {
   assert(expr->kind == EXPR_BINARY);
-  assert(expr->binary.op.kind == '+');
 
-  Resolved_Expr left  = resolve_expr(expr->binary.left, NULL);
-  Resolved_Expr right = resolve_expr(expr->binary.right, NULL);
+  Resolved_Expr left  = resolve_expr(expr->binary.left);
+  Resolved_Expr right = resolve_expr(expr->binary.right);
 
+  Arena_Temp scratch = arena_scratch_get(0, 0);
   if (left.type != type_int)
   {
-    fatal("left operand of + must be int");
+    fatal("left operand of %.*s must be int", str8_varg(str_from_token_kind(scratch.arena, expr->binary.op.kind)));
   }
   if (left.type != right.type)
   {
-    fatal("left and right operand of + must have same type");
+    fatal("left and right operand of %.*s must have same type", str8_varg(str_from_token_kind(scratch.arena, expr->binary.op.kind)));
   }
+  arena_scratch_release(scratch);
+
   if (left.is_const && right.is_const)
   {
-    return resolved_const(left.const_value + right.const_value);
+    // return resolved_const(left.const_value + right.const_value);
+    return resolved_const(eval_int_binary(expr->binary.op.kind, left.const_value, right.const_value));
   }
   return resolved_rvalue(left.type);
 }
@@ -917,7 +1013,7 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
     for each_index(i, expr->compound.args.count)
     {
       Compound_Arg *arg = expr->compound.args.v[i];
-      Resolved_Expr field = resolve_expr(arg->expr, NULL);
+      Resolved_Expr field = resolve_expr(arg->expr);
       if (field.type != type->aggregate.fields.v[i].type)
       {
         fatal("Compound literal field type mismatch");
@@ -942,7 +1038,7 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
     for each_index(i, expr->compound.args.count)
     {
       Compound_Arg *arg = expr->compound.args.v[i];
-      Resolved_Expr element = resolve_expr(arg->expr, NULL);
+      Resolved_Expr element = resolve_expr(arg->expr);
       if (element.type != type->array.base)
       {
         fatal("Compound literal element type mismatch");
@@ -958,7 +1054,7 @@ resolve_expr_call(Expr *expr)
 {
   assert(expr->kind == EXPR_CALL);
 
-  Resolved_Expr proc = resolve_expr(expr->call.expr, NULL);
+  Resolved_Expr proc = resolve_expr(expr->call.expr);
   complete_type(proc.type);
 
   if (proc.type->kind != TYPE_PROC)
@@ -977,7 +1073,7 @@ resolve_expr_call(Expr *expr)
   for (u32 i = 0; i < expr->call.args.count; i += 1)
   {
     Type *param_type = proc.type->proc.params.v[i];
-    Resolved_Expr arg = resolve_expr(expr->call.args.v[i], param_type);
+    Resolved_Expr arg = resolve_expected_expr(expr->call.args.v[i], param_type);
     if (arg.type != param_type)
     {
       fatal("Procedure call argument type mismatch");
@@ -988,27 +1084,118 @@ resolve_expr_call(Expr *expr)
 }
 
 internal Resolved_Expr
-resolve_expr(Expr *expr, Type *expected_type)
+resolve_expr_ternary(Expr *expr, Type *expected_type)
 {
+  // TODO: have actual bool types
+  assert(expr->kind == EXPR_TERNARY);
+  Resolved_Expr cond = resolve_expr(expr->ternary.cond);
+  if (cond.type->kind != TYPE_INT && cond.type->kind != TYPE_PTR)
+  {
+    fatal("Ternary condition expression must have type int or ptr");
+  }
+  Resolved_Expr then_expr = resolve_expr(expr->ternary.then);
+  Resolved_Expr else_expr = resolve_expr(expr->ternary.else_);
+  if (then_expr.type != else_expr.type)
+  {
+    fatal("Ternary then/else expression must have matching types");
+  }
+  if (cond.is_const && then_expr.is_const && else_expr.const_value)
+  {
+    return resolved_const(cond.const_value ? then_expr.const_value : else_expr.const_value);
+  }
+  return resolved_rvalue(then_expr.type);
+}
+
+internal Resolved_Expr
+resolve_expr_index(Expr *expr)
+{
+  assert(expr->kind == EXPR_INDEX);
+
+  Resolved_Expr operand = resolve_expr(expr->index.expr);
+  Resolved_Expr index   = resolve_expr(expr->index.index);
+
+  if (operand.type->kind != TYPE_PTR && operand.type->kind != TYPE_ARRAY)
+  {
+    // IMPORTANT TODO: make it so u can only index arrays and add multipointer like in odin [^] == [*]
+    fatal("Can only index arrays or pointers");
+  }
+  if (index.type->kind != TYPE_INT)
+  {
+    fatal("Index expression must have type int");
+  }
+  if (operand.type->kind == TYPE_PTR)
+  {
+    return resolved_lvalue(operand.type->ptr.base);
+  }
+  assert(operand.type->kind == TYPE_ARRAY);
+  return resolved_lvalue(operand.type->array.base);
+}
+
+internal Resolved_Expr
+resolve_expr_cast(Expr *expr)
+{
+  assert(expr->kind == EXPR_CAST);
+
+  Type *type = resolve_typespec(expr->cast.type);
+  Resolved_Expr result = resolve_expr(expr->cast.expr);
+
+  // ptr -> ptr, ptr -> int, int -> ptr
+  if (type->kind == TYPE_PTR)
+  {
+    if (result.type->kind != TYPE_PTR && result.type->kind != TYPE_INT)
+    {
+      fatal("Invalid cast to pointer type");
+    }
+  }
+  else if (type->kind == TYPE_INT)
+  {
+    if (result.type->kind != TYPE_PTR && result.type->kind != TYPE_INT)
+    {
+      fatal("Invalid cast to int type");
+    }
+  }
+  else
+  {
+    fatal("Invalid target cast type");
+  }
+
+  return resolved_rvalue(type);
+}
+
+internal Resolved_Expr
+resolve_expected_expr(Expr *expr, Type *expected_type)
+{
+  // TODO: address constants
   switch (expr->kind)
   {
   case EXPR_INTEGER_LITERAL:
     return resolved_const(expr->literal.integer);
+  case EXPR_FLOAT_LITERAL:
+    return resolved_rvalue(type_float);
+  case EXPR_STRING_LITERAL:
+    // IMPORTANT TODO: get rid of char * and use sized string!!
+    return resolved_rvalue(type_ptr(type_char));
   case EXPR_IDENT:
     return resolve_expr_name(expr);
   case EXPR_COMPOUND:
     return resolve_expr_compound(expr, expected_type);
   case EXPR_FIELD:
     return resolve_expr_field(expr);
+  case EXPR_INDEX:
+    return resolve_expr_index(expr);
   case EXPR_UNARY:
     return resolve_expr_unary(expr);
   case EXPR_BINARY:
     return resolve_expr_binary(expr);
+  case EXPR_TERNARY:
+    return resolve_expr_ternary(expr, expected_type);
   case EXPR_CALL:
     return resolve_expr_call(expr);
+  case EXPR_CAST:
+    return resolve_expr_cast(expr);
   case EXPR_SIZE_OF_EXPR:
   {
-    Resolved_Expr result = resolve_expr(expr->size_of_expr, NULL);
+    Resolved_Expr result = resolve_expr(expr->size_of_expr);
     Type *type = result.type;
     complete_type(type);
     return resolved_const(type_size_of(type));
@@ -1019,6 +1206,10 @@ resolve_expr(Expr *expr, Type *expected_type)
     complete_type(type);
     return resolved_const(type_size_of(type));
   }
+  case EXPR_GROUP:
+  {
+    return resolve_expr(expr->group.expr);
+  }
   default:
     assert(0);
     return nil_resolved_expr;
@@ -1028,10 +1219,16 @@ resolve_expr(Expr *expr, Type *expected_type)
   return nil_resolved_expr;
 }
 
+internal Resolved_Expr
+resolve_expr(Expr *expr)
+{
+  return resolve_expected_expr(expr, NULL);
+}
+
 internal s64
 resolve_int_const_expr(Expr *expr)
 {
-  Resolved_Expr result = resolve_expr(expr, NULL);
+  Resolved_Expr result = resolve_expr(expr);
   if (!result.is_const)
   {
     fatal("Expected constant expression");
@@ -1046,14 +1243,35 @@ resolve_test()
   printf("--- RESOLVE TEST\n");
   printf("\n");
 
-  entity_install_type(str8_lit("int"), type_int);
+  entity_install_type(str8_lit("void"), type_void);
+  entity_install_type(str8_lit("char"), type_char);
+  entity_install_type(str8_lit("int"),  type_int);
 
   String8 source = S(
-    "struct Vector { x, y: int, }\n"
-    "proc add(a: Vector, b: Vector) -> Vector { return { a.x + b.x, a.y + b.y }; }\n"
-    "var v = add(Vector{1,2}, Vector{3,4});\n"
-    // "var a: [3]int = {1,2,3};\n"
+    "var pi = 3.14;\n"
+    "var name = \"stuff\";\n"
+
+    // "struct Vector { x, y: int, }\n"
     // "var v: Vector = {1,2};\n"
+    // "var a = 42;\n"
+    // "var p = cast(*void)a;\n"
+    // "var j = cast(int)p;\n"
+    // "var q = cast(*int)j;\n"
+
+    // "const i = 42;\n"
+    // "const j = +i;\n"
+    // "const k = -i;\n"
+    // "const l = !!i;\n"
+    // "const m = ~7 + 1 == -7;\n"
+    // "const a = 1000/((2*3-5) << 1);\n"
+
+    // "const K = 1 ? 2 : 3;\n"
+    // "proc add(a: Vector, b: Vector) -> Vector { return { a.x + b.x, a.y + b.y }; }\n"
+    // "var x = add(Vector{1,2}, Vector{3,4});\n"
+    // "var a: [3]int = {1,2,3};\n"
+    // // "var i = a[1];\n"
+    // "var p = &a[1];\n"
+    // "var i = p[1];\n"
     // "var w = Vector{3,4};\n"
     // "union Int_Or_Ptr { i: int, p: *int, }\n"
     // "var i = 42;\n"
@@ -1097,6 +1315,7 @@ resolve_test()
       String8List list = {0};
       int indent = 0;
       print_decl(scratch.arena, &list, &indent, en->decl);
+      str8_list_pushf(scratch.arena, &list, "  [=%d]", en->const_value);
       result = str8_list_join(scratch.arena, &list, NULL);
     }
     else
