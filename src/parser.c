@@ -1410,13 +1410,14 @@ parse_decl_aggregate(Parser *p, Decl_Kind kind)
   expect(p, '{');
 
   Aggr_Field_List fields = {0};
+  u64 count = 0;
   while (!parser_check(p, '}'))
   {
-    Aggr_Field *field = push_struct(p->arena, Aggr_Field);
+    Aggr_Field_Node *node = push_struct(p->arena, Aggr_Field_Node);
     while (true)
     {
       String8 field_name = parse_ident(p);
-      str8_list_push(p->arena, &field->names, field_name);
+      str8_list_push(p->arena, &node->v.names, field_name);
 
       if (match(p, ',')) continue;
       if (match(p, ':')) break;
@@ -1429,9 +1430,10 @@ parse_decl_aggregate(Parser *p, Decl_Kind kind)
       assert(!"Expected ',' or ':' after field name");
     }
 
-    field->type = parse_type(p);
-    sll_queue_push(fields.first, fields.last, field);
+    node->v.type = parse_type(p);
+    sll_queue_push(fields.first, fields.last, node);
     fields.count += 1;
+    count += 1;
 
     if (match(p, ','))
     {
@@ -1441,7 +1443,20 @@ parse_decl_aggregate(Parser *p, Decl_Kind kind)
 
   expect(p, '}');
 
-  return decl_aggregate(p, name, kind, fields);
+  Aggr_Field_Array fields_array = {0};
+  if (count > 0)
+  {
+    fields_array.count = count;
+    fields_array.v = push_array_nz(p->arena, Aggr_Field, fields_array.count);
+
+    u32 i = 0;
+    for each_node(it, Aggr_Field_Node, fields.first)
+    {
+      fields_array.v[i++] = it->v;
+    }
+  }
+
+  return decl_aggregate(p, name, kind, fields_array);
 }
 
 internal Decl *

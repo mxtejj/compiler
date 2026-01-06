@@ -35,7 +35,7 @@ decl_proc(Parser *p, String8 name, Param_List params, Type_Spec *ret, Stmt *body
 }
 
 internal Decl *
-decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_List fields)
+decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_Array fields)
 {
   assert(kind == DECL_STRUCT || kind == DECL_UNION);
   Decl *decl = decl_alloc(p, name, kind);
@@ -340,26 +340,21 @@ print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
     break;
   case TYPE_SPEC_PROC:
     str8_list_pushf(arena, list, "proc(");
-    if (t->proc.params.count > 0)
+
+    for each_index(i, t->proc.params.count)      
     {
-      // for (Type_Spec *it = t->proc.params.first;
-      //      it != 0;
-      //      it = it->next)
-      // for (Type_Spec * it = (t->proc.params).v[0]; it != (t->proc.params).v + (t->proc.params).count; it += 1)
-      for each_index(i, t->proc.params.count)      
+      Type_Spec *it = t->proc.params.v[i];
+      // if (it->name.count > 0)
+      // {
+      //   str8_list_pushf(arena, list, "%.*s ", str8_varg(it->name));
+      // }
+      print_type(arena, list, indent, it);
+      if (it != t->proc.params.v[t->proc.params.count-1])
       {
-        Type_Spec *it = t->proc.params.v[i];
-        // if (it->name.count > 0)
-        // {
-        //   str8_list_pushf(arena, list, "%.*s ", str8_varg(it->name));
-        // }
-        print_type(arena, list, indent, it);
-        if (it != t->proc.params.v[t->proc.params.count-1])
-        {
-          str8_list_pushf(arena, list, ", ");
-        }
+        str8_list_pushf(arena, list, ", ");
       }
     }
+
     str8_list_pushf(arena, list, ")");
     str8_list_pushf(arena, list, " -> ");
     print_type(arena, list, indent, t->proc.ret);
@@ -433,18 +428,18 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
 
     str8_list_pushf(arena, list, "%.*s", str8_varg(d->name));
 
-    for (Aggr_Field *it = d->aggr.fields.first;
-         it != 0;
-         it = it->next)
+    for each_index(i, d->aggr.fields.count)
     {
+      Aggr_Field it = d->aggr.fields.v[i];
+
       (*indent)++;
       print_ln(arena, list, indent);
       StringJoin join = {
         .mid = S(" "),
       };
-      String8 names = str8_list_join(scratch.arena, &it->names, &join);
+      String8 names = str8_list_join(scratch.arena, &it.names, &join);
       str8_list_pushf(arena, list, "(%.*s ", str8_varg(names));
-      print_type(arena, list, indent, it->type);
+      print_type(arena, list, indent, it.type);
       str8_list_pushf(arena, list, ")");
       // (x y z f32)
       (*indent)--;

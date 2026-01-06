@@ -260,22 +260,33 @@ struct Decl_Proc
 
 STRUCT(Aggr_Field)
 {
-  Aggr_Field *next;
   String8List names;
   Type_Spec  *type;
 };
 
+STRUCT(Aggr_Field_Node)
+{
+  Aggr_Field_Node *next;
+  Aggr_Field v;
+};
+
 STRUCT(Aggr_Field_List)
 {
-  Aggr_Field *first;
-  Aggr_Field *last;
+  Aggr_Field_Node *first;
+  Aggr_Field_Node *last;
+  u64 count;
+};
+
+STRUCT(Aggr_Field_Array)
+{
+  Aggr_Field *v;
   u64 count;
 };
 
 typedef struct Decl_Aggr Decl_Aggr;
 struct Decl_Aggr
 {
-  Aggr_Field_List fields; // TODO: use array
+  Aggr_Field_Array fields;
 };
 
 typedef struct Enum_Member Enum_Member;
@@ -364,7 +375,7 @@ struct Decl_List
 internal Decl *decl_alloc(Parser *p, String8 name, Decl_Kind kind);
 
 internal Decl *decl_proc(Parser *p, String8 name, Param_List params, Type_Spec *ret, Stmt *body);
-internal Decl *decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_List fields); // TODO: Field_Array
+internal Decl *decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_Array fields); // TODO: Field_Array
 internal Decl *decl_enum(Parser *p, String8 name, Enum_Member_Array members);
 internal Decl *decl_var(Parser *p, String8 name, Type_Spec *type, Expr *expr);
 internal Decl *decl_const(Parser *p, String8 name, Expr *expr);

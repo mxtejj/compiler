@@ -287,10 +287,12 @@ type_complete_struct(Type *type, Type_Field_Array fields)
   assert(type->kind == TYPE_COMPLETING);
   type->kind = TYPE_STRUCT;
   type->size = 0;
-  for (Type_Field *it = fields.v; it != fields.v + fields.count; it += 1)
+  // for (Type_Field *it = fields.v; it != fields.v + fields.count; it += 1)
+  for each_index(i, fields.count)
   {
+    Type_Field it = fields.v[i];
     // TODO: alignment etc
-    type->size += type_size_of(it->type);
+    type->size += type_size_of(it.type);
   }
 
   type->aggregate.fields.v = push_array_nz(sym_arena, Type_Field, fields.count);
@@ -588,11 +590,10 @@ complete_type(Type *type)
   assert(decl->kind == DECL_STRUCT || decl->kind == DECL_UNION);
 
   u32 total_field_count = 0;
-  for (Aggr_Field *it = decl->aggr.fields.first;
-       it != 0;
-       it = it->next)
+  for each_index(i, decl->aggr.fields.count)
   {
-    total_field_count += it->names.node_count;
+    Aggr_Field it = decl->aggr.fields.v[i];
+    total_field_count += it.names.node_count;
   }
 
   if (total_field_count == 0)
@@ -606,24 +607,20 @@ complete_type(Type *type)
 
   assert(decl->aggr.fields.count > 0);
 
-  // @CLEANUP
-  u32 i = 0;
-  for (Aggr_Field *it = decl->aggr.fields.first;
-       it != 0;
-       it = it->next, i += 1)
+  for each_index(i, decl->aggr.fields.count)
   {
-    Type *field_type = resolve_typespec(it->type);
+    Aggr_Field it = decl->aggr.fields.v[i];
+    Type *field_type = resolve_typespec(it.type);
     complete_type(field_type);
 
     u32 j = 0;
-    for (String8Node *name = it->names.first;
-         name != 0;
-         name = name->next, j += 1)
+    for each_node(name, String8Node, it.names.first)
     {
       fields.v[i+j] = (Type_Field){
         .name = name->string,
         .type = field_type,
       };
+      j += 1;
     }
   }
 
@@ -917,7 +914,6 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
       fatal("Compound literal has too many fields");
     }
 
-    u32 i = 0;
     for each_index(i, expr->compound.args.count)
     {
       Compound_Arg *arg = expr->compound.args.v[i];
