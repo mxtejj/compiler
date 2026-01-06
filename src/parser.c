@@ -77,8 +77,8 @@ report_error(Parser *p, const char *fmt, ...)
     line_end++;
 
   printf(CLR_CYN "%.*s\n", (int)(line_end - line_start), &l->source.data[line_start]);
-  u64 col = lexer_col(l);
-  printf("%*s" CLR_GRN "^\n" CLR_RESET, (int)col, "");
+  u64 col = lexer_col(l) - 1;
+  printf("%*s" CLR_GRN "^ here\n" CLR_RESET, (int)col, "");
 
   va_end(args);
 
