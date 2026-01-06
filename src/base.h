@@ -42,6 +42,13 @@ typedef double f64;
 ///////////////////////////////////
 // :helpers
 
+#define each_index(it, count) (u64 it = 0; it < (count); it += 1)
+#define each_element(it, array) (u64 it = 0; it < array_count(array); it += 1)
+#define each_enum_val(it, T) (T it = (T)0; it < T##_COUNT; it = (T)(it+1))
+#define each_non_zero_enum_val(it, T) (T it = (T)1; it < T##_COUNT; it = (T)(it+1))
+#define each_in_range(it, range) (u64 it = (range).min; it < (range).max; it += 1)
+#define each_node(it, T, first) (T *it = first; it != 0; it = it->next)
+
 #if !defined(BUILD_DEBUG)
 # define BUILD_DEBUG 1
 #endif

@@ -7,6 +7,8 @@
 
 // TODO:
 // [ ] use intrusive singly-linked list for AST nodes (stmt, expr, decl)
+// [ ] in some cases where we use a linked-list at first and then copy to an array
+// we could introduce a node wrapper to not pollude the struct with link pointers
 
 ENUM_SIZE(Expr_Parse_Flags, u32)
 {
@@ -170,12 +172,17 @@ struct Type_Spec_List
   Type_Spec *last;
 };
 
+STRUCT(Type_Spec_Array)
+{
+  Type_Spec **v;
+  u64 count;
+};
+
 struct Type_Spec
 {
   Type_Spec_Kind kind;
 
   Type_Spec *next;
-  Type_Spec *prev; // TODO
 
   union
   {
@@ -183,8 +190,7 @@ struct Type_Spec
 
     struct
     {
-      Type_Spec_List params; // TODO: replace with array?
-      u32 param_count;
+      Type_Spec_Array params;
       Type_Spec *ret;
     }
     proc;
@@ -232,7 +238,6 @@ typedef struct Proc_Param Proc_Param;
 struct Proc_Param
 {
   Proc_Param *next;
-  Proc_Param *prev;
 
   String8    name;
   Type_Spec *type;
@@ -270,28 +275,39 @@ STRUCT(Aggr_Field_List)
 typedef struct Decl_Aggr Decl_Aggr;
 struct Decl_Aggr
 {
-  Aggr_Field_List fields;
+  Aggr_Field_List fields; // TODO: use array
 };
 
 typedef struct Enum_Member Enum_Member;
 struct Enum_Member
 {
-  Enum_Member *next;
-  String8      name;
-  Expr        *value;
+  String8  name;
+  Expr    *value;
+};
+
+STRUCT(Enum_Member_Node)
+{
+  Enum_Member_Node *next;
+  Enum_Member v;
 };
 
 typedef struct Enum_Member_List Enum_Member_List;
 struct Enum_Member_List
 {
-  Enum_Member *first;
-  Enum_Member *last;
+  Enum_Member_Node *first;
+  Enum_Member_Node *last;
+};
+
+STRUCT(Enum_Member_Array)
+{
+  Enum_Member *v;
+  u64 count;
 };
 
 typedef struct Decl_Enum Decl_Enum;
 struct Decl_Enum
 {
-  Enum_Member_List members;
+  Enum_Member_Array members;
 };
 
 typedef struct Decl_Var Decl_Var;
@@ -318,7 +334,6 @@ struct Decl
   String8   name;
 
   Decl *next;
-  Decl *prev;
 
   union
   {
@@ -350,7 +365,7 @@ internal Decl *decl_alloc(Parser *p, String8 name, Decl_Kind kind);
 
 internal Decl *decl_proc(Parser *p, String8 name, Param_List params, Type_Spec *ret, Stmt *body);
 internal Decl *decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_List fields); // TODO: Field_Array
-internal Decl *decl_enum(Parser *p, String8 name, Enum_Member_List members);
+internal Decl *decl_enum(Parser *p, String8 name, Enum_Member_Array members);
 internal Decl *decl_var(Parser *p, String8 name, Type_Spec *type, Expr *expr);
 internal Decl *decl_const(Parser *p, String8 name, Expr *expr);
 internal Decl *decl_typedef(Parser *p, String8 name, Type_Spec *type);
@@ -397,6 +412,12 @@ STRUCT(Compound_Arg_List)
 {
   Compound_Arg *first;
   Compound_Arg *last;
+  u64 count;
+};
+
+STRUCT(Compound_Arg_Array)
+{
+  Compound_Arg **v;
   u64 count;
 };
 
@@ -487,7 +508,8 @@ struct Expr
     struct
     {
       Type_Spec *type;
-      Compound_Arg_List args;
+      // Compound_Arg_List args;
+      Compound_Arg_Array args;
     }
     compound;
 
@@ -527,6 +549,6 @@ internal Expr *expr_cast(Parser *p, Type_Spec *type, Expr *e);
 internal Expr *expr_call(Parser *p, Expr *e, Expr_Array args);
 internal Expr *expr_index(Parser *p, Expr *e, Expr *index);
 internal Expr *expr_field(Parser *p, Expr *e, String8 field);
-internal Expr *expr_compound(Parser *p, Type_Spec *type, Compound_Arg_List args);
+internal Expr *expr_compound(Parser *p, Type_Spec *type, Compound_Arg_Array args);
 internal Expr *expr_size_of_expr(Parser *p, Expr *e);
 internal Expr *expr_size_of_type(Parser *p, Type_Spec *type);

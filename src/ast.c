@@ -44,7 +44,7 @@ decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_List fields)
 }
 
 internal Decl *
-decl_enum(Parser *p, String8 name, Enum_Member_List members)
+decl_enum(Parser *p, String8 name, Enum_Member_Array members)
 {
   Decl *decl = decl_alloc(p, name, DECL_ENUM);
   decl->enum0.members = members;
@@ -208,7 +208,7 @@ expr_field(Parser *p, Expr *e, String8 field)
 }
 
 internal Expr *
-expr_compound(Parser *p, Type_Spec *type, Compound_Arg_List args)
+expr_compound(Parser *p, Type_Spec *type, Compound_Arg_Array args)
 {
   Expr *expr = expr_alloc(p, EXPR_COMPOUND);
   expr->compound.type = type;
@@ -340,18 +340,21 @@ print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
     break;
   case TYPE_SPEC_PROC:
     str8_list_pushf(arena, list, "proc(");
-    if (t->proc.param_count > 0)
+    if (t->proc.params.count > 0)
     {
-      for (Type_Spec *it = t->proc.params.first;
-           it != 0;
-           it = it->next)
+      // for (Type_Spec *it = t->proc.params.first;
+      //      it != 0;
+      //      it = it->next)
+      // for (Type_Spec * it = (t->proc.params).v[0]; it != (t->proc.params).v + (t->proc.params).count; it += 1)
+      for each_index(i, t->proc.params.count)      
       {
+        Type_Spec *it = t->proc.params.v[i];
         // if (it->name.count > 0)
         // {
         //   str8_list_pushf(arena, list, "%.*s ", str8_varg(it->name));
         // }
         print_type(arena, list, indent, it);
-        if (it != t->proc.params.last)
+        if (it != t->proc.params.v[t->proc.params.count-1])
         {
           str8_list_pushf(arena, list, ", ");
         }
@@ -452,16 +455,15 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
   case DECL_ENUM:
     str8_list_pushf(arena, list, "(enum %.*s ", str8_varg(d->name));
     (*indent)++;
-    for (Enum_Member *it = d->enum0.members.first;
-         it != 0;
-         it = it->next)
+    for each_index(i, d->enum0.members.count)
     {
+      Enum_Member it = d->enum0.members.v[i];
       print_ln(arena, list, indent);
-      str8_list_pushf(arena, list, "(%.*s ", str8_varg(it->name));
-      if (it->value)
+      str8_list_pushf(arena, list, "(%.*s ", str8_varg(it.name));
+      if (it.value)
       {
-        //str8_list_pushf(arena, list, "(%.*s ", str8_varg(it->name));
-        print_expr(arena, list, indent, it->value);
+        //str8_list_pushf(arena, list, "(%.*s ", str8_varg(it.name));
+        print_expr(arena, list, indent, it.value);
         // str8_list_pushf(arena, list, "TODO");
       }
       else
@@ -603,10 +605,9 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
   case EXPR_COMPOUND:
     str8_list_pushf(arena, list, "(compound ");
     print_type(arena, list, indent, e->compound.type);
-    for (Compound_Arg *arg = e->compound.args.first;
-         arg != 0;
-         arg = arg->next)
+    for each_index(i, e->compound.args.count)
     {
+      Compound_Arg *arg = e->compound.args.v[i];
       str8_list_pushf(arena, list, " ");
       if (arg->optional_name.count > 0)
       {

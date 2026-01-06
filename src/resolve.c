@@ -460,11 +460,10 @@ entity_install_decl(Decl *decl)
   entity_list_push(&entities, en);
   if (decl->kind == DECL_ENUM)
   {
-    for (Enum_Member *it = decl->enum0.members.first;
-         it != 0;
-         it = it->next)
+    for each_index(i, decl->enum0.members.count)
     {
-      entity_list_push(&entities, entity_enum_const(it->name, decl));
+      Enum_Member it = decl->enum0.members.v[i];
+      entity_list_push(&entities, entity_enum_const(it.name, decl));
     }
   }
   return en;
@@ -531,16 +530,14 @@ resolve_typespec(Type_Spec *typespec)
   }
   case TYPE_SPEC_PROC:
   {
-    assert(typespec->proc.param_count > 0);
+    assert(typespec->proc.params.count > 0);
     Type_Param_Array params = {0};
-    params.count = typespec->proc.param_count;
+    params.count = typespec->proc.params.count;
     params.v = push_array_nz(resolve_arena, Type_Param, params.count);
     // @CLEANUP
-    u32 i = 0;
-    for (Type_Spec *it = typespec->proc.params.first;
-         it != 0;
-         it = it->next, i += 1)
+    for each_index(i, params.count)
     {
+      Type_Spec *it = typespec->proc.params.v[i];
       params.v[i] = resolve_typespec(it);
     }
     // for (u32 i = 0; i < params.count; i += 1)
@@ -920,12 +917,10 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
       fatal("Compound literal has too many fields");
     }
 
-    // TODO(mxtej): convert expr->compound args to array
     u32 i = 0;
-    for (Compound_Arg *arg = expr->compound.args.first;
-        arg != 0;
-        arg = arg->next)
+    for each_index(i, expr->compound.args.count)
     {
+      Compound_Arg *arg = expr->compound.args.v[i];
       Resolved_Expr field = resolve_expr(arg->expr, NULL);
       if (field.type != type->aggregate.fields.v[i].type)
       {
@@ -948,11 +943,9 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
     {
       fatal("Compound literal has too many elements");
     }
-    u32 i = 0;
-    for (Compound_Arg *arg = expr->compound.args.first;
-        arg != 0;
-        arg = arg->next)
+    for each_index(i, expr->compound.args.count)
     {
+      Compound_Arg *arg = expr->compound.args.v[i];
       Resolved_Expr element = resolve_expr(arg->expr, NULL);
       if (element.type != type->array.base)
       {

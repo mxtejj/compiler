@@ -295,6 +295,7 @@ parse_compound_element(Parser *p)
     expect(p, '{');
 
     Compound_Arg_List args = {0};
+    u32 count = 0;
 
     if (!match(p, '}'))
     {
@@ -304,12 +305,26 @@ parse_compound_element(Parser *p)
         Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
         arg->expr = elem;
         push_compound_arg(&args, arg);
+        count += 1;
       } while (match(p, ','));
 
       expect(p, '}');
     }
 
-    return expr_compound(p, type, args);
+    Compound_Arg_Array arg_array = {0};
+    if (count > 0)
+    {
+      arg_array.count = count;
+      arg_array.v = push_array_nz(p->arena, Compound_Arg *, arg_array.count);
+
+      u32 i = 0;
+      for each_node(it, Compound_Arg, args.first)
+      {
+        arg_array.v[i++] = it;
+      }
+    }
+
+    return expr_compound(p, type, arg_array);
   }
   return parse_expr(p);
 }
@@ -321,6 +336,7 @@ parse_expr_primary(Parser *p)
   if ((p->expr_parse_flags & EXPR_ALLOW_COMPOUND) && match(p, '{'))
   {
     Compound_Arg_List args = {0};
+    u32 count = 0;
 
     if (!match(p, '}'))
     {
@@ -330,14 +346,28 @@ parse_expr_primary(Parser *p)
         Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
         arg->expr = value;
         push_compound_arg(&args, arg);
+        count += 1;
       } while (match(p, ','));
 
       expect(p, '}');
     }
 
+    Compound_Arg_Array arg_array = {0};
+    if (count > 0)
+    {
+      arg_array.count = count;
+      arg_array.v = push_array_nz(p->arena, Compound_Arg *, arg_array.count);
+
+      u32 i = 0;
+      for each_node(it, Compound_Arg, args.first)
+      {
+        arg_array.v[i++] = it;
+      }
+    }
+
     // TODO
     // local_persist Type_Spec null_type = { .kind = TYPE_SPEC_NULL };
-    return expr_compound(p, NULL, args);
+    return expr_compound(p, NULL, arg_array);
   }
 
   // if (parser_check(p, TOKEN_IDENT) && peek(p, '{'))
@@ -347,6 +377,7 @@ parse_expr_primary(Parser *p)
     Type_Spec *type = parse_type(p);
     expect(p, '{');
     Compound_Arg_List args = {0};
+    u32 count = 0;
 
     if (!match(p, '}'))
     {
@@ -379,6 +410,7 @@ parse_expr_primary(Parser *p)
           arg->expr = value;
           arg->optional_name = name;
           push_compound_arg(&args, arg);
+          count += 1;
         }
         else
         {
@@ -392,13 +424,27 @@ parse_expr_primary(Parser *p)
           Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
           arg->expr = value;
           push_compound_arg(&args, arg);
+          count += 1;
         }
       } while (match(p, ','));
 
       expect(p, '}');
     }
 
-    return expr_compound(p, type, args);
+    Compound_Arg_Array arg_array = {0};
+    if (count > 0)
+    {
+      arg_array.count = count;
+      arg_array.v = push_array_nz(p->arena, Compound_Arg *, arg_array.count);
+
+      u32 i = 0;
+      for each_node(it, Compound_Arg, args.first)
+      {
+        arg_array.v[i++] = it;
+      }
+    }
+
+    return expr_compound(p, type, arg_array);
   }
 
   if (match(p, TOKEN_TRUE))
@@ -475,7 +521,7 @@ parse_expr_postfix(Parser *p)
         arg_array.v = push_array(p->arena, Expr*, count);
 
         u32 i = 0;
-        for (Expr *it = args.first; it != 0; it = it->next)
+        for each_node(it, Expr, args.first)
         {
           arg_array.v[i++] = it;
         }
@@ -934,27 +980,24 @@ parse_stmt_decl(Parser *p)
 
   expect(p, ';');
 
-  // TODO: CLEANUP
-  // TODO: use stmt_decl()
-  Stmt *s = stmt_alloc(p, STMT_DECL);
-  // @HACK
-  s->decl = push_struct(p->arena, Decl);
+  // @CLEANUP
+  Decl *decl = push_struct(p->arena, Decl);
 
   if (is_const)
   {
-    s->decl->kind = DECL_CONST;
-    s->decl->name = name;
-    s->decl->const0.expr = init;
+    decl->kind = DECL_CONST;
+    decl->name = name;
+    decl->const0.expr = init;
   }
   else
   {
-    s->decl->kind = DECL_VAR;
-    s->decl->name = name;
-    s->decl->var.type = type;
-    s->decl->var.expr = init;
+    decl->kind = DECL_VAR;
+    decl->name = name;
+    decl->var.type = type;
+    decl->var.expr = init;
   }
 
-  return s;
+  return stmt_decl(p, decl);
 }
 
 internal Stmt *
@@ -1007,17 +1050,20 @@ parse_decl_enum(Parser *p)
   expect(p, '{');
 
   Enum_Member_List members = {0};
+  u64 count = 0;
+
   while (!parser_check(p, '}'))
   {
-    Enum_Member *member = push_struct(p->arena, Enum_Member);
+    Enum_Member_Node *node = push_struct(p->arena, Enum_Member_Node);
 
-    member->name = parse_ident(p);
+    node->v.name = parse_ident(p);
     if (match(p, '='))
     {
-      member->value = parse_expr(p);
+      node->v.value = parse_expr(p);
     }
 
-    sll_queue_push(members.first, members.last, member);
+    sll_queue_push(members.first, members.last, node);
+    count += 1;
 
     if (!match(p, ','))
     {
@@ -1027,7 +1073,20 @@ parse_decl_enum(Parser *p)
 
   expect(p, '}');
 
-  return decl_enum(p, name, members);
+  Enum_Member_Array member_array = {0};
+  if (count > 0)
+  {
+    member_array.count = count;
+    member_array.v = push_array_nz(p->arena, Enum_Member, count);
+
+    u32 i = 0;
+    for each_node(it, Enum_Member_Node, members.first)
+    {
+      member_array.v[i++] = it->v;
+    }
+  }
+
+  return decl_enum(p, name, member_array);
 }
 
 internal Decl *
@@ -1174,20 +1233,37 @@ parse_type_proc(Parser *p)
 {
   // update: proc(...) -> [...]
   Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_PROC);
+  // TODO make it type_spec_proc(...)
+
+  Type_Spec_List param_list = {0};
+  u64 param_count = 0;
 
   expect(p, '(');
 
   while (!match(p, ')'))
   {
     Type_Spec *param = parse_type(p);
-    sll_queue_push(t->proc.params.first, t->proc.params.last, param);
-    t->proc.param_count += 1;
+    sll_queue_push(param_list.first, param_list.last, param);
+    param_count += 1;
     match(p, ',');
   }
 
   if (match(p, TOKEN_ARROW))
   {
     t->proc.ret = parse_type(p);
+  }
+
+  Type_Spec_Array params = {0};
+  if (param_count > 0)
+  {
+    params.count = param_count;
+    params.v = push_array(p->arena, Type_Spec *, params.count);
+
+    u32 i = 0;
+    for each_node(it, Type_Spec, param_list.first)
+    {
+      params.v[i++] = it;
+    }
   }
 
   return t;
@@ -1305,7 +1381,7 @@ parse_decl_proc(Parser *p)
   while (!match(p, ')'))
   {
     Proc_Param *param = parse_decl_proc_param(p);
-    dll_push_back(params.first, params.last, param);
+    sll_queue_push(params.first, params.last, param);
     match(p, ',');
   }
   // if (!match(p, ')'))
@@ -1401,7 +1477,7 @@ parse_declarations(Parser *p)
   while (lexer_can_peek(p->lexer))
   {
     Decl *decl = parse_decl(p);
-    dll_push_back(list.first, list.last, decl);
+    sll_queue_push(list.first, list.last, decl);
   }
 
   return list;
@@ -1556,7 +1632,7 @@ parser_test()
 
     Decl_List list = parse_declarations(&p);
 
-    for (Decl *it = list.first; it != NULL; it = it->next)
+    for each_node(it, Decl, list.first)
     {
       Arena_Temp scratch = arena_scratch_get(0, 0);
 
