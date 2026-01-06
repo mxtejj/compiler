@@ -572,6 +572,10 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
     break;
   case EXPR_CAST:
     str8_list_pushf(arena, list, "(cast ");
+    print_type(arena, list, indent, e->cast.type);
+    str8_list_pushf(arena, list, " ");
+    print_expr(arena, list, indent, e->cast.expr);
+    str8_list_pushf(arena, list, ")");
     break;
   case EXPR_CALL:
     str8_list_pushf(arena, list, "(call ");
