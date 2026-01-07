@@ -30,6 +30,8 @@
   X(XOR_ASSIGN)       \
   X(INCREMENT)        \
   X(DECREMENT)        \
+  X(RANGE_INCL)       \
+  X(RANGE_EXCL)       \
   X(STRING_LITERAL)   \
   X(INTEGER_LITERAL)  \
   X(FLOAT_LITERAL)    \
@@ -62,6 +64,7 @@
   X(CASE)             \
   X(DEFER)            \
   X(BREAK)            \
+  X(FALLTHROUGH)      \
   X(CONTINUE)         \
   X(RETURN)           \
   X(STRUCT)           \
@@ -74,6 +77,7 @@
   X(SIZE_OF)          \
   X(CAST)             \
   X(TRANSMUTE)        \
+  X(IN)               \
   X(KEYWORD_END)      \
 
 typedef enum Token_Kind Token_Kind;

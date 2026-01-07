@@ -46,13 +46,13 @@ enum Stmt_Kind
   STMT_DO_WHILE,
   STMT_WHILE,
   STMT_FOR,
+  STMT_FOR_IN,
   STMT_SWITCH,
   STMT_RETURN,
   STMT_BREAK,
   STMT_CONTINUE,
   STMT_EXPR,
   STMT_DECL,
-  // call, assign
 };
 
 typedef struct Stmt Stmt;
@@ -67,6 +67,45 @@ struct Stmt_List
   u64 count;
 };
 
+STRUCT(Stmt_Array)
+{
+  Stmt **v;
+  u64 count;
+};
+
+STRUCT(Expr_Array)
+{
+  Expr **v;
+  u64 count;
+};
+
+STRUCT(Switch_Case)
+{
+  Expr_Array labels;
+  Stmt *block; // NOTE: because we have print_stmt which takes a Stmt * we "cant" make this Stmt_Array
+  b8 is_fallthrough;
+  b8 is_default; // => (labels.count == 0)
+};
+
+STRUCT(Switch_Case_Node)
+{
+  Switch_Case_Node *next;
+  Switch_Case v;
+};
+
+STRUCT(Switch_Case_List)
+{
+  Switch_Case_Node *first;
+  Switch_Case_Node *last;
+  u64 count;
+};
+
+STRUCT(Switch_Case_Array)
+{
+  Switch_Case *v;
+  u64 count;
+};
+
 struct Stmt
 {
   Stmt_Kind kind;
@@ -75,11 +114,7 @@ struct Stmt
 
   union
   {
-    struct
-    {
-      Stmt_List stmts;
-    }
-    block;
+    Stmt_Array block;
 
     struct
     {
@@ -94,30 +129,33 @@ struct Stmt
       Expr *cond;
       Stmt *body;
     }
-    do_while;
-
-    struct
-    {
-      Expr *cond;
-      Stmt *body;
-    }
     while0;
 
     struct
     {
       Stmt *init;
       Expr *cond;
-      Expr *loop;
+      Stmt *loop;
       Stmt *body;
     }
     for0;
 
     struct
     {
-      Expr *expr;
+      Expr *item;
+      Expr *iter;
+      Stmt *body;
     }
-    return0;
+    for_in;
 
+    struct
+    {
+      Expr *expr;
+      Switch_Case_Array cases;
+    }
+    switch0;
+
+    Expr *return_expr;
     Expr *expr;
     Decl *decl;
   };
@@ -135,14 +173,15 @@ struct Stmt
 
 internal Stmt *stmt_alloc(Parser *p, Stmt_Kind kind);
 
-internal Stmt *stmt_block(Parser *p, Stmt_List stmts);
+internal Stmt *stmt_block(Parser *p, Stmt_Array stmts);
 internal Stmt *stmt_if(Parser *p, Expr *cond, Stmt *then_block, Stmt *else_stmt);
-internal Stmt *stmt_do_while(Parser *p, Expr *cond, Stmt *body);
 internal Stmt *stmt_while(Parser *p, Expr *cond, Stmt *body);
-internal Stmt *stmt_for(Parser *p, Stmt *init, Expr *cond, Expr *loop, Stmt *body);
+internal Stmt *stmt_for(Parser *p, Stmt *init, Expr *cond, Stmt *loop, Stmt *body);
+internal Stmt *stmt_for_in(Parser *p, Expr *item, Expr *iter, Stmt *body);
 internal Stmt *stmt_return(Parser *p, Expr *expr);
 internal Stmt *stmt_expr(Parser *p, Expr *expr);
 internal Stmt *stmt_decl(Parser *p, Decl *decl);
+internal Stmt *stmt_switch(Parser *p, Expr *expr, Switch_Case_Array cases);
 
 ///////////////////////////////////
 // TYPE SPECIFIERS
@@ -228,26 +267,36 @@ enum Decl_Kind
   DECL_TYPEDEF,
 };
 
-typedef struct Proc_Param Proc_Param;
-struct Proc_Param
+STRUCT(Proc_Param)
 {
-  Proc_Param *next;
-
   String8    name;
   Type_Spec *type;
+};
+
+STRUCT(Proc_Param_Node)
+{
+  Proc_Param_Node *next;
+  Proc_Param v;
 };
 
 typedef struct Param_List Param_List;
 struct Param_List
 {
-  Proc_Param *first;
-  Proc_Param *last;
+  Proc_Param_Node *first;
+  Proc_Param_Node *last;
+};
+
+typedef struct Param_Array Param_Array;
+struct Param_Array
+{
+  Proc_Param *v;
+  u64 count;
 };
 
 typedef struct Decl_Proc Decl_Proc;
 struct Decl_Proc
 {
-  Param_List  params;
+  Param_Array params;
   Type_Spec  *ret;
   Stmt       *body;
 };
@@ -368,7 +417,7 @@ struct Decl_List
 
 internal Decl *decl_alloc(Parser *p, String8 name, Decl_Kind kind);
 
-internal Decl *decl_proc(Parser *p, String8 name, Param_List params, Type_Spec *ret, Stmt *body);
+internal Decl *decl_proc(Parser *p, String8 name, Param_Array params, Type_Spec *ret, Stmt *body);
 internal Decl *decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_Array fields); // TODO: Field_Array
 internal Decl *decl_enum(Parser *p, String8 name, Enum_Member_Array members);
 internal Decl *decl_var(Parser *p, String8 name, Type_Spec *type, Expr *expr);
@@ -440,7 +489,6 @@ STRUCT(Compound_Field_Array)
   Compound_Field **v;
   u64 count;
 };
-raddbg_type_view(Compound_Field_Array, array(v, count));
 
 internal void push_compound_field(Compound_Field_List *list, Compound_Field *field);
 
@@ -448,14 +496,8 @@ STRUCT(Expr_List)
 {
   Expr *first;
   Expr *last;
-};
-
-STRUCT(Expr_Array)
-{
-  Expr **v;
   u64 count;
 };
-raddbg_type_view(Expr_Array, array(v, count));
 
 struct Expr
 {

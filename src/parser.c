@@ -17,6 +17,7 @@ bitwise XOR        ^
 bitwise OR         |
 comparison         < <= > >=
 equality           == !=
+range              ..< ..=
 logical AND        &&
 logical OR         ||
 ternary            ?:
@@ -229,6 +230,7 @@ parse_compound_literal(Parser *p, Type_Spec *explicit_type)
 {
   expect(p, '{');
 
+  // TODO: use Compound_Field_Node and arena scratch for list; also in other places
   Compound_Field_List list = {0};
 
   if (!match(p, '}'))
@@ -399,16 +401,8 @@ parse_expr_postfix(Parser *p)
     }
 
     // FIELD: person.name
-    if (check(p, '.'))
+    if (match(p, '.'))
     {
-      if (peek(p, '{'))
-      {
-        assert(0);
-        // advance(p); // .
-        // expr = parse_compound_literal(p, )
-      }
-
-      advance(p); // eat '.'
       String8 name = parse_ident(p);
       expr = expr_field(p, expr, name);
       continue;
@@ -598,14 +592,29 @@ parse_expr_equality(Parser *p)
 }
 
 internal Expr *
-parse_expr_logical_and(Parser *p)
+parse_expr_range(Parser *p)
 {
   Expr *expr = parse_expr_equality(p);
+
+  while (match(p, TOKEN_RANGE_EXCL) || match(p, TOKEN_RANGE_INCL))
+  {
+    Token op = p->prev;
+    Expr *right = parse_expr_equality(p);
+    expr = expr_binary(p, expr, op, right);
+  }
+
+  return expr;
+}
+
+internal Expr *
+parse_expr_logical_and(Parser *p)
+{
+  Expr *expr = parse_expr_range(p);
 
   while (match(p, TOKEN_LOGICAL_AND))
   {
     Token op = p->prev;
-    Expr *right = parse_expr_equality(p);
+    Expr *right = parse_expr_range(p);
     expr = expr_binary(p, expr, op, right);
   }
 
@@ -643,6 +652,29 @@ parse_expr_ternary(Parser *p)
   return expr;
 }
 
+internal b32
+is_assign_op(Token_Kind kind)
+{
+  switch (kind)
+  {
+  case '=':
+  case TOKEN_ADD_ASSIGN:
+  case TOKEN_SUB_ASSIGN:
+  case TOKEN_DIV_ASSIGN:
+  case TOKEN_MUL_ASSIGN:
+  case TOKEN_AND_ASSIGN:
+  // case TOKEN_MOD_ASSIGN:
+  case TOKEN_LSHIFT_ASSIGN:
+  case TOKEN_RSHIFT_ASSIGN:
+  case TOKEN_OR_ASSIGN:
+  case TOKEN_XOR_ASSIGN:
+    return true;
+  default:
+    break;
+  }
+  return false;
+}
+
 internal Expr *
 parse_expr_assignment(Parser *p)
 {
@@ -650,18 +682,10 @@ parse_expr_assignment(Parser *p)
 
   // use `if` if we want a = b = c (recursive)
   // use while if not
-  if (match(p, '=')
-   || match(p, TOKEN_ADD_ASSIGN)
-   || match(p, TOKEN_SUB_ASSIGN)
-   || match(p, TOKEN_DIV_ASSIGN)
-   || match(p, TOKEN_MUL_ASSIGN)
-   || match(p, TOKEN_AND_ASSIGN)
-   // TODO: TOKEN_MOD_ASSIGN (%=)
-   || match(p, TOKEN_LSHIFT_ASSIGN)
-   || match(p, TOKEN_RSHIFT_ASSIGN)
-   || match(p, TOKEN_OR_ASSIGN)
-   || match(p, TOKEN_XOR_ASSIGN))
+  if (is_assign_op(p->curr.kind))
   {
+    advance(p);
+
     Token op = p->prev;
     Expr *right = parse_expr_assignment(p); // RIGHT ASSOCIATIVE
 
@@ -685,14 +709,13 @@ parse_expr(Parser *p)
 }
 
 /////////////////////////////////////////////////////
-// STATEMENTS
+//- Statements
 internal Stmt *
 parse_stmt(Parser *p);
 
 internal Stmt *
 parse_stmt_expr(Parser *p)
 {
-  // Don't allow implicit compound literal
   Expr *expr = parse_expr(p);
   expect(p, ';');
   return stmt_expr(p, expr);
@@ -702,14 +725,28 @@ internal Stmt *
 parse_stmt_block(Parser *p)
 {
   expect(p, '{');
-  Stmt_List stmts = {0};
+  Stmt_List list = {0};
   while (!check(p, '}'))
   {
     Stmt *stmt = parse_stmt(p);
-    sll_queue_push(stmts.first, stmts.last, stmt);
-    stmts.count += 1;
+    sll_queue_push(list.first, list.last, stmt);
+    list.count += 1;
   }
   expect(p, '}');
+
+  Stmt_Array stmts = {0};
+  if (list.count > 0)
+  {
+    stmts.count = list.count;
+    stmts.v = push_array_nz(p->arena, Stmt *, stmts.count);
+
+    u32 i = 0;
+    for each_node(it, Stmt, list.first)
+    {
+      stmts.v[i++] = it;
+    }
+  }
+
   return stmt_block(p, stmts);
 }
 
@@ -752,7 +789,7 @@ parse_stmt_do_while(Parser *p)
   expect(p, TOKEN_WHILE);
   Expr *cond = parse_expr(p);
   expect(p, ';');
-  return stmt_do_while(p, cond, body);
+  return stmt_while(p, cond, body);
 }
 
 internal Stmt *
@@ -850,20 +887,184 @@ parse_stmt_decl(Parser *p)
 }
 
 internal Stmt *
+parse_stmt_defer(Parser *p)
+{
+  Expr *expr = parse_expr(p);
+  expect(p, ';');
+  // return stmt_defer(p, expr);
+  assert(0);
+  return NULL;
+}
+
+internal Stmt *
+parse_stmt_for(Parser *p)
+{
+  Stmt *stmt = NULL;
+
+  if (check(p, TOKEN_IDENT) && peek(p, TOKEN_IN))
+  {
+    //- parse for-in loop
+    // for p in particles {}
+    // for i in 0 ..< 10 {}
+    // for i in 0 ..= 5*2 {}
+    Expr *item = parse_expr(p);
+    expect(p, TOKEN_IN);
+    Expr *iter = parse_expr(p);
+    Stmt *body = parse_stmt_block(p);
+    stmt = stmt_for_in(p, item, iter, body);
+  }
+  else
+  {
+    //- parse c-style for loop
+    // for var i = 0; i < 10; i += 1 {}
+    // for ; i < 10; i += 1 {}
+    Stmt *init = NULL;
+    Expr *cond = NULL;
+    Stmt *loop = NULL;
+
+    if (!check(p, ';'))
+    {
+      init = parse_stmt(p);
+    }
+    // @CLEANUP
+    // TODO: because parse_stmt expects & consumes ; we cant expect it here also
+    // expect(p, ';');
+    if (match(p, ';')) {}
+
+    if (!check(p, ';'))
+    {
+      cond = parse_expr(p);
+    }
+    expect(p, ';');
+
+    loop = parse_stmt(p);
+    Stmt *body = parse_stmt_block(p);
+
+    // TODO: for now we need an additional semicolon after loop statement @CLEANUP
+
+    stmt = stmt_for(p, init, cond, loop, body);
+  }
+  return stmt;
+}
+
+internal Switch_Case
+parse_switch_case(Parser *p)
+{
+  Switch_Case result = {0};
+  result.is_default = true;
+
+  expect(p, TOKEN_CASE);
+
+  // parse optional labels
+  if (!check(p, ':'))
+  {
+    result.is_default = false;
+
+    Expr_List list = {0};
+    do
+    {
+      Expr *label = parse_expr(p);
+      sll_queue_push(list.first, list.last, label);
+      list.count += 1;
+    } while (match(p, ','));
+
+    assert(list.count > 0); // this should never assert
+    result.labels.count = list.count;
+    result.labels.v = push_array_nz(p->arena, Expr *, list.count);
+
+    u32 i = 0;
+    for each_node(it, Expr, list.first)
+    {
+      result.labels.v[i++] = it;
+    }
+  }
+
+  expect(p, ':');
+
+  Stmt_List list = {0};
+
+  //- parse statements until next case or '}'
+  while (!check(p, TOKEN_CASE) && !check(p, '}'))
+  {
+    if (match(p, TOKEN_FALLTHROUGH))
+    {
+      expect(p, ';');
+      result.is_fallthrough = true;
+      break; // must be last statement
+    }
+
+    Stmt *stmt = parse_stmt(p);
+    sll_queue_push(list.first, list.last, stmt);
+    list.count += 1;
+  }
+
+  Stmt_Array stmts = {0};
+  if (list.count > 0)
+  {
+    stmts.count = list.count;
+    stmts.v = push_array_nz(p->arena, Stmt *, list.count);
+
+    u32 i = 0;
+    for each_node(it, Stmt, list.first)
+    {
+      stmts.v[i++] = it;
+    }
+  }
+
+  result.block = stmt_block(p, stmts);
+  return result;
+}
+
+internal Stmt *
+parse_stmt_switch(Parser *p)
+{
+  Arena_Temp scratch = arena_scratch_get(0, 0);
+
+  Expr *expr = parse_expr(p);
+  Switch_Case_List list = {0};
+
+  expect(p, '{');
+
+  while (!check(p, '}') && !check(p, TOKEN_EOF))
+  {
+    Switch_Case_Node *node = push_struct(scratch.arena, Switch_Case_Node);
+    node->v = parse_switch_case(p);
+    sll_queue_push(list.first, list.last, node);
+    list.count += 1;
+  }
+
+  Switch_Case_Array cases = {0};
+  if (list.count > 0)
+  {
+    cases.count = list.count;
+    cases.v = push_array_nz(p->arena, Switch_Case, cases.count);
+
+    u32 i = 0;
+    for each_node(it, Switch_Case_Node, list.first)
+    {
+      cases.v[i++] = it->v;
+    }
+  }
+
+  arena_scratch_release(scratch);
+  return stmt_switch(p, expr, cases);
+}
+
+internal Stmt *
 parse_stmt(Parser *p)
 {
   if (check(p, '{'))            return parse_stmt_block(p);
   if (match(p, TOKEN_IF))       return parse_stmt_if(p);
   if (match(p, TOKEN_DO))       return parse_stmt_do_while(p);
   if (match(p, TOKEN_WHILE))    return parse_stmt_while(p);
-  if (match(p, TOKEN_DEFER))    assert(!"TODO: defer");
+  if (match(p, TOKEN_DEFER))    return parse_stmt_defer(p);
   if (match(p, TOKEN_RETURN))   return parse_stmt_return(p);
   if (match(p, TOKEN_CONTINUE)) return parse_stmt_continue(p);
   if (match(p, TOKEN_BREAK))    return parse_stmt_break(p);
   if (match(p, TOKEN_VAR))      return parse_stmt_decl(p);
   if (match(p, TOKEN_CONST))    return parse_stmt_decl(p);
-  if (match(p, TOKEN_FOR))    assert(!"TODO: for");
-  if (match(p, TOKEN_SWITCH)) assert(!"TODO: switch");
+  if (match(p, TOKEN_FOR))      return parse_stmt_for(p);
+  if (match(p, TOKEN_SWITCH))   return parse_stmt_switch(p);
 
   /*
   TODO: STMT_DECL (locally scoped decls like struct or union)
@@ -1006,16 +1207,16 @@ parse_decl_const(Parser *p)
   return decl_const(p, name, expr);
 }
 
-internal Proc_Param *
+internal Proc_Param
 parse_decl_proc_param(Parser *p)
 {
-  Proc_Param *param = push_struct(p->arena, Proc_Param);
+  Proc_Param param = {0};
 
   // TODO: Support multiname param
   // eg;   x, y: f32
-  param->name = parse_ident(p);
+  param.name = parse_ident(p);
   expect(p, ':');
-  param->type = parse_type(p);
+  param.type = parse_type(p);
 
   return param;
 }
@@ -1235,11 +1436,15 @@ parse_decl_proc(Parser *p)
   String8 name = parse_ident(p);
   expect(p, '(');
 
-  Param_List params = {0};
+  Param_List list = {0};
+  u64 count = 0;
+
   while (!match(p, ')'))
   {
-    Proc_Param *param = parse_decl_proc_param(p);
-    sll_queue_push(params.first, params.last, param);
+    Proc_Param_Node *node = push_struct(p->arena, Proc_Param_Node);
+    node->v = parse_decl_proc_param(p);
+    sll_queue_push(list.first, list.last, node);
+    count += 1;
     match(p, ',');
   }
   // if (!match(p, ')'))
@@ -1256,7 +1461,20 @@ parse_decl_proc(Parser *p)
   {
     ret = parse_type(p);
   }
-  
+
+  Param_Array params = {0};
+  if (count > 0)
+  {
+    params.count = count;
+    params.v = push_array_nz(p->arena, Proc_Param, params.count);
+
+    u32 i = 0;
+    for each_node(it, Proc_Param_Node, list.first)
+    {
+      params.v[i++] = it->v;
+    }
+  }
+
   Stmt *body = parse_stmt_block(p);
   return decl_proc(p, name, params, ret, body);
 }
@@ -1359,6 +1577,10 @@ parse_declarations(Parser *p)
 internal void
 parser_test()
 {
+  printf("\n");
+  printf("--- STATEMENTS\n");
+  printf("\n");
+
   {
     String8 source = S(
       "x = 5 + 3;\n"
@@ -1409,6 +1631,32 @@ parser_test()
 
       "break;\n"
       "continue;\n"
+
+      "x = 5;\n"
+      "x = y = z;\n"
+
+      "for var i = 0; i < 10; i += 1; {}\n"
+      "for i = 0; i < 10; i += 1; {}\n"
+      "for ; i < 10; i += 1; {}\n"
+
+      "for i in 0 ..< 10 {}\n"
+      "for i in 0 ..= 9 {}\n"
+      "for i in 0 ..< 2*5 {}\n"
+
+      "var people: []Person;\n"
+      "for person in people {}\n"
+
+      "switch c\n"
+      "{\n"
+      "case 'a' ..= 'z', 'A' ..= 'Z':\n"
+      "  print(\"letter\");\n"
+      "case '_':\n"
+      "  print(\"underscore\");\n"
+      "case 0..=9:\n"
+      "  print(\"number\");\n"
+      "case:\n"
+      "  print(\"default case\");\n"
+      "}\n"
     );
 
     Lexer l = lexer_init(source);
@@ -1490,6 +1738,9 @@ parser_test()
       "proc f() { if (1) { return 1; } else if (2) { return 2; } else { return 3; } }\n"
 
       "union Int_Or_Ptr { i: int, p: *int, }\n"
+
+      "struct Vector { x, y: int, }\n"
+      "var v: Vector = 0 ? .{1,2} : .{3,4};\n"
     );
     /*
 

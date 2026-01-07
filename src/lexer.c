@@ -417,17 +417,18 @@ lexer_parse_ident_or_keyword(Lexer *l)
     { .kind = TOKEN_FALSE,     .value = S("false") },
 
     // control flow statements
-    { .kind = TOKEN_IF,        .value = S("if") },
-    { .kind = TOKEN_ELSE,      .value = S("else") },
-    { .kind = TOKEN_FOR,       .value = S("for") },
-    { .kind = TOKEN_DO,        .value = S("do") },
-    { .kind = TOKEN_WHILE,     .value = S("while") },
-    { .kind = TOKEN_SWITCH,    .value = S("switch") },
-    { .kind = TOKEN_CASE,      .value = S("case") },
-    { .kind = TOKEN_DEFER,     .value = S("defer") },
-    { .kind = TOKEN_BREAK,     .value = S("break") },
-    { .kind = TOKEN_CONTINUE,  .value = S("continue") },
-    { .kind = TOKEN_RETURN,    .value = S("return") },
+    { .kind = TOKEN_IF,          .value = S("if") },
+    { .kind = TOKEN_ELSE,        .value = S("else") },
+    { .kind = TOKEN_FOR,         .value = S("for") },
+    { .kind = TOKEN_DO,          .value = S("do") },
+    { .kind = TOKEN_WHILE,       .value = S("while") },
+    { .kind = TOKEN_SWITCH,      .value = S("switch") },
+    { .kind = TOKEN_CASE,        .value = S("case") },
+    { .kind = TOKEN_DEFER,       .value = S("defer") },
+    { .kind = TOKEN_BREAK,       .value = S("break") },
+    { .kind = TOKEN_FALLTHROUGH, .value = S("fallthrough") },
+    { .kind = TOKEN_CONTINUE,    .value = S("continue") },
+    { .kind = TOKEN_RETURN,      .value = S("return") },
 
     { .kind = TOKEN_STRUCT,    .value = S("struct") },
     { .kind = TOKEN_UNION,     .value = S("union") },
@@ -443,6 +444,7 @@ lexer_parse_ident_or_keyword(Lexer *l)
     { .kind = TOKEN_SIZE_OF,   .value = S("size_of") },
     { .kind = TOKEN_CAST,      .value = S("cast") },
     { .kind = TOKEN_TRANSMUTE, .value = S("transmute") },
+    { .kind = TOKEN_IN,        .value = S("in") },
   };
   static_assert(array_count(keywords) == (TOKEN_KEYWORD_END - TOKEN_KEYWORD_BEGIN - 1));
 
@@ -495,15 +497,32 @@ lexer_next(Lexer *l)
       lexer_eat(l);
     }
 
-    if (lexer_can_peek(l) &&
-       (lexer_peek(l) == '.' || tolower(lexer_peek(l)) == 'e'))
+    b32 looks_like_float = false;
+    if (lexer_can_peek(l))
     {
-      l->cursor = l->start;
+      if (tolower(lexer_peek(l)) == 'e')
+      {
+        looks_like_float = true;
+      }
+      else if (lexer_peek(l) == '.')
+      {
+        lexer_eat(l);
+        if (lexer_can_peek(l) && lexer_peek(l) != '.')
+        {
+          looks_like_float = true;
+        }
+      }
+    }
+
+    l->cursor = l->start;
+    // if (lexer_can_peek(l) &&
+    //    (lexer_peek(l) == '.' || tolower(lexer_peek(l)) == 'e'))
+    if (looks_like_float)
+    {
       t = lexer_parse_float(l);
     }
     else
     {
-      l->cursor = l->start;
       t = lexer_parse_integer(l);
     }
     break;
@@ -514,6 +533,24 @@ lexer_next(Lexer *l)
     {
       lexer_eat(l);
       t = lexer_make_token(l, TOKEN_DEREF);
+    }
+    else if (lexer_can_peek(l) && lexer_peek(l) == '.')
+    {
+      lexer_eat(l);
+      if (lexer_can_peek(l) && lexer_peek(l) == '<')
+      {
+        lexer_eat(l);
+        t = lexer_make_token(l, TOKEN_RANGE_EXCL);
+      }
+      else if (lexer_can_peek(l) && lexer_peek(l) == '=')
+      {
+        lexer_eat(l);
+        t = lexer_make_token(l, TOKEN_RANGE_INCL);
+      }
+      else
+      {
+        lexer_syntax_error(l, "Range operator must explicitly be inclusive '..=' or exclusive '..<'");
+      }
     }
     else
     {

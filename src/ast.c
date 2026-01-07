@@ -26,7 +26,7 @@ decl_alloc(Parser *p, String8 name, Decl_Kind kind)
 }
 
 internal Decl *
-decl_proc(Parser *p, String8 name, Param_List params, Type_Spec *ret, Stmt *body)
+decl_proc(Parser *p, String8 name, Param_Array params, Type_Spec *ret, Stmt *body)
 {
   Decl *decl = decl_alloc(p, name, DECL_PROC);
   decl->proc.params = params;
@@ -252,10 +252,10 @@ stmt_alloc(Parser *p, Stmt_Kind kind)
 }
 
 internal Stmt *
-stmt_block(Parser *p, Stmt_List stmts)
+stmt_block(Parser *p, Stmt_Array stmts)
 {
   Stmt *stmt = stmt_alloc(p, STMT_BLOCK);
-  stmt->block.stmts = stmts;
+  stmt->block = stmts;
   return stmt;
 }
 
@@ -270,15 +270,6 @@ stmt_if(Parser *p, Expr *cond, Stmt *then_block, Stmt *else_stmt)
 }
 
 internal Stmt *
-stmt_do_while(Parser *p, Expr *cond, Stmt *body)
-{
-  Stmt *stmt = stmt_alloc(p, STMT_DO_WHILE);
-  stmt->do_while.cond = cond;
-  stmt->do_while.body = body;
-  return stmt;
-}
-
-internal Stmt *
 stmt_while(Parser *p, Expr *cond, Stmt *body)
 {
   Stmt *stmt = stmt_alloc(p, STMT_WHILE);
@@ -288,7 +279,7 @@ stmt_while(Parser *p, Expr *cond, Stmt *body)
 }
 
 internal Stmt *
-stmt_for(Parser *p, Stmt *init, Expr *cond, Expr *loop, Stmt *body)
+stmt_for(Parser *p, Stmt *init, Expr *cond, Stmt *loop, Stmt *body)
 {
   Stmt *stmt = stmt_alloc(p, STMT_FOR);
   stmt->for0.init = init;
@@ -299,10 +290,20 @@ stmt_for(Parser *p, Stmt *init, Expr *cond, Expr *loop, Stmt *body)
 }
 
 internal Stmt *
+stmt_for_in(Parser *p, Expr *item, Expr *iter, Stmt *body)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_FOR_IN);
+  stmt->for_in.item = item;
+  stmt->for_in.iter = iter;
+  stmt->for_in.body = body;
+  return stmt;
+}
+
+internal Stmt *
 stmt_return(Parser *p, Expr *expr)
 {
   Stmt *stmt = stmt_alloc(p, STMT_RETURN);
-  stmt->return0.expr = expr;
+  stmt->return_expr = expr;
   return stmt;
 }
 
@@ -319,6 +320,15 @@ stmt_decl(Parser *p, Decl *decl)
 {
   Stmt *stmt = stmt_alloc(p, STMT_DECL);
   stmt->decl = decl;
+  return stmt;
+}
+
+internal Stmt *
+stmt_switch(Parser *p, Expr *expr, Switch_Case_Array cases)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_SWITCH);
+  stmt->switch0.expr  = expr;
+  stmt->switch0.cases = cases;
   return stmt;
 }
 
@@ -407,13 +417,12 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
   case DECL_PROC:
     str8_list_pushf(arena, list, "(proc %.*s ", str8_varg(d->name));
     str8_list_pushf(arena, list, "(");
-    for (Proc_Param *it = d->proc.params.first;
-         it != 0;
-         it = it->next)
+    for each_index(i, d->proc.params.count)
     {
-      str8_list_pushf(arena, list, "%.*s ", str8_varg(it->name));
-      print_type(arena, list, indent, it->type);
-      if (it != d->proc.params.last)
+      Proc_Param it = d->proc.params.v[i];
+      str8_list_pushf(arena, list, "%.*s ", str8_varg(it.name));
+      print_type(arena, list, indent, it.type);
+      if (i != d->proc.params.count)
       {
         str8_list_pushf(arena, list, ", ");
       }
@@ -689,10 +698,9 @@ print_stmt(Arena *arena, String8List *list, int *indent, Stmt *s)
   case STMT_BLOCK:
     str8_list_pushf(arena, list, "(block ");
     (*indent)++;
-    for (Stmt *it = s->block.stmts.first;
-         it != 0;
-         it = it->next)
+    for each_index(i, s->block.count)
     {
+      Stmt *it = s->block.v[i];
       print_ln(arena, list, indent);
       print_stmt(arena, list, indent, it);
     }
@@ -731,11 +739,11 @@ print_stmt(Arena *arena, String8List *list, int *indent, Stmt *s)
     str8_list_pushf(arena, list, "(do ");
     (*indent)++;
     print_ln(arena, list, indent);
-    print_stmt(arena, list, indent, s->do_while.body);
+    print_stmt(arena, list, indent, s->while0.body);
     print_ln(arena, list, indent);
     (*indent)--;
     str8_list_pushf(arena, list, "(while ");
-    print_expr(arena, list, indent, s->do_while.cond);
+    print_expr(arena, list, indent, s->while0.cond);
     str8_list_pushf(arena, list, ")");
     str8_list_pushf(arena, list, ")");
     break;
@@ -748,14 +756,67 @@ print_stmt(Arena *arena, String8List *list, int *indent, Stmt *s)
     (*indent)--;
     str8_list_pushf(arena, list, ")");
     break;
-  // case STMT_FOR:      break;
-  // case STMT_SWITCH:   break;
+  case STMT_FOR:
+    str8_list_pushf(arena, list, "(for ");
+    print_stmt(arena, list, indent, s->for0.init);
+    str8_list_pushf(arena, list, " ");
+    print_expr(arena, list, indent, s->for0.cond);
+    str8_list_pushf(arena, list, " ");
+    print_stmt(arena, list, indent, s->for0.loop);
+    (*indent)++;
+    print_ln(arena, list, indent);
+    print_stmt(arena, list, indent, s->for0.body);
+    (*indent)--;
+    str8_list_pushf(arena, list, ")");
+    break;
+  case STMT_FOR_IN:
+    str8_list_pushf(arena, list, "(for-in ");
+    print_expr(arena, list, indent, s->for_in.item);
+    str8_list_pushf(arena, list, " ");
+    print_expr(arena, list, indent, s->for_in.iter);
+    str8_list_pushf(arena, list, " ");
+    (*indent)++;
+    print_ln(arena, list, indent);
+    print_stmt(arena, list, indent, s->for_in.body);
+    (*indent)--;
+    str8_list_pushf(arena, list, ")");
+    break;
+  case STMT_SWITCH:
+    str8_list_pushf(arena, list, "(switch ");
+    print_expr(arena, list, indent, s->switch0.expr);
+    for each_index(i, s->switch0.cases.count)
+    {
+      Switch_Case it = s->switch0.cases.v[i];
+
+      (*indent)++;
+      print_ln(arena, list, indent);
+      str8_list_pushf(arena, list, "(case ");
+      for each_index(j, it.labels.count)
+      {
+        Expr *expr = it.labels.v[j];
+        print_expr(arena, list, indent, expr);
+        if (j != it.labels.count)
+        {
+          str8_list_pushf(arena, list, " ");
+        }
+      }
+      {
+        (*indent)++;
+        print_ln(arena, list, indent);
+        print_stmt(arena, list, indent, it.block);
+        (*indent)--;
+      }
+      str8_list_pushf(arena, list, ")");
+      (*indent)--;
+    }
+    str8_list_pushf(arena, list, ")");
+    break;
   case STMT_RETURN:
     str8_list_pushf(arena, list, "(return");
-    if (s->return0.expr)
+    if (s->return_expr)
     {
       str8_list_pushf(arena, list, " ");
-      print_expr(arena, list, indent, s->return0.expr);
+      print_expr(arena, list, indent, s->return_expr);
     }
     str8_list_pushf(arena, list, ")");
     break;

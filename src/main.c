@@ -25,7 +25,7 @@
 #include "strings.c"
 #include "ast.c"
 #include "parser.c"
-#include "resolve.c"
+#include "resolver.c"
 #ifdef _WIN32
 # include "os_win32.c"
 #else
@@ -376,6 +376,17 @@ main(int argc, char **argv)
       { .input = S("ptr.* = 5;"),     .output = S("(= (.* ptr) 5)") },
       { .input = S("ptr.*.age = 5;"), .output = S("(= (field (.* ptr) age) 5)") },
       #endif
+
+      //- Ranges
+      { .input = S("0 ..< 10 + 1"),    .output = S("(..< 0 (+ 10 1))") },
+      { .input = S("0 ..< x << 1"),    .output = S("(..< 0 (<< x 1))") },
+      { .input = S("0 ..< i < 10"),    .output = S("(..< 0 (< i 10))") }, // type error later
+      { .input = S("a + b ..< c + d"), .output = S("(..< (+ a b) (+ c d))") },
+      { .input = S("0 ..= 10"),        .output = S("(..= 0 10)") },
+      { .input = S("0 ..= 10 + 1"),    .output = S("(..= 0 (+ 10 1))") },
+      { .input = S("1 + 1 ..= 5 * 2"), .output = S("(..= (+ 1 1) (* 5 2))") },
+      { .input = S("a & b ..< c | d"), .output = S("(..< (& a b) (| c d))") },
+      { .input = S("0 ..= 5 ..= 10"),  .output = S("(..= (..= 0 5) 10)") }, // type error later
 
       // "a.b(c)[i].d++\n"
       // "foo()\n"
