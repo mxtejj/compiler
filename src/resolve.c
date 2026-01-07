@@ -123,11 +123,13 @@ type_alloc(Type_Kind kind)
   return t;
 }
 
-Type *type_void  = &(Type){ .kind = TYPE_VOID,  .size = 0 };
-Type *type_char  = &(Type){ .kind = TYPE_CHAR,  .size = 1 };
-Type *type_int   = &(Type){ .kind = TYPE_INT,   .size = 4 };
-Type *type_float = &(Type){ .kind = TYPE_FLOAT, .size = 4 };
-const usize PTR_SIZE = 8;
+Type *type_void  = &(Type){ .kind = TYPE_VOID,  .size = 0, .align = 0 };
+Type *type_char  = &(Type){ .kind = TYPE_CHAR,  .size = 1, .align = 1 };
+Type *type_int   = &(Type){ .kind = TYPE_INT,   .size = 4, .align = 4 };
+Type *type_float = &(Type){ .kind = TYPE_FLOAT, .size = 4, .align = 4 };
+
+const usize PTR_SIZE  = 8;
+const usize PTR_ALIGN = 8;
 
 internal usize
 type_size_of(Type *type)
@@ -135,6 +137,14 @@ type_size_of(Type *type)
   assert(type->kind > TYPE_COMPLETING);
   assert(type->size != 0);
   return type->size;
+}
+
+internal usize
+type_align_of(Type *type)
+{
+  assert(type->kind > TYPE_COMPLETING);
+  assert(is_pow2(type->align));
+  return type->align;
 }
 
 STRUCT(Cached_Ptr_Type)
@@ -214,6 +224,7 @@ type_array(Type *base, u64 length)
   // t->ptr.base = base;
   Type t = (Type){ .kind = TYPE_ARRAY, .array.base = base, .array.length = length };
   t.size = length * type_size_of(base);
+  t.align = type_align_of(base);
 
   Cached_Array_Type *cached = push_struct(resolve_arena, Cached_Array_Type);
   cached->v = t;
@@ -268,7 +279,8 @@ type_proc(Type_Param_Array params, Type *ret)
 
   // TODO: do we need to copy?
   Type t = (Type){ .kind = TYPE_PROC };
-  t.size = PTR_SIZE;
+  t.size  = PTR_SIZE;
+  t.align = PTR_ALIGN;
   t.proc.params.v = push_array_nz(resolve_arena, Type_Param, params.count);
   t.proc.params.count = params.count;
   t.proc.ret = ret;
@@ -286,14 +298,16 @@ internal void
 type_complete_struct(Type *type, Type_Field_Array fields)
 {
   assert(type->kind == TYPE_COMPLETING);
-  type->kind = TYPE_STRUCT;
-  type->size = 0;
+  type->kind  = TYPE_STRUCT;
+  type->size  = 0;
+  type->align = 0;
   // for (Type_Field *it = fields.v; it != fields.v + fields.count; it += 1)
   for each_index(i, fields.count)
   {
+    // TODO: store offsets of fields in the type
     Type_Field it = fields.v[i];
-    // TODO: alignment etc
-    type->size += type_size_of(it.type);
+    type->size = type_size_of(it.type) + align_up_pow2(type->size, type_align_of(it.type));
+    type->align = clamp_bot(type->align, type_align_of(it.type));
   }
 
   type->aggregate.fields.v = push_array_nz(resolve_arena, Type_Field, fields.count);
@@ -306,12 +320,14 @@ internal void
 type_complete_union(Type *type, Type_Field_Array fields)
 {
   assert(type->kind == TYPE_COMPLETING);
-  type->kind = TYPE_UNION;
-  type->size = 0;
+  type->kind  = TYPE_UNION;
+  type->size  = 0;
+  type->align = 0;
   for (Type_Field *it = fields.v; it != fields.v + fields.count; it += 1)
   {
     assert(it->type->kind > TYPE_COMPLETING);
-    type->size = max(type->size, type_size_of(it->type));
+    type->size  = MAX(type->size, type_size_of(it->type));
+    type->align = MAX(type->align, type_align_of(it->type));
   }
 
   type->aggregate.fields.v = push_array_nz(resolve_arena, Type_Field, fields.count);

@@ -129,6 +129,7 @@ typedef double f64;
 #define TB(n) ((u64)(n) << 40)
 
 #define align_up_pow2(n, p) (((u64)(n) + ((u64)(p) - 1)) & (~((u64)(p) - 1)))
+#define is_pow2(n) ((n) > 0 && (((n) & ((n) - 1)) == 0))
 
 ////////////////////////////
 // LINKED LIST MACROS
