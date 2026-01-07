@@ -510,7 +510,7 @@ resolved_const(s64 const_value)
 }
 
 internal Entity *resolve_name(String8 name);
-internal s64 resolve_int_const_expr(Expr *expr);
+internal s64 resolve_const_expr(Expr *expr);
 internal Resolved_Expr resolve_expr(Expr *expr);
 internal Resolved_Expr resolve_expected_expr(Expr *expr, Type *expected_type);
 
@@ -557,7 +557,7 @@ resolve_typespec(Type_Spec *typespec)
     return type_proc(params, ret);
   }
   case TYPE_SPEC_ARRAY:
-    return type_array(resolve_typespec(typespec->array.elem), resolve_int_const_expr(typespec->array.count));
+    return type_array(resolve_typespec(typespec->array.elem), resolve_const_expr(typespec->array.count));
   // case TYPE_SPEC_SLICE:
     // break;
   case TYPE_SPEC_PTR:
@@ -802,6 +802,17 @@ resolve_expr_field(Expr *expr)
 }
 
 internal Resolved_Expr
+ptr_decay(Resolved_Expr expr)
+{
+  // TODO: dont do this
+  if (expr.type->kind == TYPE_ARRAY)
+  {
+    return resolved_rvalue(type_ptr(expr.type->array.base));
+  }
+  return expr;
+}
+
+internal Resolved_Expr
 resolve_expr_name(Expr *expr)
 {
   assert(expr->kind == EXPR_IDENT);
@@ -856,21 +867,27 @@ resolve_expr_unary(Expr *expr)
   switch (expr->unary.op.kind)
   {
   case TOKEN_DEREF:
+  {
+    operand = ptr_decay(operand);
     if (type->kind != TYPE_PTR)
     {
       fatal("Cannot dereference non-pointer type");
     }
     return resolved_lvalue(type->ptr.base);
+  }
   case '&':
+  {
     if (!operand.is_lvalue)
     {
       fatal("Cannot take address of non-lvalue");
     }
     return resolved_rvalue(type_ptr(type));
+  }
   case '+':
   case '-':
   case '!':
   case '~':
+  {
     if (type->kind != TYPE_INT)
     {
       fatal("Can use unary %.*s with ints only", str8_varg(str_from_token_kind(scratch.arena, expr->unary.op.kind)));
@@ -880,7 +897,7 @@ resolve_expr_unary(Expr *expr)
       return resolved_const(eval_int_unary(expr->unary.op.kind, operand.const_value));
     }
     return resolved_rvalue(type);
-    break;
+  }
   default:
     assert(0);
     return nil_resolved_expr;
@@ -1088,13 +1105,13 @@ resolve_expr_ternary(Expr *expr, Type *expected_type)
 {
   // TODO: have actual bool types
   assert(expr->kind == EXPR_TERNARY);
-  Resolved_Expr cond = resolve_expr(expr->ternary.cond);
+  Resolved_Expr cond = ptr_decay(resolve_expr(expr->ternary.cond));
   if (cond.type->kind != TYPE_INT && cond.type->kind != TYPE_PTR)
   {
     fatal("Ternary condition expression must have type int or ptr");
   }
-  Resolved_Expr then_expr = resolve_expr(expr->ternary.then);
-  Resolved_Expr else_expr = resolve_expr(expr->ternary.else_);
+  Resolved_Expr then_expr = ptr_decay(resolve_expr(expr->ternary.then));
+  Resolved_Expr else_expr = ptr_decay(resolve_expr(expr->ternary.else_));
   if (then_expr.type != else_expr.type)
   {
     fatal("Ternary then/else expression must have matching types");
@@ -1111,14 +1128,13 @@ resolve_expr_index(Expr *expr)
 {
   assert(expr->kind == EXPR_INDEX);
 
-  Resolved_Expr operand = resolve_expr(expr->index.expr);
-  Resolved_Expr index   = resolve_expr(expr->index.index);
-
+  Resolved_Expr operand = ptr_decay(resolve_expr(expr->index.expr));
   if (operand.type->kind != TYPE_PTR && operand.type->kind != TYPE_ARRAY)
   {
     // IMPORTANT TODO: make it so u can only index arrays and add multipointer like in odin [^] == [*]
     fatal("Can only index arrays or pointers");
   }
+  Resolved_Expr index   = resolve_expr(expr->index.index);
   if (index.type->kind != TYPE_INT)
   {
     fatal("Index expression must have type int");
@@ -1137,7 +1153,7 @@ resolve_expr_cast(Expr *expr)
   assert(expr->kind == EXPR_CAST);
 
   Type *type = resolve_typespec(expr->cast.type);
-  Resolved_Expr result = resolve_expr(expr->cast.expr);
+  Resolved_Expr result = ptr_decay(resolve_expr(expr->cast.expr));
 
   // ptr -> ptr, ptr -> int, int -> ptr
   if (type->kind == TYPE_PTR)
@@ -1226,7 +1242,7 @@ resolve_expr(Expr *expr)
 }
 
 internal s64
-resolve_int_const_expr(Expr *expr)
+resolve_const_expr(Expr *expr)
 {
   Resolved_Expr result = resolve_expr(expr);
   if (!result.is_const)
@@ -1248,8 +1264,17 @@ resolve_test()
   entity_install_type(str8_lit("int"),  type_int);
 
   String8 source = S(
-    "var pi = 3.14;\n"
-    "var name = \"stuff\";\n"
+    "var a: [3]int = {1,2,3};\n"
+    "var b: [4]int;\n"
+    "var p = &a[1];\n"
+    "var i = p[1];\n"
+    "var j = p.*;\n"
+    "const N = size_of(1 ? a : b);\n"
+    "const M = size_of(&a[0]);\n"
+    // "const L = size_of();\n"
+
+    // "var pi = 3.14;\n"
+    // "var name = \"stuff\";\n"
 
     // "struct Vector { x, y: int, }\n"
     // "var v: Vector = {1,2};\n"
