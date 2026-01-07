@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 internal Type_Spec *
 type_spec_alloc(Parser *p, Type_Spec_Kind kind)
@@ -164,6 +165,14 @@ expr_bool_lit(Parser *p, bool b)
 }
 
 internal Expr *
+expr_char_lit(Parser *p, char c)
+{
+  Expr *expr = expr_alloc(p, EXPR_CHAR_LITERAL);
+  expr->literal.character = c;
+  return expr;
+}
+
+internal Expr *
 expr_group(Parser *p, Expr *e)
 {
   Expr *expr = expr_alloc(p, EXPR_GROUP);
@@ -208,7 +217,7 @@ expr_field(Parser *p, Expr *e, String8 field)
 }
 
 internal Expr *
-expr_compound(Parser *p, Type_Spec *type, Compound_Arg_Array args)
+expr_compound(Parser *p, Type_Spec *type, Compound_Field_Array args)
 {
   Expr *expr = expr_alloc(p, EXPR_COMPOUND);
   expr->compound.type = type;
@@ -565,6 +574,18 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
   case EXPR_BOOL_LITERAL:
     str8_list_pushf(arena, list, e->literal.boolean ? "true" : "false");
     break;
+  case EXPR_CHAR_LITERAL:
+  {
+    if (e->literal.character < 128 && isprint(e->literal.character))
+    {
+      str8_list_pushf(arena, list, "%c", e->literal.character);
+    }
+    else
+    {
+      str8_list_pushf(arena, list, "<ASCII %d>", e->literal.character);
+    }
+    break;
+  }
   case EXPR_GROUP:
     str8_list_pushf(arena, list, "(group ");
     print_expr(arena, list, indent, e->group.expr);
@@ -606,13 +627,31 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
     print_type(arena, list, indent, e->compound.type);
     for each_index(i, e->compound.args.count)
     {
-      Compound_Arg *arg = e->compound.args.v[i];
+      Compound_Field *arg = e->compound.args.v[i];
       str8_list_pushf(arena, list, " ");
-      if (arg->optional_name.count > 0)
+      switch (arg->kind)
       {
-        str8_list_pushf(arena, list, "%.*s=", str8_varg(arg->optional_name));
+      case COMPOUND_FIELD_NONE:
+        break;
+      case COMPOUND_FIELD_NAME:
+      {
+        if (arg->name.count > 0)
+        {
+          str8_list_pushf(arena, list, "%.*s=", str8_varg(arg->name));
+        }
+        break;
       }
-      print_expr(arena, list, indent, arg->expr);
+      case COMPOUND_FIELD_INDEX:
+      {
+        print_expr(arena, list, indent, arg->index);
+        str8_list_pushf(arena, list, "=");
+        break;
+      }
+      default:
+        assert(0);
+        break;
+      }
+      print_expr(arena, list, indent, arg->init);
     }
     str8_list_pushf(arena, list, ")");
     break;

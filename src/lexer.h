@@ -33,6 +33,7 @@
   X(STRING_LITERAL)   \
   X(INTEGER_LITERAL)  \
   X(FLOAT_LITERAL)    \
+  X(CHAR_LITERAL)     \
   X(KEYWORD_BEGIN)    \
   X(NIL)              \
   X(S8)               \
@@ -59,6 +60,7 @@
   X(WHILE)            \
   X(SWITCH)           \
   X(CASE)             \
+  X(DEFER)            \
   X(BREAK)            \
   X(CONTINUE)         \
   X(RETURN)           \
@@ -68,9 +70,9 @@
   X(PROC)             \
   X(VAR)              \
   X(CONST)            \
+  X(TYPEDEF)          \
   X(SIZE_OF)          \
   X(CAST)             \
-  X(TYPEDEF)          \
   X(TRANSMUTE)        \
   X(KEYWORD_END)      \
 
@@ -94,6 +96,7 @@ union Literal_Value
   u64     integer;
   f64     floating;
   bool    boolean;
+  char    character;
 };
 
 typedef struct Token Token;

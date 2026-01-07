@@ -45,9 +45,9 @@ parser_init(Lexer *l)
 }
 
 internal void
-push_compound_arg(Compound_Arg_List *list, Compound_Arg *arg)
+push_compound_field(Compound_Field_List *list, Compound_Field *field)
 {
-  sll_queue_push(list->first, list->last, arg);
+  sll_queue_push(list->first, list->last, field);
   list->count += 1;
 }
 
@@ -102,7 +102,7 @@ advance(Parser *p)
 }
 
 internal bool
-parser_check(Parser *p, Token_Kind kind)
+check(Parser *p, Token_Kind kind)
 {
   // lexer_can_peek(p->lexer) && 
   return p->curr.kind == kind;
@@ -132,7 +132,7 @@ expect(Parser *p, Token_Kind kind)
 internal bool
 match(Parser *p, Token_Kind kind)
 {
-  if (parser_check(p, kind))
+  if (check(p, kind))
   {
     advance(p);
     return true;
@@ -155,12 +155,6 @@ internal b32
 peek(Parser *p, Token_Kind kind)
 {
   return p->next.kind == kind;
-}
-
-internal b32
-is_named_arg(Parser *p)
-{
-  return parser_check(p, TOKEN_IDENT) && peek(p, '=');
 }
 
 internal bool
@@ -195,256 +189,108 @@ is_type_start(Parser *p)
   return false;
 }
 
-// internal b32
-// ok i re(Parser *p)
-// {
-//   Arena_Temp scratch = arena_scratch_get(0, 0);
-
-//   Parser temp_parser = *p;
-//   Lexer temp_lexer = *p->lexer;
-
-//   temp_parser.arena = scratch.arena;
-//   temp_parser.lexer = &temp_lexer;
-
-//   parse_type(&temp_parser);
-//   b32 result = temp_parser.curr.kind == '{';
-
-//   arena_scratch_release(scratch);
-//   return result;
-// }
-
 internal Type_Spec *parse_type_base(Parser *p);
+internal Expr *parse_compound_or_expr(Parser *p);
+
+internal Compound_Field *
+parse_compound_field(Parser *p)
+{
+  Compound_Field *field = push_struct(p->arena, Compound_Field);
+
+  // [index] = value
+  if (match(p, '['))
+  {
+    field->kind = COMPOUND_FIELD_INDEX;
+    field->index = parse_expr(p);
+    expect(p, ']');
+    expect(p, '=');
+    field->init = parse_expr(p); // parse_compound_or_expr
+  }
+  // name = value
+  else if (check(p, TOKEN_IDENT) && peek(p, '='))
+  {
+    field->kind = COMPOUND_FIELD_NAME;
+    field->name = parse_ident(p);
+    advance(p); // Consume '='
+    field->init = parse_expr(p); // parse_compound_or_expr
+  }
+  // value
+  else
+  {
+    field->kind = COMPOUND_FIELD_NONE;
+    field->init = parse_expr(p); // parse_compound_or_expr
+  }
+
+  return field;
+}
+
+internal Expr *
+parse_compound_literal(Parser *p, Type_Spec *explicit_type)
+{
+  expect(p, '{');
+
+  Compound_Field_List list = {0};
+
+  if (!match(p, '}'))
+  {
+    do
+    {
+      Compound_Field *field = parse_compound_field(p);
+      push_compound_field(&list, field);
+    } while (match(p, ','));
+
+    expect(p, '}');
+  }
+
+  Compound_Field_Array fields = {0};
+  if (list.count > 0)
+  {
+    fields.count = list.count;
+    fields.v = push_array_nz(p->arena, Compound_Field *, fields.count);
+
+    u32 i = 0;
+    for each_node(it, Compound_Field, list.first)
+    {
+      fields.v[i++] = it;
+    }
+  }
+
+  return expr_compound(p, explicit_type, fields);
+}
 
 internal b32
-looks_like_compound_literal(Parser *p)
+looks_like_dotted_compound(Parser *p)
 {
   Arena_Temp scratch = arena_scratch_get(0, 0);
 
-  // Clone temporary parser state
+  // Temporary clone of parser and lexer
   Parser tmp = *p;
   Lexer temp_lexer = *p->lexer;
   tmp.arena = scratch.arena;
   tmp.lexer = &temp_lexer;
 
-  // A compound literal MUST start with a type.
-  // We try to parse a type specifier speculatively.
   Type_Spec *type = parse_type(&tmp);
-  
-  // If after the type we see a '{', it's definitely a compound literal.
-  b32 result = (type != NULL && tmp.curr.kind == '{');
+  b32 result = (type != NULL && check(&tmp, '.') && peek(&tmp, '{'));
 
   arena_scratch_release(scratch);
   return result;
-}
-// looks_like_compound_literal(Parser *p)
-// {
-//   Arena_Temp scratch = arena_scratch_get(0, 0);
-
-//   Parser tmp = *p;
-//   Lexer  temp_lexer = *p->lexer;
-
-//   tmp.arena = scratch.arena;
-//   tmp.lexer = &temp_lexer;
-
-//   // skip leading array prefix
-//   while (tmp.curr.kind == '[')
-//   {
-//     advance(&tmp);
-//     while (tmp.curr.kind != ']' && tmp.curr.kind != TOKEN_EOF)
-//       advance(&tmp);
-//     if (tmp.curr.kind != ']') return false;
-//     advance(&tmp);
-//   }
-
-//   // parse only type BASE + SUFFIXES (no exprs)
-//   if (!parse_type_base(&tmp)) return false;
-
-//   while (tmp.curr.kind == '[' || tmp.curr.kind == '*')
-//   {
-//     if (tmp.curr.kind == '[')
-//     {
-//       advance(&tmp);
-//       if (tmp.curr.kind != ']')
-//       {
-//         // skip tokens, NOT parse expressions
-//         while (tmp.curr.kind != ']' && tmp.curr.kind != TOKEN_EOF)
-//           advance(&tmp);
-//       }
-//       if (tmp.curr.kind != ']') return false;
-//       advance(&tmp);
-//     }
-//     else
-//     {
-//       advance(&tmp); // *
-//     }
-//   }
-
-//   b32 result = tmp.curr.kind == '{';
-
-//   arena_scratch_release(scratch);
-//   return result;
-// }
-
-internal Expr *
-parse_compound_element(Parser *p)
-{
-  // if (is_type_start(p) && is_type_followed_by_lbrace(p))
-  if (is_type_start(p) && looks_like_compound_literal(p))
-  {
-    Type_Spec *type = parse_type(p);
-    expect(p, '{');
-
-    Compound_Arg_List args = {0};
-    u32 count = 0;
-
-    if (!match(p, '}'))
-    {
-      do
-      {
-        Expr *elem = parse_compound_element(p);
-        Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
-        arg->expr = elem;
-        push_compound_arg(&args, arg);
-        count += 1;
-      } while (match(p, ','));
-
-      expect(p, '}');
-    }
-
-    Compound_Arg_Array arg_array = {0};
-    if (count > 0)
-    {
-      arg_array.count = count;
-      arg_array.v = push_array_nz(p->arena, Compound_Arg *, arg_array.count);
-
-      u32 i = 0;
-      for each_node(it, Compound_Arg, args.first)
-      {
-        arg_array.v[i++] = it;
-      }
-    }
-
-    return expr_compound(p, type, arg_array);
-  }
-  return parse_expr(p);
 }
 
 internal Expr *
 parse_expr_primary(Parser *p)
 {
-  // implicit compound literals
-  if ((p->expr_parse_flags & EXPR_ALLOW_COMPOUND) && match(p, '{'))
+  // implicit compound literal
+  if (check(p, '.') && peek(p, '{'))
   {
-    Compound_Arg_List args = {0};
-    u32 count = 0;
-
-    if (!match(p, '}'))
-    {
-      do
-      {
-        Expr *value = parse_expr(p);
-        Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
-        arg->expr = value;
-        push_compound_arg(&args, arg);
-        count += 1;
-      } while (match(p, ','));
-
-      expect(p, '}');
-    }
-
-    Compound_Arg_Array arg_array = {0};
-    if (count > 0)
-    {
-      arg_array.count = count;
-      arg_array.v = push_array_nz(p->arena, Compound_Arg *, arg_array.count);
-
-      u32 i = 0;
-      for each_node(it, Compound_Arg, args.first)
-      {
-        arg_array.v[i++] = it;
-      }
-    }
-
-    // TODO
-    // local_persist Type_Spec null_type = { .kind = TYPE_SPEC_NULL };
-    return expr_compound(p, NULL, arg_array);
+    advance(p); // eat dot
+    return parse_compound_literal(p, NULL);
   }
-
-  // if (parser_check(p, TOKEN_IDENT) && peek(p, '{'))
-  // if ((p->expr_parse_flags & EXPR_ALLOW_COMPOUND) && is_type_start(p) && is_type_followed_by_lbrace(p))
-  if ((p->expr_parse_flags & EXPR_ALLOW_COMPOUND) && is_type_start(p) && looks_like_compound_literal(p))
+  // explicit compound literal
+  if (is_type_start(p) && looks_like_dotted_compound(p))
   {
     Type_Spec *type = parse_type(p);
-    expect(p, '{');
-    Compound_Arg_List args = {0};
-    u32 count = 0;
-
-    if (!match(p, '}'))
-    {
-      b32 is_named, decided = false;
-
-      do
-      {
-        if (!decided)
-        {
-          is_named = is_named_arg(p);
-          decided  = true;
-        }
-
-        if (is_named)
-        {
-          if (!parser_check(p, TOKEN_IDENT) || !peek(p, '='))
-          {
-            // TODO:
-            // Person{name = "Bob", 5}
-            //                        ^
-            // arrow should be under 5???
-            report_error(p, "Expected field name");
-          }
-          // named field
-          String8 name = parse_ident(p);
-          expect(p, '=');
-          Expr *value = parse_compound_element(p);
-
-          Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
-          arg->expr = value;
-          arg->optional_name = name;
-          push_compound_arg(&args, arg);
-          count += 1;
-        }
-        else
-        {
-          if (is_named_arg(p))
-          {
-            report_error(p, "Named fields not allowed after positional fields");
-          }
-          // positional field
-          Expr *value = parse_compound_element(p);
-
-          Compound_Arg *arg = push_struct(p->arena, Compound_Arg);
-          arg->expr = value;
-          push_compound_arg(&args, arg);
-          count += 1;
-        }
-      } while (match(p, ','));
-
-      expect(p, '}');
-    }
-
-    Compound_Arg_Array arg_array = {0};
-    if (count > 0)
-    {
-      arg_array.count = count;
-      arg_array.v = push_array_nz(p->arena, Compound_Arg *, arg_array.count);
-
-      u32 i = 0;
-      for each_node(it, Compound_Arg, args.first)
-      {
-        arg_array.v[i++] = it;
-      }
-    }
-
-    return expr_compound(p, type, arg_array);
+    expect(p, '.');
+    return parse_compound_literal(p, type);
   }
 
   if (match(p, TOKEN_TRUE))
@@ -470,6 +316,10 @@ parse_expr_primary(Parser *p)
   if (match(p, TOKEN_FLOAT_LITERAL))
   {
     return expr_float_lit(p, p->prev.value.floating);
+  }
+  if (match(p, TOKEN_CHAR_LITERAL))
+  {
+    return expr_char_lit(p, p->prev.value.character);
   }
   if (match(p, TOKEN_IDENT))
   {
@@ -549,8 +399,16 @@ parse_expr_postfix(Parser *p)
     }
 
     // FIELD: person.name
-    if (match(p, '.'))
+    if (check(p, '.'))
     {
+      if (peek(p, '{'))
+      {
+        assert(0);
+        // advance(p); // .
+        // expr = parse_compound_literal(p, )
+      }
+
+      advance(p); // eat '.'
       String8 name = parse_ident(p);
       expr = expr_field(p, expr, name);
       continue;
@@ -815,14 +673,6 @@ parse_expr_assignment(Parser *p)
 }
 
 internal Expr *
-parse_expr_with_flags(Parser *p, Expr_Parse_Flags flags)
-{
-  p->expr_parse_flags = flags;
-  // return parse_expr(p);
-  return parse_expr_assignment(p);
-}
-
-internal Expr *
 parse_expr(Parser *p)
 {
   //
@@ -831,8 +681,7 @@ parse_expr(Parser *p)
   // In other words, detect a binary operator appearing at the beginning of an expression.
   // Report that as an error, but also parse and discard a right-hand operand with the appropriate precedence.
   //
-  // return parse_expr_assignment(p);
-  return parse_expr_with_flags(p, EXPR_ALLOW_COMPOUND);
+  return parse_expr_assignment(p);
 }
 
 /////////////////////////////////////////////////////
@@ -844,7 +693,7 @@ internal Stmt *
 parse_stmt_expr(Parser *p)
 {
   // Don't allow implicit compound literal
-  Expr *expr = parse_expr_with_flags(p, 0);
+  Expr *expr = parse_expr(p);
   expect(p, ';');
   return stmt_expr(p, expr);
 }
@@ -854,7 +703,7 @@ parse_stmt_block(Parser *p)
 {
   expect(p, '{');
   Stmt_List stmts = {0};
-  while (!parser_check(p, '}'))
+  while (!check(p, '}'))
   {
     Stmt *stmt = parse_stmt(p);
     sll_queue_push(stmts.first, stmts.last, stmt);
@@ -867,7 +716,7 @@ parse_stmt_block(Parser *p)
 internal Stmt *
 parse_stmt_if(Parser *p)
 {
-  Expr *cond       = parse_expr_with_flags(p, 0);
+  Expr *cond       = parse_expr(p);
   Stmt *then_block = parse_stmt_block(p);
   Stmt *else_stmt  = NULL;
 
@@ -891,7 +740,7 @@ parse_stmt_if(Parser *p)
 internal Stmt *
 parse_stmt_while(Parser *p)
 {
-  Expr *cond = parse_expr_with_flags(p, 0);
+  Expr *cond = parse_expr(p);
   Stmt *body = parse_stmt_block(p);
   return stmt_while(p, cond, body);
 }
@@ -901,7 +750,7 @@ parse_stmt_do_while(Parser *p)
 {
   Stmt *body = parse_stmt_block(p);
   expect(p, TOKEN_WHILE);
-  Expr *cond = parse_expr_with_flags(p, 0);
+  Expr *cond = parse_expr(p);
   expect(p, ';');
   return stmt_do_while(p, cond, body);
 }
@@ -1003,23 +852,32 @@ parse_stmt_decl(Parser *p)
 internal Stmt *
 parse_stmt(Parser *p)
 {
-  if (parser_check(p, '{')) return parse_stmt_block(p);
-  // TODO switch-case
-  if (match(p, TOKEN_IF))    return parse_stmt_if(p);
-  if (match(p, TOKEN_DO))    return parse_stmt_do_while(p);
-  if (match(p, TOKEN_WHILE)) return parse_stmt_while(p);
-  // if (match(p, DEFER)) return parse_stmt_defer(p);
+  if (check(p, '{'))            return parse_stmt_block(p);
+  if (match(p, TOKEN_IF))       return parse_stmt_if(p);
+  if (match(p, TOKEN_DO))       return parse_stmt_do_while(p);
+  if (match(p, TOKEN_WHILE))    return parse_stmt_while(p);
+  if (match(p, TOKEN_DEFER))    assert(!"TODO: defer");
   if (match(p, TOKEN_RETURN))   return parse_stmt_return(p);
   if (match(p, TOKEN_CONTINUE)) return parse_stmt_continue(p);
   if (match(p, TOKEN_BREAK))    return parse_stmt_break(p);
   if (match(p, TOKEN_VAR))      return parse_stmt_decl(p);
   if (match(p, TOKEN_CONST))    return parse_stmt_decl(p);
-  // TODO: parse statement decl: struct, union etc (locally scoped aggregates)
+  if (match(p, TOKEN_FOR))    assert(!"TODO: for");
+  if (match(p, TOKEN_SWITCH)) assert(!"TODO: switch");
 
   /*
-  STMT_FOR,
-  STMT_SWITCH,
-  STMT_DECL,
+  TODO: STMT_DECL (locally scoped decls like struct or union)
+
+  proc some_proc()
+  {
+    struct Local_Data
+    {
+      numbers: []int,
+    }
+    var data = Local_Data.{};
+
+    do_stuff(data.numbers);
+  }
   */
 
   return parse_stmt_expr(p);
@@ -1052,7 +910,7 @@ parse_decl_enum(Parser *p)
   Enum_Member_List members = {0};
   u64 count = 0;
 
-  while (!parser_check(p, '}'))
+  while (!check(p, '}'))
   {
     Enum_Member_Node *node = push_struct(p->arena, Enum_Member_Node);
 
@@ -1272,7 +1130,7 @@ parse_type_proc(Parser *p)
 internal Type_Spec *
 parse_type_base(Parser *p)
 {
-  if (parser_check(p, TOKEN_IDENT) || (p->curr.kind >= TOKEN_S8 && p->curr.kind <= TOKEN_STRING))
+  if (check(p, TOKEN_IDENT) || (p->curr.kind >= TOKEN_S8 && p->curr.kind <= TOKEN_STRING))
   {
     Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_NAME);
     t->name = parse_type_name(p);
@@ -1328,12 +1186,12 @@ parse_type(Parser *p)
   return parse_type_base(p);
 
   // Type_Spec *type = parse_type_base(p);
-  // while (parser_check(p, '[') || parser_check(p, '*'))
+  // while (check(p, '[') || check(p, '*'))
   // {
   //   if (match(p, '['))
   //   {
   //     Expr *expr = NULL;
-  //     if (!parser_check(p, ']'))
+  //     if (!check(p, ']'))
   //     {
   //       expr = parse_expr(p);
   //     }
@@ -1347,7 +1205,7 @@ parse_type(Parser *p)
   //   }
   //   else
   //   {
-  //     assert(parser_check(p, '*'));
+  //     assert(check(p, '*'));
   //     advance(p);
   //     Type_Spec *elem = type;
   //     type = type_spec_alloc(p, TYPE_SPEC_PTR);
@@ -1411,7 +1269,7 @@ parse_decl_aggregate(Parser *p, Decl_Kind kind)
 
   Aggr_Field_List fields = {0};
   u64 count = 0;
-  while (!parser_check(p, '}'))
+  while (!check(p, '}'))
   {
     Aggr_Field_Node *node = push_struct(p->arena, Aggr_Field_Node);
     while (true)
@@ -1543,9 +1401,9 @@ parser_test()
       // TODO: This takes the array and gives me a slice of all elements
       // or i can also do array[<lo>:<hi>]
       // "return array[:];\n"
-      "return Person{\"Joe\", 53};\n"
+      "return Person.{\"Joe\", 53};\n"
 
-      "return [10]Person{};\n"
+      "return [10]Person.{};\n"
 
       "var update_proc: proc(Entity);\n"
 
@@ -1602,7 +1460,7 @@ parser_test()
       "  age:   int,\n"
       "}\n"
       "\n"
-      "var x = Point{1,2};\n"
+      "var x = Point.{1,2};\n"
       "\n"
       "proc make_person(name: string, age: int) -> Person\n"
       "{\n"
@@ -1622,7 +1480,7 @@ parser_test()
       "enum Color { RED = 3, GREEN, BLUE = 0 }\n"
       // "const pi = 3.14\n"
       "struct Vector { x, y: f32, }\n"
-      "var v = Vector{1.0, -1.0};\n"
+      "var v = Vector.{1.0, -1.0};\n"
       // "var v: Vector = {1.0. -1.0};\n"
       "union Int_Or_Float { i: int, f: f32, }\n"
       "typedef Vectors = [1+2]Vector;\n"

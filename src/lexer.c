@@ -152,21 +152,21 @@ lexer_make_token(Lexer *l, Token_Kind kind)
   };
 }
 
+global read_only char escape_to_char[256] =
+{
+  ['n'] = '\n',
+  ['r'] = '\r',
+  ['t'] = '\t',
+  ['v'] = '\v',
+  ['b'] = '\b',
+  ['a'] = '\a',
+  ['0'] = '\0',
+};
+
 internal Token
 lexer_parse_string(Lexer *l)
 {
   assert(lexer_peek(l) == '"');
-
-  local_persist char escape_to_char[256] =
-  {
-    ['n'] = '\n',
-    ['r'] = '\r',
-    ['t'] = '\t',
-    ['v'] = '\v',
-    ['b'] = '\b',
-    ['a'] = '\a',
-    ['0'] = '\0',
-  };
 
   Arena *string_arena = arena_alloc(GB(1), MB(8), 0);
   char *string_buf = push_array_align(string_arena, char, 0, 1);
@@ -424,6 +424,7 @@ lexer_parse_ident_or_keyword(Lexer *l)
     { .kind = TOKEN_WHILE,     .value = S("while") },
     { .kind = TOKEN_SWITCH,    .value = S("switch") },
     { .kind = TOKEN_CASE,      .value = S("case") },
+    { .kind = TOKEN_DEFER,     .value = S("defer") },
     { .kind = TOKEN_BREAK,     .value = S("break") },
     { .kind = TOKEN_CONTINUE,  .value = S("continue") },
     { .kind = TOKEN_RETURN,    .value = S("return") },
@@ -433,13 +434,14 @@ lexer_parse_ident_or_keyword(Lexer *l)
     { .kind = TOKEN_ENUM,      .value = S("enum") },
     { .kind = TOKEN_STRING,    .value = S("string") },
 
+    // declarations
     { .kind = TOKEN_PROC,      .value = S("proc") },
     { .kind = TOKEN_VAR,       .value = S("var") },
     { .kind = TOKEN_CONST,     .value = S("const") },
+    { .kind = TOKEN_TYPEDEF,   .value = S("typedef") },
 
     { .kind = TOKEN_SIZE_OF,   .value = S("size_of") },
     { .kind = TOKEN_CAST,      .value = S("cast") },
-    { .kind = TOKEN_TYPEDEF,   .value = S("typedef") },
     { .kind = TOKEN_TRANSMUTE, .value = S("transmute") },
   };
   static_assert(array_count(keywords) == (TOKEN_KEYWORD_END - TOKEN_KEYWORD_BEGIN - 1));
@@ -524,8 +526,52 @@ lexer_next(Lexer *l)
     break;
 
   case '\'':
-    assert(!"TODO: Character literal");
+  {
+    char val = 0;
+    lexer_eat(l);
+    if (!lexer_can_peek(l))
+    {
+      lexer_syntax_error(l, "Unexpected end of file in character literal");
+    }
+    if (lexer_peek(l) == '\'')
+    {
+      lexer_syntax_error(l, "Character literal must not be empty");
+    }
+    else
+    {
+      if (lexer_peek(l) == '\n')
+      {
+        lexer_syntax_error(l, "Character literal must not contain newline");
+      }
+      else if (lexer_peek(l) == '\\')
+      {
+        lexer_eat(l);
+        val = escape_to_char[lexer_peek(l)];
+        if (val == 0 && lexer_peek(l) != '0')
+        {
+          lexer_syntax_error(l, "Invalid character literal escape '\\%c'", lexer_peek(l));
+        }
+        lexer_eat(l);
+      }
+      else
+      {
+        val = lexer_peek(l);
+        lexer_eat(l);
+      }
+
+      if (lexer_peek(l) != '\'')
+      {
+        lexer_syntax_error(l, "Expected closing character single quote", lexer_peek(l));
+      }
+      else
+      {
+        lexer_eat(l);
+      }
+    }
+    t = lexer_make_token(l, TOKEN_CHAR_LITERAL);
+    t.value.character = val;
     break;
+  }
 
   case '*':
     lexer_eat(l);

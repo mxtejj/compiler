@@ -985,6 +985,22 @@ resolve_expr_binary(Expr *expr)
   return resolved_rvalue(left.type);
 }
 
+internal usize
+aggregate_field_index(Type *type, String8 name)
+{
+  assert(type->kind == TYPE_STRUCT || type->kind == TYPE_UNION);
+  for each_index(i, type->aggregate.fields.count)
+  {
+    // TODO: string interning
+    if (str8_equal(type->aggregate.fields.v[i].name, name))
+    {
+      return i;
+    }
+  }
+  fatal("Field '%.*s' in compound literal not found in struct/union", str8_varg(name));
+  return SIZE_MAX;
+}
+
 internal Resolved_Expr
 resolve_expr_compound(Expr *expr, Type *expected_type)
 {
@@ -999,10 +1015,10 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
   if (expr->compound.type)
   {
     type = resolve_typespec(expr->compound.type);
-    if (expected_type && expected_type != type)
-    {
-      fatal("Explicit compound literal type does not match expected type");
-    }
+    // if (expected_type && expected_type != type)
+    // {
+    //   fatal("Explicit compound literal type does not match expected type");
+    // }
   }
   else
   {
@@ -1020,46 +1036,77 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
 
   if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION)
   {
-
     assert(type->aggregate.fields.count > 0);
-    if (expr->compound.args.count > type->aggregate.fields.count)
-    {
-      fatal("Compound literal has too many fields");
-    }
+    // if (expr->compound.args.count > type->aggregate.fields.count)
+    // {
+    //   fatal("Compound literal has too many fields");
+    // }
 
+    u32 index = 0;
     for each_index(i, expr->compound.args.count)
     {
-      Compound_Arg *arg = expr->compound.args.v[i];
-      Resolved_Expr field = resolve_expr(arg->expr);
-      if (field.type != type->aggregate.fields.v[i].type)
+      Compound_Field *field = expr->compound.args.v[i];
+      if (field->kind == COMPOUND_FIELD_INDEX)
+      {
+        fatal("Index field initializer not allowed for struct/union compound literal");
+      }
+      else if (field->kind == COMPOUND_FIELD_NAME)
+      {
+        index = aggregate_field_index(type, field->name);
+      }
+      if (index >= type->aggregate.fields.count)
+      {
+        fatal("Field initializer in struct/union compound literal out of range");
+      }
+      Resolved_Expr init = resolve_expected_expr(field->init, type->aggregate.fields.v[index].type);
+      if (init.type != type->aggregate.fields.v[index].type)
       {
         fatal("Compound literal field type mismatch");
       }
-      if (arg->optional_name.count > 0 && !str8_equal(arg->optional_name, type->aggregate.fields.v[i].name))
-      {
-        // TODO: Make it so u can specify the named fields out of order
-        fatal("Compound literal field name mismatch");
-      }
+      // if (arg->optional_name.count > 0 && !str8_equal(arg->optional_name, type->aggregate.fields.v[i].name))
+      // {
+      //   // TODO: Make it so u can specify the named fields out of order
+      //   fatal("Compound literal field name mismatch");
+      // }
 
-      i += 1;
+      index += 1;
     }
   }
   else
   {
     // assert(0);
     assert(type->kind == TYPE_ARRAY);
-    if (expr->compound.args.count > type->array.length)
-    {
-      fatal("Compound literal has too many elements");
-    }
+    // if (expr->compound.args.count > type->array.length)
+    // {
+    //   fatal("Compound literal has too many elements");
+    // }
+    u32 index = 0;
     for each_index(i, expr->compound.args.count)
     {
-      Compound_Arg *arg = expr->compound.args.v[i];
-      Resolved_Expr element = resolve_expr(arg->expr);
-      if (element.type != type->array.base)
+      Compound_Field *field = expr->compound.args.v[i];
+      if (field->kind == COMPOUND_FIELD_NAME)
+      {
+        fatal("Named field initializer not allowed in array compound literal");
+      }
+      else if (field->kind == COMPOUND_FIELD_INDEX)
+      {
+        s64 result = resolve_const_expr(field->index);
+        if (result < 0)
+        {
+          fatal("Field initializer index cannoty be negative");
+        }
+        index = result;
+      }
+      if (index >= type->array.length)
+      {
+        fatal("Field initializer in array compound literal out of range");
+      }
+      Resolved_Expr init = resolve_expected_expr(field->init, type->array.base);
+      if (init.type != type->array.base)
       {
         fatal("Compound literal element type mismatch");
       }
+      index += 1;
     }
   }
 
@@ -1191,6 +1238,10 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
   case EXPR_STRING_LITERAL:
     // IMPORTANT TODO: get rid of char * and use sized string!!
     return resolved_rvalue(type_ptr(type_char));
+  case EXPR_CHAR_LITERAL:
+    // return resolved_rvalue(type_char);
+    // TODO(mxtej): for now this will just be converted to int const
+    return resolved_const(expr->literal.character);
   case EXPR_IDENT:
     return resolve_expr_name(expr);
   case EXPR_COMPOUND:
@@ -1264,19 +1315,26 @@ resolve_test()
   entity_install_type(str8_lit("int"),  type_int);
 
   String8 source = S(
-    "var a: [3]int = {1,2,3};\n"
-    "var b: [4]int;\n"
-    "var p = &a[1];\n"
-    "var i = p[1];\n"
-    "var j = p.*;\n"
-    "const N = size_of(1 ? a : b);\n"
-    "const M = size_of(&a[0]);\n"
-    // "const L = size_of();\n"
+    "union Int_Or_Ptr { i: int, p: *int, }\n"
+    "var u1 = Int_Or_Ptr.{i = 42};\n"
+    "var u2 = Int_Or_Ptr.{p = cast(*int)42};\n"
+    "var a: [256]int = .{1, 2, ['a'] = 42, [255] = 123};\n"
+
+    // "var a: [3]int = {1,2,3};\n"
+    // "var b: [4]int;\n"
+    // "var p = &a[1];\n"
+    // "var i = p[1];\n"
+    // "var j = p.*;\n"
+    // "const N = size_of(1 ? a : b);\n"
+    // "const M = size_of(&a[0]);\n"
+
+    // "struct Vector { x, y: int, }\n"
+    // "var v: Vector = 0 ? {1,2} : {3,4};\n"
+    // "var vs: [2][2]Vector = {{{1,2},{3,4}}, {{5,6},{7,8}}};\n"
 
     // "var pi = 3.14;\n"
     // "var name = \"stuff\";\n"
 
-    // "struct Vector { x, y: int, }\n"
     // "var v: Vector = {1,2};\n"
     // "var a = 42;\n"
     // "var p = cast(*void)a;\n"
@@ -1298,7 +1356,6 @@ resolve_test()
     // "var p = &a[1];\n"
     // "var i = p[1];\n"
     // "var w = Vector{3,4};\n"
-    // "union Int_Or_Ptr { i: int, p: *int, }\n"
     // "var i = 42;\n"
     // "var u = Int_Or_Ptr{ i, &i };\n"
 

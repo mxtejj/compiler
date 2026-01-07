@@ -329,21 +329,23 @@ main(int argc, char **argv)
       { .input = S("a.b(c)[i].d"), .output = S("(field (index (call (field a b) c) i) d)") },
 
       // Compound literals
-      { .input = S("Person{}"),                        .output = S("(compound Person)") },
-      { .input = S("Person{\"Bob\"}"),                 .output = S("(compound Person Bob)") },
-      { .input = S("Person{name = \"Bob\"}"),          .output = S("(compound Person name=Bob)") },
-      { .input = S("Person{name = \"Bob\", age = 5}"), .output = S("(compound Person name=Bob age=5)") },
+      { .input = S("Person.{}"),                        .output = S("(compound Person)") },
+      { .input = S("Person.{\"Bob\"}"),                 .output = S("(compound Person Bob)") },
+      { .input = S("Person.{name = \"Bob\"}"),          .output = S("(compound Person name=Bob)") },
+      { .input = S("Person.{name = \"Bob\", age = 5}"), .output = S("(compound Person name=Bob age=5)") },
       // { .input = S("Person{name = \"Bob\", 5}"), .output = S("(compound Person name=Bob age=5)") },
+      { .input = S("[2]int.{69, 420}"),               .output = S("(compound [2]int 69 420)") },
+      { .input = S("[2]*int.{}"),                     .output = S("(compound [2]*int)") },
       #endif
-      { .input = S("[2]int{69, 420}"),             .output = S("(compound [2]int 69 420)") },
-      { .input = S("[2]*int{}"),                   .output = S("(compound [2]*int)") },
-      { .input = S("[2][2]int{ {1, 2}, {3, 4} }"), .output = S("(compound [2][2]int (compound nil 1 2) (compound nil 3 4))") },
+      { .input = S("[8]int.{1,2,3,4,5,6,7,8}"),  .output = S("(compound [8]int 1 2 3 4 5 6 7 8)") }, 
+      { .input = S("[2][2]int.{.{1,2},.{3,4}}"), .output = S("(compound [2][2]int (compound nil 1 2) (compound nil 3 4))") },
 
+      #if 1
       // Slice compound literals
-      { .input = S("[]int{1, 2, 3}"),                .output = S("(compound []int 1 2 3)") },
-      { .input = S("[]string{\"a\", \"b\", \"c\"}"), .output = S("(compound []string a b c)") },
+      { .input = S("[]int.{1, 2, 3}"),                .output = S("(compound []int 1 2 3)") },
+      { .input = S("[]string.{\"a\", \"b\", \"c\"}"), .output = S("(compound []string a b c)") },
 
-      { .input = S("Person{name=\"Bob\", scores=[]int{10,20,30}}"), .output = S("(compound Person name=Bob scores=(compound []int 10 20 30))") },
+      { .input = S("Person.{name=\"Bob\", scores=[]int.{10,20,30}}"), .output = S("(compound Person name=Bob scores=(compound []int 10 20 30))") },
 
       // TODO(mxtej): This test does not output the right result
       // { .input = S(
@@ -358,21 +360,22 @@ main(int argc, char **argv)
 
       // "Foo{a=Bar{b=Baz{values=[]int{1,2,3}}}}"
 
-      { .input = S("[3]int{1 + 2, foo(), bar * (baz + 4)}"), .output = S("(compound [3]int (+ 1 2) (call foo) (* bar (group (+ baz 4))))") },
-      { .input = S("Person{age = a > b ? 18 : 21}"),         .output = S("(compound Person age=(?: (> a b) 18 21))") },
+      { .input = S("[3]int.{1 + 2, foo(), bar * (baz + 4)}"), .output = S("(compound [3]int (+ 1 2) (call foo) (* bar (group (+ baz 4))))") },
+      { .input = S("Person.{age = a > b ? 18 : 21}"),         .output = S("(compound Person age=(?: (> a b) 18 21))") },
 
       // Compound literals in expressions
       // { .input = S("var x = Point{1,2}"), .output = S("") },
-      { .input = S("foo(Point{a + b, c * d})"), .output = S("(call foo (compound Point (+ a b) (* c d)))") },
-      { .input = S("arr[Point{1,2}.x] = 5"),    .output = S("(= (index arr (field (compound Point 1 2) x)) 5)") },
+      { .input = S("foo(Point.{a + b, c * d})"), .output = S("(call foo (compound Point (+ a b) (* c d)))") },
+      { .input = S("arr[Point.{1,2}.x] = 5"),    .output = S("(= (index arr (field (compound Point 1 2) x)) 5)") },
 
       // Compound literals + postfix
-      { .input = S("Person{name = \"Alice\"}.name"), .output = S("(field (compound Person name=Alice) name)") },
-      { .input = S("[2]int{1, 2}[0]"),               .output = S("(index (compound [2]int 1 2) 0)") },
+      { .input = S("Person.{name = \"Alice\"}.name"), .output = S("(field (compound Person name=Alice) name)") },
+      { .input = S("[2]int.{1, 2}[0]"),               .output = S("(index (compound [2]int 1 2) 0)") },
 
       // Dereference pointer
       { .input = S("ptr.* = 5;"),     .output = S("(= (.* ptr) 5)") },
       { .input = S("ptr.*.age = 5;"), .output = S("(= (field (.* ptr) age) 5)") },
+      #endif
 
       // "a.b(c)[i].d++\n"
       // "foo()\n"

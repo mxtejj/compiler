@@ -10,11 +10,6 @@
 // [ ] in some cases where we use a linked-list at first and then copy to an array
 // we could introduce a node wrapper to not pollude the struct with link pointers
 
-ENUM_SIZE(Expr_Parse_Flags, u32)
-{
-  EXPR_ALLOW_COMPOUND = 1 << 0,
-};
-
 ////////////////////////////////
 // Parser
 typedef struct Parser Parser;
@@ -25,7 +20,6 @@ struct Parser
   Token prev;
   Token curr;
   Token next;
-  Expr_Parse_Flags expr_parse_flags;
 };
 
 internal Parser parser_init(Lexer *l);
@@ -401,6 +395,7 @@ enum Expr_Kind
   EXPR_INTEGER_LITERAL,
   EXPR_FLOAT_LITERAL,
   EXPR_BOOL_LITERAL,
+  EXPR_CHAR_LITERAL,
   EXPR_GROUP,
   EXPR_CAST,         // unary
   EXPR_CALL,         // postfix
@@ -411,28 +406,43 @@ enum Expr_Kind
   EXPR_SIZE_OF_TYPE, // unary
 };
 
-STRUCT(Compound_Arg)
+// TODO: rename to compound_field, add compound_field_node for linked list
+ENUM(Compound_Field_Kind)
 {
-  Compound_Arg *next;
-
-  String8 optional_name;
-  Expr *expr;
+  COMPOUND_FIELD_NONE,
+  COMPOUND_FIELD_NAME,
+  COMPOUND_FIELD_INDEX,
 };
 
-STRUCT(Compound_Arg_List)
+STRUCT(Compound_Field)
 {
-  Compound_Arg *first;
-  Compound_Arg *last;
+  Compound_Field *next;
+
+  Compound_Field_Kind kind;
+  Expr *init;
+
+  union
+  {
+    String8 name;
+    Expr *index;
+  };
+};
+
+STRUCT(Compound_Field_List)
+{
+  Compound_Field *first;
+  Compound_Field *last;
   u64 count;
 };
 
-STRUCT(Compound_Arg_Array)
+STRUCT(Compound_Field_Array)
 {
-  Compound_Arg **v;
+  Compound_Field **v;
   u64 count;
 };
+raddbg_type_view(Compound_Field_Array, array(v, count));
 
-internal void push_compound_arg(Compound_Arg_List *list, Compound_Arg *arg);
+internal void push_compound_field(Compound_Field_List *list, Compound_Field *field);
 
 STRUCT(Expr_List)
 {
@@ -519,8 +529,8 @@ struct Expr
     struct
     {
       Type_Spec *type;
-      // Compound_Arg_List args;
-      Compound_Arg_Array args;
+      // Compound_Field_List args;
+      Compound_Field_Array args;
     }
     compound;
 
@@ -555,11 +565,12 @@ internal Expr *expr_string_lit(Parser *p, String8 s);
 internal Expr *expr_integer_lit(Parser *p, u64 n);
 internal Expr *expr_float_lit(Parser *p, f64 f);
 internal Expr *expr_bool_lit(Parser *p, bool b);
+internal Expr *expr_char_lit(Parser *p, char c);
 internal Expr *expr_group(Parser *p, Expr *e);
 internal Expr *expr_cast(Parser *p, Type_Spec *type, Expr *e);
 internal Expr *expr_call(Parser *p, Expr *e, Expr_Array args);
 internal Expr *expr_index(Parser *p, Expr *e, Expr *index);
 internal Expr *expr_field(Parser *p, Expr *e, String8 field);
-internal Expr *expr_compound(Parser *p, Type_Spec *type, Compound_Arg_Array args);
+internal Expr *expr_compound(Parser *p, Type_Spec *type, Compound_Field_Array args);
 internal Expr *expr_size_of_expr(Parser *p, Expr *e);
 internal Expr *expr_size_of_type(Parser *p, Type_Spec *type);
