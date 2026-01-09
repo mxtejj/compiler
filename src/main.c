@@ -25,7 +25,7 @@
 #include "strings.c"
 #include "ast.c"
 #include "parser.c"
-// #include "resolver.c"
+#include "resolver.c"
 #ifdef _WIN32
 # include "os_win32.c"
 #else
@@ -527,7 +527,7 @@ main(int argc, char **argv)
 
   printf("\n");
   parser_test();
-  // resolve_test();
+  resolve_test();
   // order_test();
 
   arena_scratch_release(scratch);

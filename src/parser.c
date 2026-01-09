@@ -762,8 +762,11 @@ parse_stmt_block(Parser *p)
   while (!check(p, '}'))
   {
     Stmt *stmt = parse_stmt(p);
-    sll_queue_push(list.first, list.last, stmt);
-    list.count += 1;
+    if (stmt->kind != STMT_NULL)
+    {
+      sll_queue_push(list.first, list.last, stmt);
+      list.count += 1;
+    }
   }
   expect(p, '}');
 
@@ -830,16 +833,17 @@ parse_stmt_do_while(Parser *p)
 internal Stmt *
 parse_stmt_return(Parser *p)
 {
-  // TODO: a `return` statement with no expr errors
   Expr *expr = NULL;
-  // Arena_Temp scratch = arena_scratch_get(0,0);
-  // printf(CLR_YEL "curr token before ; check: %.*s\n" CLR_RESET, str8_varg(str_from_token_kind(scratch.arena, p->curr.kind)));
-  // arena_scratch_release(scratch);
-  if (!check(p, ';'))// && !check(p, '}'))
+
+  // Check if this is an empty return (return; or return at end of block)
+  if (!check(p, ';') && !check(p, '}'))
   {
     expr = parse_expr(p);
   }
-  expect(p, ';');
+
+  // Consume semicolon if present (allows both "return;" and "return" before "}")
+  match(p, ';');
+
   return stmt_return(p, expr);
 }
 

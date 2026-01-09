@@ -4,6 +4,13 @@
 #include "print.h"
 #include "os.h"
 
+//
+// TODO:
+// [ ] Make sure that all control paths return
+// [ ] Unify both size_of exprs
+// [ ] Fix compound literal parsing
+//
+
 internal void
 fatal(char *fmt, ...)
 {
@@ -427,21 +434,35 @@ sym_decl(Decl *decl)
   Sym_Kind kind = SYM_NONE;
   switch (decl->kind)
   {
-  case DECL_STRUCT:
-  case DECL_UNION:
-  case DECL_TYPEDEF:
-  case DECL_ENUM: // TODO
-    kind = SYM_TYPE;
-    break;
+  // case DECL_STRUCT:
+  // case DECL_UNION:
+  // case DECL_TYPEDEF:
+  // case DECL_ENUM: // TODO
+  //   kind = SYM_TYPE;
+  //   break;
   case DECL_VAR:
     kind = SYM_VAR;
     break;
   case DECL_CONST:
-    kind = SYM_CONST;
+    if (decl->init_type)
+    {
+      if (decl->init_type->kind == TYPE_SPEC_PROC)
+      {
+        kind = SYM_PROC;
+      }
+      else
+      {
+        kind = SYM_TYPE;
+      }
+    }
+    else if (decl->init_expr)
+    {
+      kind = SYM_CONST;
+    }
     break;
-  case DECL_PROC:
-    kind = SYM_PROC;
-    break;
+  // case DECL_PROC:
+  //   kind = SYM_PROC;
+  //   break;
     // kind = SYM_TYPE;
   // case DECL_ENUM:
     // kind = SYM_ENUM_CONST;
@@ -452,7 +473,7 @@ sym_decl(Decl *decl)
   }
 
   Sym *sym = sym_alloc(kind, decl->name, decl);
-  if (decl->kind == DECL_STRUCT || decl->kind == DECL_UNION)
+  if (decl->init_type && (decl->init_type->kind == TYPE_SPEC_STRUCT || decl->init_type->kind == TYPE_SPEC_UNION))
   {
     sym->state = SYM_RESOLVED;
     sym->type  = type_incomplete(sym);
@@ -516,11 +537,12 @@ sym_install_decl(Decl *decl)
 {
   Sym *sym = sym_decl(decl);
   sym_list_push(&global_syms, sym);
-  if (decl->kind == DECL_ENUM)
+  // if (decl->kind == DECL_ENUM)
+  if (decl->init_type && decl->init_type->kind == TYPE_SPEC_ENUM)
   {
-    for each_index(i, decl->enum0.members.count)
+    for each_index(i, decl->init_type->enum_members.count)
     {
-      Enum_Member it = decl->enum0.members.v[i];
+      Enum_Member it = decl->init_type->enum_members.v[i];
       sym_list_push(&global_syms, sym_enum_const(it.name, decl));
     }
   }
@@ -565,14 +587,23 @@ resolved_const(s64 const_value)
   return (Resolved_Expr){ .type = type_int, .is_const = true, .const_value = const_value };
 }
 
+// :forward declarations
 internal Sym *resolve_name(String8 name);
 internal s64 resolve_const_expr(Expr *expr);
 internal Resolved_Expr resolve_expr(Expr *expr);
 internal Resolved_Expr resolve_expected_expr(Expr *expr, Type *expected_type);
+internal Type *resolve_decl_var(Decl *decl);
+internal void resolve_sym(Sym *sym);
 
 internal Type *
 resolve_typespec(Type_Spec *typespec)
 {
+  if (!typespec)
+  {
+    // @HACK
+    return type_void;
+  }
+
   switch (typespec->kind)
   {
   case TYPE_SPEC_NULL:
@@ -596,8 +627,8 @@ resolve_typespec(Type_Spec *typespec)
     // @CLEANUP
     for each_index(i, params.count)
     {
-      Type_Spec *it = typespec->proc.params.v[i];
-      params.v[i] = resolve_typespec(it);
+      Decl *it = typespec->proc.params.v[i];
+      params.v[i] = resolve_decl_var(it);
     }
     // for (u32 i = 0; i < params.count; i += 1)
     // {
@@ -612,6 +643,18 @@ resolve_typespec(Type_Spec *typespec)
     }
     return type_proc(params, ret);
   }
+  case TYPE_SPEC_ENUM:
+  {
+    // For inline enum types, we need to create a type
+    // This is handled similar to struct/union
+    Type *type = type_alloc(TYPE_ENUM);
+    type->size = 4;  // enums are int-sized
+    type->align = 4;
+    // TODO: process enum members if needed
+    return type;
+  }
+  case TYPE_SPEC_STRUCT:
+  case TYPE_SPEC_UNION:
   case TYPE_SPEC_ARRAY:
     return type_array(resolve_typespec(typespec->array.elem), resolve_const_expr(typespec->array.count));
   // case TYPE_SPEC_SLICE:
@@ -644,12 +687,12 @@ complete_type(Type *type)
   type->kind = TYPE_COMPLETING;
   Decl *decl = type->sym->decl;
 
-  assert(decl->kind == DECL_STRUCT || decl->kind == DECL_UNION);
+  assert(decl->init_type && (decl->init_type->kind == TYPE_SPEC_STRUCT || decl->init_type->kind == TYPE_SPEC_UNION));
 
   u32 total_field_count = 0;
-  for each_index(i, decl->aggr.fields.count)
+  for each_index(i, decl->init_type->aggr_fields.count)
   {
-    Aggr_Field it = decl->aggr.fields.v[i];
+    Aggr_Field it = decl->init_type->aggr_fields.v[i];
     total_field_count += it.names.node_count;
   }
 
@@ -662,11 +705,11 @@ complete_type(Type *type)
   fields.count = total_field_count;
   fields.v = push_array(resolve_arena, Type_Field, fields.count);
 
-  assert(decl->aggr.fields.count > 0);
+  assert(decl->init_type->aggr_fields.count > 0);
 
-  for each_index(i, decl->aggr.fields.count)
+  for each_index(i, decl->init_type->aggr_fields.count)
   {
-    Aggr_Field it = decl->aggr.fields.v[i];
+    Aggr_Field it = decl->init_type->aggr_fields.v[i];
     Type *field_type = resolve_typespec(it.type);
     complete_type(field_type);
 
@@ -681,13 +724,13 @@ complete_type(Type *type)
     }
   }
 
-  if (decl->kind == DECL_STRUCT)
+  if (decl->init_type->kind == TYPE_SPEC_STRUCT)
   {
     type_complete_struct(type, fields);
   }
   else
   {
-    assert(decl->kind == DECL_UNION);
+    assert(decl->init_type->kind == TYPE_SPEC_UNION);
     type_complete_union(type, fields);
   }
 
@@ -697,9 +740,8 @@ complete_type(Type *type)
 internal Type *
 resolve_decl_type(Decl *decl)
 {
-  // TODO add typedef
-  assert(decl->kind == DECL_TYPEDEF);
-  return resolve_typespec(decl->typedef0.type);
+  assert(decl->init_type);
+  return resolve_typespec(decl->init_type);
 }
 
 internal Type *
@@ -707,18 +749,28 @@ resolve_decl_var(Decl *decl)
 {
   assert(decl->kind == DECL_VAR);
   Type *type = NULL;
-  if (decl->var.type)
+  if (decl->type_hint)
   {
-    type = resolve_typespec(decl->var.type);
+    type = resolve_typespec(decl->type_hint);
   }
-  if (decl->var.expr)
+  if (decl->init_expr)
   {
-    Resolved_Expr result = resolve_expected_expr(decl->var.expr, type);
+    Resolved_Expr result = resolve_expected_expr(decl->init_expr, type);
     if (type && result.type != type)
     {
       fatal("Declared var type does not match inferred type");
     }
     type = result.type;
+  }
+  else if (decl->init_type)
+  {
+    // if we have a resolved type hint it must match init type?
+    Type *type_hint = type;
+    type = resolve_typespec(decl->init_type);
+    if (type_hint && type != type_hint)
+    {
+      fatal("Declared var type does not match type hint");
+    }
   }
   complete_type(type);
   return type;
@@ -728,7 +780,8 @@ internal Type *
 resolve_decl_const(Decl *decl, s64 *const_value)
 {
   assert(decl->kind == DECL_CONST);
-  Resolved_Expr result = resolve_expr(decl->const0.expr);
+  assert(decl->init_expr);
+  Resolved_Expr result = resolve_expr(decl->init_expr);
   if (!result.is_const)
   {
     fatal("Initializer for const is not a constant expression");
@@ -740,9 +793,11 @@ resolve_decl_const(Decl *decl, s64 *const_value)
 internal Type *
 resolve_decl_proc(Decl *decl)
 {
-  assert(decl->kind == DECL_PROC);
+  assert(decl->kind == DECL_CONST);
+  assert(decl->init_type && decl->init_type->kind == TYPE_SPEC_PROC);
 
-  Param_Array params = decl->proc.params;
+  Type_Spec *proc_spec = decl->init_type;
+  Decl_Array params = proc_spec->proc.params;
 
   Type_Param_Array param_types = {0};
   param_types.count = params.count;
@@ -750,10 +805,11 @@ resolve_decl_proc(Decl *decl)
 
   for each_index(i, params.count)
   {
-    param_types.v[i] = resolve_typespec(params.v[i].type);
+    // param_types.v[i] = resolve_typespec(params.v[i]->type_hint);
+    param_types.v[i] = resolve_decl_var(params.v[i]);
   }
 
-  return type_proc(param_types, resolve_typespec(decl->proc.ret));
+  return type_proc(param_types, resolve_typespec(proc_spec->proc.ret));
 }
 
 internal void resolve_stmt_block(Stmt_Array block, Type *ret_type);
@@ -779,7 +835,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
   {
     resolve_cond_expr(stmt->if0.cond);
     resolve_stmt_block(stmt->if0.then_block->block, ret_type);
-    if (stmt->if0.then_block != NULL)
+    if (stmt->if0.else_stmt != NULL)
     {
       if (stmt->if0.else_stmt->kind == STMT_BLOCK)
       {
@@ -821,6 +877,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
     break;
   }
   case STMT_SWITCH:
+  {
     Resolved_Expr result = resolve_expr(stmt->switch0.expr);
     for each_index(i, stmt->switch0.cases.count)
     {
@@ -837,13 +894,25 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
       }
     }
     break;
+  }
   case STMT_RETURN:
   {
     // TODO: support multiple returns
-    Resolved_Expr result = resolve_expected_expr(stmt->return_expr, ret_type);
-    if (result.type != ret_type)
+    if (stmt->return_expr)
     {
-      fatal("Return type mismatch");
+      Resolved_Expr result = resolve_expected_expr(stmt->return_expr, ret_type);
+      if (result.type != ret_type)
+      {
+        fatal("Return type mismatch");
+      }
+    }
+    else
+    {
+      // Empty return statement
+      if (ret_type && ret_type != type_void)
+      {
+        fatal("Cannot return without a value from procedure with non-void return type");
+      }
     }
     break;
   }
@@ -858,8 +927,10 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
   }
   case STMT_DECL:
   {
-    // Resolved_Expr left = resolve_expr(stmt->decl.)
-    assert(0);
+    Decl *decl = stmt->decl;
+    Sym *sym = sym_decl(decl);
+    resolve_sym(sym);
+    sym_push(sym);
     break;
   }
   default:
@@ -884,16 +955,21 @@ internal void
 resolve_proc(Sym *sym)
 {
   Decl *decl = sym->decl;
-  assert(decl->kind == DECL_PROC);
+  assert(decl->kind == DECL_CONST);
+  assert(decl->init_type && decl->init_type->kind == TYPE_SPEC_PROC);
   assert(sym->state == SYM_RESOLVED);
 
+  Type_Spec *proc_spec = decl->init_type;
+  Decl_Array params = proc_spec->proc.params;
+
   Sym **syms = sym_enter();
-  for each_index(i, decl->proc.params.count)
+  for each_index(i, params.count)
   {
-    Proc_Param it = decl->proc.params.v[i];
-    sym_push(sym_var(it.name, resolve_typespec(it.type)));
+    Decl *param = params.v[i];
+    sym_push(sym_var(param->name, resolve_typespec(param->type_hint)));
+    // resolve_decl_var(param);
   }
-  resolve_stmt_block(decl->proc.body->block, resolve_typespec(decl->proc.ret));
+  resolve_stmt_block(proc_spec->proc.body->block, resolve_typespec(proc_spec->proc.ret));
   sym_leave(syms);
 }
 
@@ -944,8 +1020,29 @@ resolve_sym(Sym *sym)
     sym->type = resolve_decl_var(sym->decl);
     break;
   case SYM_CONST:
-    sym->type = resolve_decl_const(sym->decl, &sym->const_value);
+  {
+    // TODO: `distinct` keyword
+    // My_Int :: distinct int
+    // #assert(My_Int != int)
+
+    // Check if this is actually a type alias (e.g., My_Int :: int)
+    Decl *decl = sym->decl;
+    if (decl->init_expr && decl->init_expr->kind == EXPR_IDENT)
+    {
+      Sym *ref_sym = sym_get(decl->init_expr->ident);
+      if (ref_sym && ref_sym->kind == SYM_TYPE)
+      {
+        // This is a type alias, not a constant
+        // @CLEANUP
+        sym->kind = SYM_TYPE;
+        resolve_sym(ref_sym);
+        sym->type = ref_sym->type;
+        break;
+      }
+    }
+    sym->type = resolve_decl_const(decl, &sym->const_value);
     break;
+  }
   // case SYM_TYPEDEF:
     // sym->type = resolve_decl_type(sym->decl);
     // break;
@@ -968,6 +1065,10 @@ complete_sym(Sym *sym)
   if (sym->kind == SYM_TYPE)
   {
     complete_type(sym->type);
+  }
+  else if (sym->kind == SYM_PROC)
+  {
+    resolve_proc(sym);
   }
 }
 
@@ -1033,6 +1134,7 @@ resolve_expr_name(Expr *expr)
   case SYM_CONST:
     return resolved_const(sym->const_value);
   case SYM_PROC:
+  case SYM_TYPE:
     return resolved_rvalue(sym->type);
   default:
     fatal("%.*s must be a var or const", str8_varg(expr->ident));
@@ -1190,19 +1292,20 @@ resolve_expr_binary(Expr *expr)
     // return resolved_const(left.const_value + right.const_value);
     return resolved_const(eval_int_binary(expr->binary.op.kind, left.const_value, right.const_value));
   }
-  // NOTE(mxtej): assign stuff
-  if (left.is_lvalue)
+
+  // Handle assignment operators
+  if (is_assign_op(expr->binary.op.kind))
   {
-    if (is_assign_op(expr->binary.op.kind))
+    if (!left.is_lvalue)
     {
-      assert(!"TODO");
+      fatal("Left side of assignment must be an lvalue");
     }
-    else
-    {
-      fatal("Invalid assign operator");
-    }
+    // Types already checked above, assignment is valid
+    // Return lvalue so assignments can be chained: a = b = c
     return resolved_lvalue(left.type);
   }
+
+  // Regular binary operation
   return resolved_rvalue(left.type);
 }
 
@@ -1535,73 +1638,155 @@ resolve_test()
   sym_install_type(str8_lit("char"), type_char);
   sym_install_type(str8_lit("int"),  type_int);
 
+  /*
+  IMPORTANT TODO !!!:
+  [ ] Fix parsing of compound literals
+  */
+
   String8 source = S(
-    "var some_number: int = 0;\n"
-    // "some_number += 1;\n"
-    "proc add(a: int, b: int) -> int\n"
-    "{\n"
-    "  var c: int;\n"
-    "  c += a;\n"
-    "  c += b;\n"
-    "  return c;\n"
+    "i: int\n"
+
+    "f1 :: proc() {\n"
+    "  N :: 8\n"
+    "  a: [N]int\n"
+    "  j := 0\n"
+    "  i += 1\n"
+    "  return\n"
     "}\n"
 
+    "f2 :: proc() {\n"
+    "  N :: 4\n"
+    "  a: [N]int\n"
+    // "  i += j\n" // this should error
+    "}\n"
+
+    "f3 :: proc(n: int) -> int {\n"
+    "  square :: proc(m: int) -> int {\n"
+    "    return 2*m\n" // TODO: this inner proc can access symbol `n`, this is wrong
+    "  }\n"
+    "  return square(n)\n"
+    "}\n"
+
+    "f4 :: proc(x: int) -> int {\n"
+    "  if x {\n"
+    "    return -x\n"
+    "  } else if x % 2 == 0 {\n"
+    "    return 2\n"
+    "  } else {\n"
+    "    return -1\n"
+    "  }\n"
+    "}\n"
+
+    "f5 :: proc(n: int) -> int {\n"
+    "  for i in 0 ..< n {\n"
+    "    if i % 3 == 0 {\n"
+    "      return n\n"
+    "    }\n"
+    "  }\n"
+    "  return 0\n"
+    "}\n"
+
+    "f6 :: proc(x: int) -> int {\n"
+    "  switch x {\n"
+    "  case 0, 1:\n"
+    "    return 42\n"
+    "  case 3:\n"
+    "    fallthrough\n"
+    "  case:\n"
+    "    return -1\n"
+    "  }\n"
+    "  return 0\n"
+    "}\n"
+
+    "f7 :: proc(n: int) -> int {\n"
+    "  p := 1\n"
+    "  while n > 0 {\n"
+    "    p *= 2\n"
+    "    n -= 1\n"
+    "  }\n"
+    "  return p\n"
+    "}\n"
+
+    "f8 :: proc(n: int) -> int {\n"
+    "  p := 1\n"
+    "  do {\n"
+    "    p *= 2\n"
+    "    n -= 1\n"
+    "  } while n > 0\n"
+    "  return p\n"
+    "}\n"
+
+
     /*
-    "union Int_Or_Ptr { i: int, p: *int, }\n"
-    "var u1 = Int_Or_Ptr.{i = 42};\n"
-    "var u2 = Int_Or_Ptr.{p = cast(*int)42};\n"
-    "var ints: [256]int = .{1, 2, ['a'] = 42, [255] = 123};\n"
+    "some_number: int = 0\n"
+    // "some_number += 1;\n"
+    "add_ints :: proc(a := 0, b: int) -> int {\n"
+    "  c: int\n"
+    "  c += a\n"
+    "  c += b\n"
+    "  return c\n"
+    "}\n"
 
-    "var a: [3]int = .{1,2,3};\n"
-    "var b: [4]int;\n"
-    "var p = &a[1];\n"
-    "var i = p[1];\n"
-    "var j = p.*;\n"
-    "const N = 5 + size_of(1 ? a : b);\n"
-    "const M = size_of(&a[0]);\n"
+    "Int_Or_Ptr :: union { i: int, p: *int, }\n"
+    // "u1 := Int_Or_Ptr.{i = 42}\n"
+    // "u2 := Int_Or_Ptr.{p = cast(*int)42}\n"
+    // "ints: [256]int := .{1, 2, ['a'] = 42, [255] = 123}\n" // TODO: fix compound literal
 
-    "struct Vector { x, y: int, }\n"
-    "var v: Vector = 0 ? .{1,2} : .{3,4};\n"
-    "var vs: [2][2]Vector = .{.{.{1,2},.{3,4}}, .{.{5,6},.{7,8}}};\n"
+    // "a: [3]int = .{1,2,3}\n"
+    "a: [3]int\n"
+    // "a := [3]int.{1,2,3}\n"
+    "b: [4]int\n"
+    "p := &a[1]\n"
+    "i := p[1]\n"
+    "j := p.*\n"
+    "N :: 5 + size_of(1 ? a : b)\n"
+    "M :: size_of(&a[0])\n"
 
-    "var pi = 3.14;\n"
-    "var name = \"stuff\";\n"
+    "Vector :: struct { x, y: int, }\n"
+    "v: Vector\n"
+    "V_SIZE :: size_of(:Vector)\n"
+    // "v: Vector = 0 ? .{1,2} : .{3,4}\n"
+    // "vs: [2][2]Vector = .{.{.{1,2},.{3,4}}, .{.{5,6},.{7,8}}}\n"
+
+    "pi := 3.14\n"
+    "name := \"stuff\"\n"
+
+    // "v: Vector = .{1,2}\n"
+    "a := 42\n"
+    "p := cast(*void)a\n"
+    "j := cast(int)p\n"
+    "q := cast(*int)j\n"
+
+    "I :: 42\n"
+    "J :: +I\n"
+    "K :: -I\n"
+    "L :: !!I\n"
+    "M :: ~7 + 1 == -7\n"
+    "A :: 1000/((2*3-5) << 1)\n"
+
+    "K :: 1 ? 2 : 3\n"
+    "Vector_Alias :: Vector\n"
+    "addv :: proc(a: Vector_Alias, b: Vector) -> Vector { return .{ a.x + b.x, a.y + b.y }; }\n"
+    "x := addv(Vector.{1,2}, Vector.{3,4})\n"
+    "a: [3]int = .{1,2,3}\n"
+    // "i = a[1]\n"
+    "p := &a[1]\n"
+    "i := p[1]\n"
+    "w := Vector.{3,4}\n"
+    "i := 42\n"
+    "u := Int_Or_Ptr.{ i, &i }\n"
+
+    "P :: 1 + size_of(p)\n" // 9
+    "p: *T\n" // 4
+    "u := p.*\n" // deref
+    "T :: struct { a: [N]int, }\n"
+    "r := &t.a\n"
+    "t: T\n"
+    "S :: [N+M]int\n"
+    "M :: size_of(t.a)\n" // 36
+    "nm := N+M\n" // [9 + 36] = 45
+    "ai := &i\n"
     */
-
-    // "var v: Vector = .{1,2};\n"
-    // "var a = 42;\n"
-    // "var p = cast(*void)a;\n"
-    // "var j = cast(int)p;\n"
-    // "var q = cast(*int)j;\n"
-
-    // "const i = 42;\n"
-    // "const j = +i;\n"
-    // "const k = -i;\n"
-    // "const l = !!i;\n"
-    // "const m = ~7 + 1 == -7;\n"
-    // "const a = 1000/((2*3-5) << 1);\n"
-
-    // "const K = 1 ? 2 : 3;\n"
-    // "proc add(a: Vector, b: Vector) -> Vector { return .{ a.x + b.x, a.y + b.y }; }\n"
-    // "var x = add(Vector.{1,2}, Vector.{3,4});\n"
-    // "var a: [3]int = .{1,2,3};\n"
-    // // "var i = a[1];\n"
-    // "var p = &a[1];\n"
-    // "var i = p[1];\n"
-    // "var w = Vector.{3,4};\n"
-    // "var i = 42;\n"
-    // "var u = Int_Or_Ptr.{ i, &i };\n"
-
-    // "const N = 1 + size_of(p);\n" // 9
-    // "var p: *T;\n" // 4
-    // "var u = p.*;\n" // deref
-    // "struct T { a: [N]int, }\n"
-    // "var r = &t.a;\n"
-    // "var t: T;\n"
-    // "typedef S = [N+M]int;\n"
-    // "const M = size_of(t.a);\n" // 36
-    // "var i = N+M;\n" // [9 + 36] = 45
-    // "var q = &i;\n"
   );
 
   Lexer l = lexer_init(source);

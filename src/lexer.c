@@ -901,6 +901,8 @@ lexer_next(Lexer *l)
   // case TOKEN_RETURN:
   case TOKEN_BREAK:
   case TOKEN_CONTINUE:
+  case TOKEN_DEREF:
+  case TOKEN_FALLTHROUGH:
     l->insert_semicolon = true;
     break;
   default:
