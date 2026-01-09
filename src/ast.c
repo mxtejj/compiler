@@ -5,11 +5,71 @@
 #include <stdarg.h>
 #include <ctype.h>
 
+////////////////////////////////
+//- Type Specs
+
 internal Type_Spec *
 type_spec_alloc(Parser *p, Type_Spec_Kind kind)
 {
   Type_Spec *t = push_struct(p->arena, Type_Spec);
   t->kind = kind;
+  return t;
+}
+
+internal Type_Spec *
+type_spec_name(Parser *p, String8 name)
+{
+  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_NAME);
+  t->name = name;
+  return t;
+}
+
+internal Type_Spec *
+type_spec_proc(Parser *p, Decl_Array params, Type_Spec *ret, Stmt *body)
+{
+  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_PROC);
+  t->proc.params = params;
+  t->proc.ret    = ret;
+  t->proc.body   = body;
+  return t;
+}
+
+internal Type_Spec *
+type_spec_enum(Parser *p, Enum_Member_Array members)
+{
+  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_ENUM);
+  t->enum_members = members;
+  return t;
+}
+
+internal Type_Spec *
+type_spec_aggr(Parser *p, Type_Spec_Kind kind, Aggr_Field_Array fields)
+{
+  assert(kind == TYPE_SPEC_STRUCT || kind == TYPE_SPEC_UNION);
+  Type_Spec *t = type_spec_alloc(p, kind);
+  t->aggr_fields = fields;
+  return t;
+}
+
+internal Type_Spec *type_spec_array(Parser *p, Expr *count, Type_Spec *elem)
+{
+  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_ARRAY);
+  t->array.count = count;
+  t->array.elem  = elem;
+  return t;
+}
+
+internal Type_Spec *type_spec_slice(Parser *p, Type_Spec *elem)
+{
+  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_SLICE);
+  t->slice.elem = elem;
+  return t;
+}
+
+internal Type_Spec *type_spec_ptr(Parser *p, Type_Spec *pointee)
+{
+  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_PTR);
+  t->ptr.pointee = pointee;
   return t;
 }
 
@@ -26,54 +86,21 @@ decl_alloc(Parser *p, String8 name, Decl_Kind kind)
 }
 
 internal Decl *
-decl_proc(Parser *p, String8 name, Param_Array params, Type_Spec *ret, Stmt *body)
-{
-  Decl *decl = decl_alloc(p, name, DECL_PROC);
-  decl->proc.params = params;
-  decl->proc.ret    = ret;
-  decl->proc.body   = body;
-  return decl;
-}
-
-internal Decl *
-decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_Array fields)
-{
-  assert(kind == DECL_STRUCT || kind == DECL_UNION);
-  Decl *decl = decl_alloc(p, name, kind);
-  decl->aggr.fields = fields;
-  return decl;
-}
-
-internal Decl *
-decl_enum(Parser *p, String8 name, Enum_Member_Array members)
-{
-  Decl *decl = decl_alloc(p, name, DECL_ENUM);
-  decl->enum0.members = members;
-  return decl;
-}
-
-internal Decl *
-decl_var(Parser *p, String8 name, Type_Spec *type, Expr *expr)
+decl_var(Parser *p, String8 name, Type_Spec *type_hint, Expr *init_expr)
 {
   Decl *decl = decl_alloc(p, name, DECL_VAR);
-  decl->var.type = type;
-  decl->var.expr = expr;
+  decl->type_hint = type_hint;
+  decl->init_expr = init_expr;
   return decl;
 }
 
 internal Decl *
-decl_const(Parser *p, String8 name, Expr *expr)
+decl_const(Parser *p, String8 name, Type_Spec *type_hint, Expr *init_expr, Type_Spec *init_type)
 {
   Decl *decl = decl_alloc(p, name, DECL_CONST);
-  decl->const0.expr = expr;
-  return decl;
-}
-
-internal Decl *
-decl_typedef(Parser *p, String8 name, Type_Spec *type)
-{
-  Decl *decl = decl_alloc(p, name, DECL_TYPEDEF);
-  decl->typedef0.type = type;
+  decl->type_hint = type_hint;
+  decl->init_expr = init_expr;
+  decl->init_type = init_type;
   return decl;
 }
 
@@ -308,6 +335,14 @@ stmt_return(Parser *p, Expr *expr)
 }
 
 internal Stmt *
+stmt_defer(Parser *p, Stmt *s)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_RETURN);
+  stmt->defer_stmt = s;
+  return stmt;
+}
+
+internal Stmt *
 stmt_expr(Parser *p, Expr *expr)
 {
   Stmt *stmt = stmt_alloc(p, STMT_EXPR);
@@ -349,6 +384,8 @@ print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
     return;
   }
 
+  Arena_Temp scratch = arena_scratch_get(&arena, 1);
+
   switch (t->kind)
   {
   case TYPE_SPEC_NULL:
@@ -360,14 +397,15 @@ print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
   case TYPE_SPEC_PROC:
     str8_list_pushf(arena, list, "proc(");
 
-    for each_index(i, t->proc.params.count)      
+    for each_index(i, t->proc.params.count)
     {
-      Type_Spec *it = t->proc.params.v[i];
+      Decl *it = t->proc.params.v[i];
       // if (it->name.count > 0)
       // {
       //   str8_list_pushf(arena, list, "%.*s ", str8_varg(it->name));
       // }
-      print_type(arena, list, indent, it);
+      // print_type(arena, list, indent, it);
+      print_decl(arena, list, indent, it);
       if (it != t->proc.params.v[t->proc.params.count-1])
       {
         str8_list_pushf(arena, list, ", ");
@@ -377,6 +415,64 @@ print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
     str8_list_pushf(arena, list, ")");
     str8_list_pushf(arena, list, " -> ");
     print_type(arena, list, indent, t->proc.ret);
+    (*indent)++;
+    print_ln(arena, list, indent);
+    print_stmt(arena, list, indent, t->proc.body);
+    (*indent)--;
+    break;
+  case TYPE_SPEC_ENUM:
+    str8_list_pushf(arena, list, "(enum ");
+    (*indent)++;
+    for each_index(i, t->enum_members.count)
+    {
+      Enum_Member it = t->enum_members.v[i];
+      print_ln(arena, list, indent);
+      str8_list_pushf(arena, list, "(%.*s ", str8_varg(it.name));
+      if (it.value)
+      {
+        //str8_list_pushf(arena, list, "(%.*s ", str8_varg(it.name));
+        print_expr(arena, list, indent, it.value);
+        // str8_list_pushf(arena, list, "TODO");
+      }
+      else
+      {
+        str8_list_pushf(arena, list, "nil");
+      }
+      str8_list_pushf(arena, list, ")");
+    }
+    (*indent)--;
+    str8_list_pushf(arena, list, ")");
+    break;
+  case TYPE_SPEC_STRUCT:
+  case TYPE_SPEC_UNION:
+    str8_list_pushf(arena, list, "(");
+    if (t->kind == TYPE_SPEC_STRUCT)
+    {
+      str8_list_pushf(arena, list, "struct ");
+    }
+    else
+    {
+      str8_list_pushf(arena, list, "union ");
+    }
+
+    for each_index(i, t->aggr_fields.count)
+    {
+      Aggr_Field it = t->aggr_fields.v[i];
+
+      (*indent)++;
+      print_ln(arena, list, indent);
+      StringJoin join = {
+        .mid = S(" "),
+      };
+      String8 names = str8_list_join(scratch.arena, &it.names, &join);
+      str8_list_pushf(arena, list, "(%.*s ", str8_varg(names));
+      print_type(arena, list, indent, it.type);
+      str8_list_pushf(arena, list, ")");
+      // (x y z f32)
+      (*indent)--;
+    }
+
+    str8_list_pushf(arena, list, ")");
     break;
   case TYPE_SPEC_ARRAY:
     str8_list_pushf(arena, list, "[");
@@ -396,6 +492,8 @@ print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
     assert(0);
     break;
   }
+
+  arena_scratch_release(scratch);
 }
 
 internal void
@@ -407,112 +505,40 @@ print_ln(Arena *arena, String8List *list, int *indent)
 internal void
 print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
 {
+  if (!d)
+  {
+    printf(CLR_RED "Decl is NULL!!!\n" CLR_RESET);
+    return;
+  }
+
   Arena_Temp scratch = arena_scratch_get(&arena, 1);
 
-  switch (d->kind)
+  char *tag = (d->kind == DECL_CONST) ? "const" : "var";
+  str8_list_pushf(arena, list, "(%s %.*s", tag, str8_varg(d->name));
+
+  if (d->type_hint)
   {
-  case DECL_NULL:
-    str8_list_pushf(arena, list, "<NULL>");
-    break;
-  case DECL_PROC:
-    str8_list_pushf(arena, list, "(proc %.*s ", str8_varg(d->name));
-    str8_list_pushf(arena, list, "(");
-    for each_index(i, d->proc.params.count)
-    {
-      Proc_Param it = d->proc.params.v[i];
-      str8_list_pushf(arena, list, "%.*s ", str8_varg(it.name));
-      print_type(arena, list, indent, it.type);
-      if (i != d->proc.params.count)
-      {
-        str8_list_pushf(arena, list, ", ");
-      }
-    }
-    str8_list_pushf(arena, list, ") ");
-    print_type(arena, list, indent, d->proc.ret);
-
-    str8_list_pushf(arena, list, ")");
-    break;
-  case DECL_STRUCT:
-  case DECL_UNION:
-    str8_list_pushf(arena, list, "(");
-    if (d->kind == DECL_STRUCT)
-    {
-      str8_list_pushf(arena, list, "struct ");
-    }
-    else
-    {
-      str8_list_pushf(arena, list, "union ");
-    }
-
-    str8_list_pushf(arena, list, "%.*s", str8_varg(d->name));
-
-    for each_index(i, d->aggr.fields.count)
-    {
-      Aggr_Field it = d->aggr.fields.v[i];
-
-      (*indent)++;
-      print_ln(arena, list, indent);
-      StringJoin join = {
-        .mid = S(" "),
-      };
-      String8 names = str8_list_join(scratch.arena, &it.names, &join);
-      str8_list_pushf(arena, list, "(%.*s ", str8_varg(names));
-      print_type(arena, list, indent, it.type);
-      str8_list_pushf(arena, list, ")");
-      // (x y z f32)
-      (*indent)--;
-    }
-
-    str8_list_pushf(arena, list, ")");
-    break;
-  case DECL_ENUM:
-    str8_list_pushf(arena, list, "(enum %.*s ", str8_varg(d->name));
-    (*indent)++;
-    for each_index(i, d->enum0.members.count)
-    {
-      Enum_Member it = d->enum0.members.v[i];
-      print_ln(arena, list, indent);
-      str8_list_pushf(arena, list, "(%.*s ", str8_varg(it.name));
-      if (it.value)
-      {
-        //str8_list_pushf(arena, list, "(%.*s ", str8_varg(it.name));
-        print_expr(arena, list, indent, it.value);
-        // str8_list_pushf(arena, list, "TODO");
-      }
-      else
-      {
-        str8_list_pushf(arena, list, "nil");
-      }
-      str8_list_pushf(arena, list, ")");
-    }
-    (*indent)--;
-    str8_list_pushf(arena, list, ")");
-    break;
-  case DECL_VAR:
-    // (var (dt f32) (/ 1.0 60.0))
-    str8_list_pushf(arena, list, "(var ");
-    str8_list_pushf(arena, list, "(%.*s ", str8_varg(d->name));
-    print_type(arena, list, indent, d->var.type);
-    str8_list_pushf(arena, list, ") ");
-    print_expr(arena, list, indent, d->var.expr);
-    str8_list_pushf(arena, list, ")");
-    break;
-  case DECL_CONST:
-    str8_list_pushf(arena, list, "(const ");
-    str8_list_pushf(arena, list, "%.*s ", str8_varg(d->name));
-    print_expr(arena, list, indent, d->const0.expr);
-    str8_list_pushf(arena, list, ")");
-    break;
-  case DECL_TYPEDEF:
-    str8_list_pushf(arena, list, "(typedef ");
-    str8_list_pushf(arena, list, "%.*s ", str8_varg(d->name));
-    print_type(arena, list, indent, d->typedef0.type);
-    str8_list_pushf(arena, list, ")");
-    break;
-  default:
-    assert(0);
-    break;
+    // str8_list_pushf(arena, list, " type:");
+    str8_list_pushf(arena, list, " ");
+    print_type(arena, list, indent, d->type_hint);
   }
+
+  // str8_list_pushf(arena, list, " value:");
+  str8_list_pushf(arena, list, " ");
+  if (d->init_type)
+  {
+    print_type(arena, list, indent, d->init_type);
+  }
+  else if (d->init_expr)
+  {
+    print_expr(arena, list, indent, d->init_expr);
+  }
+  else
+  {
+    str8_list_pushf(arena, list, "<uninitialized>");
+  }
+
+  str8_list_pushf(arena, list, ")");
 
   arena_scratch_release(scratch);
 }

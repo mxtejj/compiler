@@ -49,6 +49,7 @@ enum Stmt_Kind
   STMT_FOR_IN,
   STMT_SWITCH,
   STMT_RETURN,
+  STMT_DEFER,
   STMT_BREAK,
   STMT_CONTINUE,
   STMT_EXPR,
@@ -156,6 +157,7 @@ struct Stmt
     switch0;
 
     Expr *return_expr;
+    Stmt *defer_stmt;
     Expr *expr;
     Decl *decl;
   };
@@ -179,6 +181,7 @@ internal Stmt *stmt_while(Parser *p, Expr *cond, Stmt *body);
 internal Stmt *stmt_for(Parser *p, Stmt *init, Expr *cond, Stmt *loop, Stmt *body);
 internal Stmt *stmt_for_in(Parser *p, Expr *item, Expr *iter, Stmt *body);
 internal Stmt *stmt_return(Parser *p, Expr *expr);
+internal Stmt *stmt_defer(Parser *p, Stmt *stmt);
 internal Stmt *stmt_expr(Parser *p, Expr *expr);
 internal Stmt *stmt_decl(Parser *p, Decl *decl);
 internal Stmt *stmt_switch(Parser *p, Expr *expr, Switch_Case_Array cases);
@@ -189,11 +192,14 @@ typedef enum Type_Spec_Kind Type_Spec_Kind;
 enum Type_Spec_Kind
 {
   TYPE_SPEC_NULL,
-  TYPE_SPEC_NAME,  // en: Entity
-  TYPE_SPEC_PROC,  // update: proc(Entity)
-  TYPE_SPEC_ARRAY, // entity_pair: [2]Entity
-  TYPE_SPEC_SLICE, // entities: []Entity
-  TYPE_SPEC_PTR,   // en: *Entity
+  TYPE_SPEC_NAME,   // Entity
+  TYPE_SPEC_PROC,   // proc(...) -> ret
+  TYPE_SPEC_ENUM,   // enum { ... }
+  TYPE_SPEC_STRUCT, // struct { ... }
+  TYPE_SPEC_UNION,  // union { ... }
+  TYPE_SPEC_ARRAY,  // [2]Entity
+  TYPE_SPEC_SLICE,  // []Entity
+  TYPE_SPEC_PTR,    // *Entity
 };
 
 typedef struct Type_Spec Type_Spec;
@@ -211,6 +217,31 @@ STRUCT(Type_Spec_Array)
   u64 count;
 };
 
+STRUCT(Enum_Member)
+{
+  String8  name;
+  Expr    *value;
+};
+
+STRUCT(Enum_Member_Array)
+{
+  Enum_Member *v;
+  u64 count;
+};
+
+STRUCT(Aggr_Field);
+STRUCT(Aggr_Field_Array)
+{
+  Aggr_Field *v;
+  u64 count;
+};
+
+STRUCT(Decl_Array)
+{
+  Decl **v;
+  u64 count;
+};
+
 struct Type_Spec
 {
   Type_Spec_Kind kind;
@@ -223,10 +254,14 @@ struct Type_Spec
 
     struct
     {
-      Type_Spec_Array params;
+      Decl_Array params;
       Type_Spec *ret;
+      Stmt *body;
     }
     proc;
+
+    Enum_Member_Array enum_members;
+    Aggr_Field_Array aggr_fields;
 
     struct
     {
@@ -250,6 +285,13 @@ struct Type_Spec
 };
 
 internal Type_Spec *type_spec_alloc(Parser *p, Type_Spec_Kind kind);
+internal Type_Spec *type_spec_name(Parser *p, String8 name);
+internal Type_Spec *type_spec_proc(Parser *p, Decl_Array params, Type_Spec *ret, Stmt *body);
+internal Type_Spec *type_spec_enum(Parser *p, Enum_Member_Array members);
+internal Type_Spec *type_spec_aggr(Parser *p, Type_Spec_Kind kind, Aggr_Field_Array fields);
+internal Type_Spec *type_spec_array(Parser *p, Expr *count, Type_Spec *elem);
+internal Type_Spec *type_spec_slice(Parser *p, Type_Spec *elem);
+internal Type_Spec *type_spec_ptr(Parser *p, Type_Spec *pointee);
 
 ///////////////////////////////////
 // DECLARATIONS
@@ -258,13 +300,8 @@ typedef enum Decl_Kind Decl_Kind;
 enum Decl_Kind
 {
   DECL_NULL,
-  DECL_PROC,
-  DECL_STRUCT,
-  DECL_UNION,
-  DECL_ENUM,
   DECL_VAR,
   DECL_CONST,
-  DECL_TYPEDEF,
 };
 
 STRUCT(Proc_Param)
@@ -320,23 +357,10 @@ STRUCT(Aggr_Field_List)
   u64 count;
 };
 
-STRUCT(Aggr_Field_Array)
-{
-  Aggr_Field *v;
-  u64 count;
-};
-
 typedef struct Decl_Aggr Decl_Aggr;
 struct Decl_Aggr
 {
   Aggr_Field_Array fields;
-};
-
-typedef struct Enum_Member Enum_Member;
-struct Enum_Member
-{
-  String8  name;
-  Expr    *value;
 };
 
 STRUCT(Enum_Member_Node)
@@ -350,12 +374,6 @@ struct Enum_Member_List
 {
   Enum_Member_Node *first;
   Enum_Member_Node *last;
-};
-
-STRUCT(Enum_Member_Array)
-{
-  Enum_Member *v;
-  u64 count;
 };
 
 typedef struct Decl_Enum Decl_Enum;
@@ -374,6 +392,7 @@ struct Decl_Var
 typedef struct Decl_Const Decl_Const;
 struct Decl_Const
 {
+  Type_Spec *type;
   Expr *expr;
 };
 
@@ -386,18 +405,23 @@ struct Decl
 {
   Decl_Kind kind;
   String8   name;
+  Type_Spec *type_hint; // The 'T' in 'x: T = ...'
+
+  // payload
+  Expr      *init_expr; // 'N :: 5'
+  Type_Spec *init_type; // 'Color :: enum { ... }'
 
   Decl *next;
 
-  union
-  {
-    Decl_Proc  proc;
-    Decl_Aggr  aggr;
-    Decl_Enum  enum0;
-    Decl_Var   var;
-    Decl_Const const0;
-    Decl_Typedef typedef0;
-  };
+  // union
+  // {
+  //   Decl_Proc  proc;
+  //   Decl_Aggr  aggr;
+  //   Decl_Enum  enum0;
+  //   Decl_Var   var;
+  //   Decl_Const const0;
+  //   Decl_Typedef typedef0;
+  // };
 };
 // raddbg_type_view(Decl,
 //                  kind == DECL_PROC   ? proc :
@@ -408,6 +432,8 @@ struct Decl
 //                  kind == DECL_CONST  ? const0 :
 //                  $);
 
+struct Decl;
+
 typedef struct Decl_List Decl_List;
 struct Decl_List
 {
@@ -417,12 +443,8 @@ struct Decl_List
 
 internal Decl *decl_alloc(Parser *p, String8 name, Decl_Kind kind);
 
-internal Decl *decl_proc(Parser *p, String8 name, Param_Array params, Type_Spec *ret, Stmt *body);
-internal Decl *decl_aggregate(Parser *p, String8 name, Decl_Kind kind, Aggr_Field_Array fields); // TODO: Field_Array
-internal Decl *decl_enum(Parser *p, String8 name, Enum_Member_Array members);
-internal Decl *decl_var(Parser *p, String8 name, Type_Spec *type, Expr *expr);
-internal Decl *decl_const(Parser *p, String8 name, Expr *expr);
-internal Decl *decl_typedef(Parser *p, String8 name, Type_Spec *type);
+internal Decl *decl_var(Parser *p, String8 name, Type_Spec *type_hint, Expr *init_expr);
+internal Decl *decl_const(Parser *p, String8 name, Type_Spec *type_hint, Expr *init_expr, Type_Spec *init_type);
 
 // TODO order this properly
 internal Decl *parse_decl(Parser *p);

@@ -83,6 +83,8 @@ report_error(Parser *p, const char *fmt, ...)
 
   va_end(args);
 
+  trap();
+
   // TODO: Make some errors non fatal
   // getchar();
   // os_exit(1);
@@ -183,6 +185,30 @@ is_type_start(Parser *p)
   case TOKEN_F64:
   case TOKEN_BOOL:
   case TOKEN_PROC:
+  case '*':
+  case '[':
+    return true;
+  }
+  return false;
+}
+
+// NOTE(mxtej): doesn't contain identifiers
+internal bool
+is_explicit_type_start(Parser *p)
+{
+  switch (p->curr.kind)
+  {
+  // built-in type keywords
+  case TOKEN_STRING:
+  case TOKEN_S8:      case TOKEN_S16: case TOKEN_S32: case TOKEN_S64:
+  case TOKEN_U8:      case TOKEN_U16: case TOKEN_U32: case TOKEN_U64:
+  case TOKEN_UINTPTR: case TOKEN_INT: case TOKEN_UINT:
+  case TOKEN_F32:     case TOKEN_F64: case TOKEN_BOOL:
+
+  // type literal keywords
+  case TOKEN_PROC: case TOKEN_STRUCT: case TOKEN_UNION: case TOKEN_ENUM:
+
+  // type operators
   case '*':
   case '[':
     return true;
@@ -714,6 +740,13 @@ internal Stmt *
 parse_stmt(Parser *p);
 
 internal Stmt *
+parse_stmt_expr_nosemi(Parser *p)
+{
+  Expr *expr = parse_expr(p);
+  return stmt_expr(p, expr);
+}
+
+internal Stmt *
 parse_stmt_expr(Parser *p)
 {
   Expr *expr = parse_expr(p);
@@ -754,6 +787,8 @@ internal Stmt *
 parse_stmt_if(Parser *p)
 {
   Expr *cond       = parse_expr(p);
+  // match(p, ';'); // allman indent hacky fix
+
   Stmt *then_block = parse_stmt_block(p);
   Stmt *else_stmt  = NULL;
 
@@ -795,7 +830,15 @@ parse_stmt_do_while(Parser *p)
 internal Stmt *
 parse_stmt_return(Parser *p)
 {
-  Expr *expr = parse_expr(p);
+  // TODO: a `return` statement with no expr errors
+  Expr *expr = NULL;
+  // Arena_Temp scratch = arena_scratch_get(0,0);
+  // printf(CLR_YEL "curr token before ; check: %.*s\n" CLR_RESET, str8_varg(str_from_token_kind(scratch.arena, p->curr.kind)));
+  // arena_scratch_release(scratch);
+  if (!check(p, ';'))// && !check(p, '}'))
+  {
+    expr = parse_expr(p);
+  }
   expect(p, ';');
   return stmt_return(p, expr);
 }
@@ -817,83 +860,22 @@ parse_stmt_break(Parser *p)
 }
 
 internal Stmt *
-parse_stmt_decl(Parser *p)
-{
-  // Example: var a = 5;
-  //        | const PI = 3.14;
-  //
-  // TODO:
-  // Eventually support:
-  // a := 5;
-  // PI :: 3.14
-
-  bool is_const = false;
-  if (p->prev.kind == TOKEN_VAR)
-  {
-    is_const = false;
-  }
-  else if (p->prev.kind == TOKEN_CONST)
-  {
-    is_const = true;
-  }
-  else
-  {
-    assert(!"parse_stmt_decl called without var/const");
-  }
-
-  String8 name = parse_ident(p);
-
-  Type_Spec *type = NULL;
-  Expr      *init = NULL;
-
-  // optional type annotation
-  if (match(p, ':'))
-  {
-    type = parse_type(p);
-  }
-
-  // optional initializer
-  if (match(p, '='))
-  {
-    init = parse_expr(p);
-  }
-
-  if (!type && !init)
-  {
-    // if its `var x;`
-    report_error(p, "Variables must have a type or an initializer");
-  }
-
-  expect(p, ';');
-
-  // @CLEANUP
-  Decl *decl = push_struct(p->arena, Decl);
-
-  if (is_const)
-  {
-    decl->kind = DECL_CONST;
-    decl->name = name;
-    decl->const0.expr = init;
-  }
-  else
-  {
-    decl->kind = DECL_VAR;
-    decl->name = name;
-    decl->var.type = type;
-    decl->var.expr = init;
-  }
-
-  return stmt_decl(p, decl);
-}
-
-internal Stmt *
 parse_stmt_defer(Parser *p)
 {
-  Expr *expr = parse_expr(p);
-  expect(p, ';');
-  // return stmt_defer(p, expr);
-  assert(0);
-  return NULL;
+  Stmt *stmt = parse_stmt(p);
+  switch (stmt->kind)
+  {
+  case STMT_RETURN:
+    report_error(p, "Cannot defer a return statement");
+    break;
+  case STMT_DEFER:
+    report_error(p, "Cannot defer a defer statement");
+    break;
+  default:
+    break;
+  }
+  // expect(p, ';');
+  return stmt_defer(p, stmt);
 }
 
 internal Stmt *
@@ -916,7 +898,7 @@ parse_stmt_for(Parser *p)
   else
   {
     //- parse c-style for loop
-    // for var i = 0; i < 10; i += 1 {}
+    // for i := 0; i < 10; i += 1 {}
     // for ; i < 10; i += 1 {}
     Stmt *init = NULL;
     Expr *cond = NULL;
@@ -937,7 +919,7 @@ parse_stmt_for(Parser *p)
     }
     expect(p, ';');
 
-    loop = parse_stmt(p);
+    loop = parse_stmt_expr_nosemi(p);
     Stmt *body = parse_stmt_block(p);
 
     // TODO: for now we need an additional semicolon after loop statement @CLEANUP
@@ -1046,6 +1028,8 @@ parse_stmt_switch(Parser *p)
     }
   }
 
+  expect(p, '}');
+
   arena_scratch_release(scratch);
   return stmt_switch(p, expr, cases);
 }
@@ -1053,6 +1037,11 @@ parse_stmt_switch(Parser *p)
 internal Stmt *
 parse_stmt(Parser *p)
 {
+  if (match(p, ';'))
+  {
+    // "eats" leading semicolons
+    return stmt_alloc(p, STMT_NULL);
+  }
   if (check(p, '{'))            return parse_stmt_block(p);
   if (match(p, TOKEN_IF))       return parse_stmt_if(p);
   if (match(p, TOKEN_DO))       return parse_stmt_do_while(p);
@@ -1061,25 +1050,9 @@ parse_stmt(Parser *p)
   if (match(p, TOKEN_RETURN))   return parse_stmt_return(p);
   if (match(p, TOKEN_CONTINUE)) return parse_stmt_continue(p);
   if (match(p, TOKEN_BREAK))    return parse_stmt_break(p);
-  if (match(p, TOKEN_VAR))      return parse_stmt_decl(p);
-  if (match(p, TOKEN_CONST))    return parse_stmt_decl(p);
+  if (check(p, TOKEN_IDENT) && peek(p, ':')) return stmt_decl(p, parse_decl(p));
   if (match(p, TOKEN_FOR))      return parse_stmt_for(p);
   if (match(p, TOKEN_SWITCH))   return parse_stmt_switch(p);
-
-  /*
-  TODO: STMT_DECL (locally scoped decls like struct or union)
-
-  proc some_proc()
-  {
-    struct Local_Data
-    {
-      numbers: []int,
-    }
-    var data = Local_Data.{};
-
-    do_stuff(data.numbers);
-  }
-  */
 
   return parse_stmt_expr(p);
 }
@@ -1092,7 +1065,10 @@ parse_statements(Parser *p)
   while (lexer_can_peek(p->lexer))
   {
     Stmt *stmt = parse_stmt(p);
-    sll_queue_push(list.first, list.last, stmt);
+    if (stmt->kind != STMT_NULL)
+    {
+      sll_queue_push(list.first, list.last, stmt);
+    }
   }
 
   return list;
@@ -1100,126 +1076,6 @@ parse_statements(Parser *p)
 
 /////////////////////////////////////////////////////
 // DECLARATIONS
-
-internal Decl *
-parse_decl_enum(Parser *p)
-{
-  String8 name = parse_ident(p);
-
-  expect(p, '{');
-
-  Enum_Member_List members = {0};
-  u64 count = 0;
-
-  while (!check(p, '}'))
-  {
-    Enum_Member_Node *node = push_struct(p->arena, Enum_Member_Node);
-
-    node->v.name = parse_ident(p);
-    if (match(p, '='))
-    {
-      node->v.value = parse_expr(p);
-    }
-
-    sll_queue_push(members.first, members.last, node);
-    count += 1;
-
-    if (!match(p, ','))
-    {
-      break;
-    }
-  }
-
-  expect(p, '}');
-
-  Enum_Member_Array member_array = {0};
-  if (count > 0)
-  {
-    member_array.count = count;
-    member_array.v = push_array_nz(p->arena, Enum_Member, count);
-
-    u32 i = 0;
-    for each_node(it, Enum_Member_Node, members.first)
-    {
-      member_array.v[i++] = it->v;
-    }
-  }
-
-  return decl_enum(p, name, member_array);
-}
-
-internal Decl *
-parse_decl_var(Parser *p)
-{
-  // var name: type = expr;
-  String8 name = parse_ident(p);
-  Type_Spec *type = NULL;
-  Expr *expr = NULL;
-
-  if (match(p, ':'))
-  {
-    type = parse_type(p);
-  }
-
-  if (match(p, '='))
-  {
-    expr = parse_expr(p);
-  }
-
-  if (!type && !expr)
-  {
-    report_error(p, "Variables must have a type or an initializer");
-    trap();
-  }
-
-  expect(p, ';');
-
-  return decl_var(p, name, type, expr);
-}
-
-internal Decl *
-parse_decl_const(Parser *p)
-{
-  String8 name = parse_ident(p);
-  // Type_Spec *type = NULL;
-  Expr *expr = NULL;
-
-  // if (match(p, ':'))
-  // {
-  //   type = parse_type(p);
-  // }
-
-  if (match(p, '='))
-  {
-    expr = parse_expr(p);
-  }
-
-  // if (!type && !expr)
-  if (!expr)
-  {
-    // report_error(p, "Constants must have a type or an initializer");
-    report_error(p, "Constants must have an initializer");
-    trap();
-  }
-
-  expect(p, ';');
-
-  return decl_const(p, name, expr);
-}
-
-internal Proc_Param
-parse_decl_proc_param(Parser *p)
-{
-  Proc_Param param = {0};
-
-  // TODO: Support multiname param
-  // eg;   x, y: f32
-  param.name = parse_ident(p);
-  expect(p, ':');
-  param.type = parse_type(p);
-
-  return param;
-}
 
 internal String8
 parse_type_name(Parser *p)
@@ -1287,65 +1143,190 @@ parse_type_prefix(Parser *p)
   return t;
 }
 
+internal Decl *parse_decl_nosemi(Parser *p);
+
 internal Type_Spec *
 parse_type_proc(Parser *p)
 {
-  // update: proc(...) -> [...]
-  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_PROC);
-  // TODO make it type_spec_proc(...)
-
-  Type_Spec_List param_list = {0};
+  Decl_List list = {0};
   u64 param_count = 0;
 
   expect(p, '(');
 
   while (!match(p, ')'))
   {
-    Type_Spec *param = parse_type(p);
-    sll_queue_push(param_list.first, param_list.last, param);
+    // need to call parse_decl
+    // a := 5
+    // a: int
+    // Type_Spec *param = parse_type(p);
+    Decl *param = parse_decl_nosemi(p);
+    sll_queue_push(list.first, list.last, param);
     param_count += 1;
     match(p, ',');
   }
 
+  Type_Spec *ret = NULL;
   if (match(p, TOKEN_ARROW))
   {
-    t->proc.ret = parse_type(p);
+    ret = parse_type(p);
   }
 
-  Type_Spec_Array params = {0};
+  Stmt *body = NULL;
+  if (check(p, '{'))
+  {
+    body = parse_stmt_block(p);
+  }
+
+  Decl_Array params = {0};
   if (param_count > 0)
   {
     params.count = param_count;
-    params.v = push_array(p->arena, Type_Spec *, params.count);
+    params.v = push_array(p->arena, Decl *, params.count);
 
     u32 i = 0;
-    for each_node(it, Type_Spec, param_list.first)
+    for each_node(it, Decl, list.first)
     {
       params.v[i++] = it;
     }
   }
 
-  return t;
+  return type_spec_proc(p, params, ret, body);
+}
+
+internal Type_Spec *
+parse_type_aggr(Parser *p, Type_Spec_Kind kind)
+{
+  assert(kind == TYPE_SPEC_STRUCT || kind == TYPE_SPEC_UNION);
+  expect(p, '{');
+
+  Aggr_Field_List list = {0};
+  u64 count = 0;
+  while (!check(p, '}'))
+  {
+    Aggr_Field_Node *node = push_struct(p->arena, Aggr_Field_Node);
+    while (true)
+    {
+      String8 field_name = parse_ident(p);
+      str8_list_push(p->arena, &node->v.names, field_name);
+
+      if (match(p, ',')) continue;
+      if (match(p, ':')) break;
+
+      // if (!match(p, ':'))
+      // {
+      //   break;
+      // }
+
+      report_error(p, "Expected ',' or ':' after field name");
+    }
+
+    node->v.type = parse_type(p);
+    sll_queue_push(list.first, list.last, node);
+    list.count += 1;
+    count += 1;
+
+    if (match(p, ','))
+    {
+      continue;
+    }
+  }
+
+  expect(p, '}');
+
+  Aggr_Field_Array fields = {0};
+  if (count > 0)
+  {
+    fields.count = count;
+    fields.v = push_array_nz(p->arena, Aggr_Field, list.count);
+
+    u32 i = 0;
+    for each_node(it, Aggr_Field_Node, list.first)
+    {
+      fields.v[i++] = it->v;
+    }
+  }
+
+  return type_spec_aggr(p, kind, fields);
+}
+
+internal Type_Spec *
+parse_type_enum(Parser *p)
+{
+  expect(p, '{');
+
+  Enum_Member_List list = {0};
+  u64 count = 0;
+
+  while (!check(p, '}'))
+  {
+    Enum_Member_Node *node = push_struct(p->arena, Enum_Member_Node);
+
+    node->v.name = parse_ident(p);
+    if (match(p, '='))
+    {
+      node->v.value = parse_expr(p);
+    }
+
+    sll_queue_push(list.first, list.last, node);
+    count += 1;
+
+    if (!match(p, ','))
+    {
+      break;
+    }
+  }
+
+  expect(p, '}');
+
+  Enum_Member_Array members = {0};
+  if (count > 0)
+  {
+    members.count = count;
+    members.v = push_array_nz(p->arena, Enum_Member, count);
+
+    u32 i = 0;
+    for each_node(it, Enum_Member_Node, list.first)
+    {
+      members.v[i++] = it->v;
+    }
+  }
+
+  return type_spec_enum(p, members);
 }
 
 internal Type_Spec *
 parse_type_base(Parser *p)
 {
+  // 1. identifiers and built-in types
   if (check(p, TOKEN_IDENT) || (p->curr.kind >= TOKEN_S8 && p->curr.kind <= TOKEN_STRING))
   {
-    Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_NAME);
-    t->name = parse_type_name(p);
-    return t;
+    return type_spec_name(p, parse_type_name(p));
   }
+  // 2. proc(args) -> ret
   else if (match(p, TOKEN_PROC))
   {
-    Type_Spec *t = parse_type_proc(p);
-    return t;
+    return parse_type_proc(p);
   }
+  // 3. struct { ... }
+  else if (match(p, TOKEN_STRUCT))
+  {
+    return parse_type_aggr(p, TYPE_SPEC_STRUCT);
+  }
+  // 4. union { ... }
+  else if (match(p, TOKEN_UNION))
+  {
+    return parse_type_aggr(p, TYPE_SPEC_UNION);
+  }
+  // 5. enum { ... }
+  else if (match(p, TOKEN_ENUM))
+  {
+    return parse_type_enum(p);
+  }
+  // 6. grouping: (int)
   else if (match(p, '('))
   {
     Type_Spec *t = parse_type(p);
-    expect(p, ')'); // ?
+    expect(p, ')');
     return t;
   }
   Arena_Temp scratch = arena_scratch_get(0, 0);
@@ -1385,179 +1366,68 @@ parse_type(Parser *p)
 
   // Base case: Builtins or Identifiers
   return parse_type_base(p);
-
-  // Type_Spec *type = parse_type_base(p);
-  // while (check(p, '[') || check(p, '*'))
-  // {
-  //   if (match(p, '['))
-  //   {
-  //     Expr *expr = NULL;
-  //     if (!check(p, ']'))
-  //     {
-  //       expr = parse_expr(p);
-  //     }
-  //     expect(p, ']');
-
-  //     Type_Spec *elem = type;
-
-  //     type = type_spec_alloc(p, TYPE_SPEC_ARRAY);
-  //     type->array.elem = elem;
-  //     type->array.count = expr;
-  //   }
-  //   else
-  //   {
-  //     assert(check(p, '*'));
-  //     advance(p);
-  //     Type_Spec *elem = type;
-  //     type = type_spec_alloc(p, TYPE_SPEC_PTR);
-  //     type->ptr.pointee = elem;
-  //   }
-  // }
-
-  // return type;
-
-  // if (match(p, TOKEN_PROC)) return parse_type_proc(p);
-  // return parse_type_prefix(p);
 }
 
 internal Decl *
-parse_decl_proc(Parser *p)
-{
-  /*
-  proc make_person(name: string, age: int) -> Person
-  {
-    var person = Person{};
-    person.name = name;
-    person.age  = age;
-    return person;
-  }
-  */
-  // proc main(argc: int, argv: []cstring) -> int { return 0; }
-  String8 name = parse_ident(p);
-  expect(p, '(');
-
-  Param_List list = {0};
-  u64 count = 0;
-
-  while (!match(p, ')'))
-  {
-    Proc_Param_Node *node = push_struct(p->arena, Proc_Param_Node);
-    node->v = parse_decl_proc_param(p);
-    sll_queue_push(list.first, list.last, node);
-    count += 1;
-    match(p, ',');
-  }
-  // if (!match(p, ')'))
-  // {
-  //   do
-  //   {
-  //     Proc_Param *param = parse_decl_proc_param(p);
-  //     dll_push_back(params->first, params->last, param);
-  //   } while (match(p, ','));
-  // }
-  // expect(p, ')');
-  Type_Spec *ret = NULL;
-  if (match(p, TOKEN_ARROW))
-  {
-    ret = parse_type(p);
-  }
-
-  Param_Array params = {0};
-  if (count > 0)
-  {
-    params.count = count;
-    params.v = push_array_nz(p->arena, Proc_Param, params.count);
-
-    u32 i = 0;
-    for each_node(it, Proc_Param_Node, list.first)
-    {
-      params.v[i++] = it->v;
-    }
-  }
-
-  Stmt *body = parse_stmt_block(p);
-  return decl_proc(p, name, params, ret, body);
-}
-
-internal Decl *
-parse_decl_aggregate(Parser *p, Decl_Kind kind)
+parse_decl_nosemi(Parser *p)
 {
   String8 name = parse_ident(p);
-  expect(p, '{');
+  expect(p, ':');
 
-  Aggr_Field_List fields = {0};
-  u64 count = 0;
-  while (!check(p, '}'))
+  Type_Spec *type_hint = NULL;
+  Expr      *init_expr = NULL;
+  Type_Spec *init_type = NULL;
+  b32        is_const  = false;
+
+  // CASE A: Inferred Type (name :: value OR name := value)
+  if (check(p, ':') || check(p, '='))
   {
-    Aggr_Field_Node *node = push_struct(p->arena, Aggr_Field_Node);
-    while (true)
+    if (match(p, ':')) is_const = true;
+    else               match(p, '=');
+
+    // Is the value a Type Literal (struct/enum) or a Value Expression (5+2)?
+    if (is_explicit_type_start(p))
     {
-      String8 field_name = parse_ident(p);
-      str8_list_push(p->arena, &node->v.names, field_name);
-
-      if (match(p, ',')) continue;
-      if (match(p, ':')) break;
-
-      // if (!match(p, ':'))
-      // {
-      //   break;
-      // }
-
-      assert(!"Expected ',' or ':' after field name");
+      init_type = parse_type(p); // Color :: enum { RED, BLUE }
     }
-
-    node->v.type = parse_type(p);
-    sll_queue_push(fields.first, fields.last, node);
-    fields.count += 1;
-    count += 1;
-
-    if (match(p, ','))
+    else
     {
-      continue;
+      init_expr = parse_expr(p); // N :: 500
+    }
+  }
+  // CASE B: Explicit Type (name : int ...)
+  else
+  {
+    type_hint = parse_type(p);
+
+    if (match(p, ':')) // name : type : value;
+    {
+      is_const = true;
+      init_expr = parse_expr(p);
+    }
+    else if (match(p, '=')) // name : type = value;
+    {
+      init_expr = parse_expr(p);
     }
   }
 
-  expect(p, '}');
-
-  Aggr_Field_Array fields_array = {0};
-  if (count > 0)
+  // Return the appropriate node
+  if (is_const)
   {
-    fields_array.count = count;
-    fields_array.v = push_array_nz(p->arena, Aggr_Field, fields_array.count);
-
-    u32 i = 0;
-    for each_node(it, Aggr_Field_Node, fields.first)
-    {
-      fields_array.v[i++] = it->v;
-    }
+    // Your decl_const should be updated to accept both init_expr and init_type
+    return decl_const(p, name, type_hint, init_expr, init_type);
   }
 
-  return decl_aggregate(p, name, kind, fields_array);
-}
-
-internal Decl *
-parse_decl_typedef(Parser *p)
-{
-  // typedef name = type;
-  String8 name = parse_ident(p);
-  expect(p, '=');
-  Type_Spec *type = parse_type(p);
-  expect(p, ';');
-  return decl_typedef(p, name, type);
+  return decl_var(p, name, type_hint, init_expr);
 }
 
 internal Decl *
 parse_decl(Parser *p)
 {
-  if (match(p, TOKEN_PROC))    return parse_decl_proc(p);
-  if (match(p, TOKEN_STRUCT))  return parse_decl_aggregate(p, DECL_STRUCT);
-  if (match(p, TOKEN_UNION))   return parse_decl_aggregate(p, DECL_UNION);
-  if (match(p, TOKEN_ENUM))    return parse_decl_enum(p);
-  if (match(p, TOKEN_VAR))     return parse_decl_var(p);
-  if (match(p, TOKEN_CONST))   return parse_decl_const(p);
-  if (match(p, TOKEN_TYPEDEF)) return parse_decl_typedef(p);
-  report_error(p, "Expected declaration keyword");
-  return NULL;
+  while (match(p, ';')) {};
+  Decl *decl = parse_decl_nosemi(p);
+  expect(p, ';');
+  return decl;
 }
 
 internal Decl_List
@@ -1569,6 +1439,9 @@ parse_declarations(Parser *p)
   {
     Decl *decl = parse_decl(p);
     sll_queue_push(list.first, list.last, decl);
+
+    // // eat extra semicolons
+    // while (match(p, ';')) {}
   }
 
   return list;
@@ -1582,80 +1455,88 @@ parser_test()
   printf("\n");
 
   {
+    // String8 source = S(
+    //   "x = 5 + 3\n"
+    //   "do\n"
+    //   "{\n"
+    //   "  a -= a\n"
+    //   "} while a > b\n"
+    // );
+
     String8 source = S(
-      "x = 5 + 3;\n"
-      "x = -a;\n"
-      "x = (2 + 3) * 4;\n"
-      "x = a > b ? 1 : 0;\n"
-      "x = a && b;\n"
-      "x = y = z = 42;\n"
-      "{\n"
-      "  a = 5;\n"
-      "  if a > b\n"
-      "  {\n"
-      "    x = a;\n"
-      "  }\n"
-      "  else if a > c\n"
-      "  {\n"
-      "    x = c;\n"
-      "  }\n"
-      "  else if c > a\n"
-      "  {\n"
-      "    x = a;\n"
-      "  }\n"
-      "  else\n"
-      "  {\n"
-      "    x = b;\n"
-      "  }\n"
-      "}\n"
+      "x = 5 + 3\n"
+      "x = -a\n"
+      "x = (2 + 3) * 4\n"
+      "x = a > b ? 1 : 0\n"
+      "x = a && b\n"
+      "x = y = z = 42\n"
+      // "{\n"
+      // "  a = 5\n"
+      // // "  defer a = 40\n"
+      // // "  defer if a < b { print(a); }\n"
+      // // "  defer { b = c; }\n"
+      // "  if a > b {\n"
+      // "    x = a\n"
+      // "  } else if a > c {\n"
+      // "    x = c\n"
+      // "  } else if c > a {\n"
+      // "    x = a\n"
+      // "  } else {\n"
+      // "    x = b\n"
+      // "  }\n"
+      // "}\n"
 
-      "do\n"
-      "{\n"
-      "  a -= 1;\n"
-      "} while (a > b);\n"
+      // "defer { a = 41; }\n"
 
-      "while !request_shutdown()\n"
-      "{\n"
-      "  var dt: f32 = 1.0 / 60.0;\n"
-      "  tick_game(dt);\n"
+      "do {\n"
+      "  a -= 1\n"
+      "} while (a > b)\n"
+
+      "while !request_shutdown() {\n"
+      "  dt: f32 = 1.0 / 60.0\n"
+      "  tick_game(dt)\n"
       "}\n"
 
       // TODO: This takes the array and gives me a slice of all elements
       // or i can also do array[<lo>:<hi>]
-      // "return array[:];\n"
-      "return Person.{\"Joe\", 53};\n"
+      // "return array[:]\n"
+      // "return Person.{\"Joe\", 53}\n"
 
-      "return [10]Person.{};\n"
+      "return [10]Person.{}\n"
 
-      "var update_proc: proc(Entity);\n"
+      "update_proc: proc(en: Entity)\n"
 
-      "break;\n"
-      "continue;\n"
+      "break\n"
+      "continue\n"
 
-      "x = 5;\n"
-      "x = y = z;\n"
+      "x = 5\n"
+      "x = y = z\n"
 
-      "for var i = 0; i < 10; i += 1; {}\n"
-      "for i = 0; i < 10; i += 1; {}\n"
-      "for ; i < 10; i += 1; {}\n"
+      "for i := 0; i < 10; i += 1 {}\n"
+      "for i = 0; i < 10; i += 1 {}\n"
+      "for ; i < 10; i += 1 {}\n"
 
       "for i in 0 ..< 10 {}\n"
       "for i in 0 ..= 9 {}\n"
       "for i in 0 ..< 2*5 {}\n"
 
-      "var people: []Person;\n"
+      "people: []Person\n"
       "for person in people {}\n"
 
-      "switch c\n"
-      "{\n"
+      "switch c {\n"
+      // "{\n"
       "case 'a' ..= 'z', 'A' ..= 'Z':\n"
-      "  print(\"letter\");\n"
+      "  print(\"letter\")\n"
       "case '_':\n"
-      "  print(\"underscore\");\n"
+      "  print(\"underscore\")\n"
       "case 0..=9:\n"
-      "  print(\"number\");\n"
+      "  print(\"number\")\n"
       "case:\n"
-      "  print(\"default case\");\n"
+      "  print(\"default case\")\n"
+      "}\n"
+
+      "if a > b {\n"
+      "  return a\n"
       "}\n"
     );
 
@@ -1686,61 +1567,61 @@ parser_test()
 
   {
     String8 source = S(
-      // "var foo = a ? a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m <= n*(p+q)/r : 0;\n"
-      // "var foo = a ? 1 : 0;\n"
-      // "var foo = a ? b + c : 0;\n"
-      // "var foo = a ? b + c << d : 0;\n"
-      // "var foo = a ? b == c : 0;\n"
-      // "var foo = a ? +u : 0;\n"
-      "var foo = a ? h(x) : 0;\n" // proc call
-      "var foo = a ? k[x] : 0;\n" // indexing
-      "enum Color\n"
-      "{\n"
+      // "var foo = a ? a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m <= n*(p+q)/r : 0\n"
+      // "var foo = a ? 1 : 0\n"
+      // "var foo = a ? b + c : 0\n"
+      // "var foo = a ? b + c << d : 0\n"
+      // "var foo = a ? b == c : 0\n"
+      // "var foo = a ? +u : 0\n"
+      "foo := a ? h(x) : 0\n" // proc call
+      "foo := a ? k[x] : 0\n" // indexing
+      "Color :: enum {\n"
+      // "{\n"
       "  Red = 3,\n"
       "  Green,\n"
-      "  Blue = 0\n"
+      "  Blue = 0,\n"
       "}\n"
       // "\n"
-      "struct Person\n"
+      "Person :: struct\n"
       "{\n"
       "  name:  string,\n"
       "  x,y,z: f32,\n"
       "  age:   int,\n"
-      "}\n"
+      "};;;;;;;;;;;;;;;;;\n" // extra semicolons should not cause errors
       "\n"
-      "var x = Point.{1,2};\n"
+      "x := Point.{1,2}\n"
       "\n"
-      "proc make_person(name: string, age: int) -> Person\n"
-      "{\n"
-      "  var person: Person;\n"
-      "  person.name = name;\n"
-      "  person.age  = age;\n"
-      "  return person;\n"
+      "make_person :: proc(name: string, age: int) -> Person {\n"
+      "  person: Person\n"
+      "  person.name = name\n"
+      "  person.age  = age\n"
+      "  return person\n"
+      // "  return\n"
       "}\n"
 
-      // "const n = size_of(:[16]*int);\n"
-      // "const n = sizeof(1+2);\n"
-      "var x = b == 1 ? 1+2 : 3-4;\n"
-      "proc fact(n: int) -> int { trace(\"fact\"); if n == 0 { return 1; } else { return n * fact(n-1); } }\n"
-      // "proc fact(n: int) -> int { var p = 1; for var i = 1; i n; i += 1 { p *= i; } return p; }\n"
-      // "var foo = a ? a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m <= n*(p+q)/r : 0;\n"
-      // "proc f(x: int) -> bool { switch x { case 0: case 1: return true; case 2: default: return false; } }\n"
-      "enum Color { RED = 3, GREEN, BLUE = 0 }\n"
-      // "const pi = 3.14\n"
-      "struct Vector { x, y: f32, }\n"
-      "var v = Vector.{1.0, -1.0};\n"
-      // "var v: Vector = {1.0. -1.0};\n"
-      "union Int_Or_Float { i: int, f: f32, }\n"
-      "typedef Vectors = [1+2]Vector;\n"
-      "proc f() { do { print(42); } while (1); }\n"
-      "typedef T = [16]proc(int, f32, string, Vector, string, f32, int, uint) -> int;\n"
-      // "proc f() { enum E { A, B, C }; return; }\n"
-      "proc f() { if (1) { return 1; } else if (2) { return 2; } else { return 3; } }\n"
+      // "N :: size_of(:[16]*int)\n"
+      // "N :: sizeof(1+2)\n"
+      "x := b == 1 ? 1+2 : 3-4\n"
+      "fact :: proc(n: int) -> int { trace(\"fact\"); if n == 0 { return 1; } else { return n * fact(n-1); } }\n"
+      "fact :: proc(n: int) -> int { p := 1; for i := 1; i < n; i += 1 { p *= i; } return p; }\n"
+      // "foo := a ? a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m <= n*(p+q)/r : 0\n"
+      // "f :: proc(x: int) -> bool { switch x { case 0: case 1: return true; case 2: default: return false; } }\n"
+      "Color :: enum { RED = 3, GREEN, BLUE = 0 }\n"
+      // "PI :: 3.14\n"
+      "Vector :: struct { x, y: f32, }\n"
+      "v := Vector.{1.0, -1.0}\n"
+      // "v: Vector = {1.0. -1.0}\n"
+      "Int_Or_Float :: union { i: int, f: f32, }\n"
+      "Vectors :: [1+2]Vector\n"
+      "f :: proc() { do { print(42); } while (1); }\n"
+      // "T :: [16]proc(int, f32, string, Vector, string, f32, int, uint) -> int\n"
+      "f :: proc() { E :: enum { A, B, C, }; return; }\n"
+      "f :: proc() { if (1) { return 1; } else if (2) { return 2; } else { return 3; } }\n"
 
-      "union Int_Or_Ptr { i: int, p: *int, }\n"
+      "Int_Or_Ptr :: union { i: int, p: *int, }\n"
 
-      "struct Vector { x, y: int, }\n"
-      "var v: Vector = 0 ? .{1,2} : .{3,4};\n"
+      "Vector :: struct { x, y: int, }\n"
+      "v: Vector = 0 ? .{1,2} : .{3,4}\n"
     );
     /*
 

@@ -25,7 +25,7 @@
 #include "strings.c"
 #include "ast.c"
 #include "parser.c"
-#include "resolver.c"
+// #include "resolver.c"
 #ifdef _WIN32
 # include "os_win32.c"
 #else
@@ -90,6 +90,89 @@ main(int argc, char **argv)
   Arena_Temp scratch = arena_scratch_get(0, 0);
 
   String8 source = S(
+    // "Person :: struct {\n"
+    // "  a, b, c: int,\n"
+    // "  name: string,\n"
+    // "}\n"
+    // "\n"
+    // "a := 5387219973821\n"
+    // "b := 3.14\n"
+    // "print(a + cast(int)b)\n"
+    // "\n"
+
+
+    "x = 5 + 3\n"
+    "x = -a\n"
+    "x = (2 + 3) * 4\n"
+    "x = a > b ? 1 : 0\n"
+    "x = a && b\n"
+    "x = y = z = 42\n"
+    // "{\n"
+    // "  a = 5\n"
+    // // "  defer a = 40\n"
+    // // "  defer if a < b { print(a); }\n"
+    // // "  defer { b = c; }\n"
+    // "  if a > b {\n"
+    // "    x = a\n"
+    // "  } else if a > c {\n"
+    // "    x = c\n"
+    // "  } else if c > a {\n"
+    // "    x = a\n"
+    // "  } else {\n"
+    // "    x = b\n"
+    // "  }\n"
+    // "}\n"
+
+    // "defer { a = 41; }\n"
+
+    "do {\n"
+    "  a -= 1\n"
+    "} while (a > b)\n"
+
+    "while !request_shutdown() {\n"
+    "  dt: f32 = 1.0 / 60.0\n"
+    "  tick_game(dt)\n"
+    "}\n"
+
+    // TODO: This takes the array and gives me a slice of all elements
+    // or i can also do array[<lo>:<hi>]
+    // "return array[:]\n"
+    "return Person.{\"Joe\", 53}\n"
+
+    "return [10]Person.{}\n"
+
+    "update_proc: proc(en: Entity)\n"
+
+    "break\n"
+    "continue\n"
+
+    "x = 5\n"
+    "x = y = z\n"
+
+    "for i := 0; i < 10; i += 1 {}\n"
+    "for i = 0; i < 10; i += 1 {}\n"
+    "for ; i < 10; i += 1 {}\n"
+
+    "for i in 0 ..< 10 {}\n"
+    "for i in 0 ..= 9 {}\n"
+    "for i in 0 ..< 2*5 {}\n"
+
+    "people: []Person\n"
+    "for person in people {}\n"
+
+    "switch c {\n"
+    // "{\n"
+    "case 'a' ..= 'z', 'A' ..= 'Z':\n"
+    "  print(\"letter\")\n"
+    "case '_':\n"
+    "  print(\"underscore\")\n"
+    "case 0..=9:\n"
+    "  print(\"number\")\n"
+    "case:\n"
+    "  print(\"default case\")\n"
+    "}\n"
+
+    /*
     "struct Person\n"
     "{\n"
     "  name: string,\n"
@@ -126,6 +209,7 @@ main(int argc, char **argv)
     // "  1ee10;\n"
     "  print(\"Hello KK!\");\n"
     "}\n"
+    */
   );
 
   {
@@ -443,7 +527,7 @@ main(int argc, char **argv)
 
   printf("\n");
   parser_test();
-  resolve_test();
+  // resolve_test();
   // order_test();
 
   arena_scratch_release(scratch);

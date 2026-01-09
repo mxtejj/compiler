@@ -120,6 +120,7 @@ struct Lexer
   u64 cursor;
   u64 line;
   u64 bol; // beginning of line
+  b32 insert_semicolon;
 };
 
 internal Lexer lexer_init(String8 source);

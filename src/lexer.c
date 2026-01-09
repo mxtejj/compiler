@@ -6,6 +6,14 @@
 #include <math.h>
 #include "globals.h"
 
+//
+// TODO:
+// [ ] handle each token explicitly
+// [ ] add comments
+//   [ ] single line
+//   [ ] multi line
+//
+
 internal String8
 str_from_token_kind(Arena *arena, Token_Kind kind)
 {
@@ -471,11 +479,59 @@ lexer_parse_ident_or_keyword(Lexer *l)
 Token
 lexer_next(Lexer *l)
 {
-  lexer_eat_whitespace(l);
+  // lexer_eat_whitespace(l);
+
+  for (;;)
+  {
+    if (!lexer_can_peek(l)) break;
+
+    char c = lexer_peek(l);
+    if (c == ' ' || c == '\t' || c == '\r')
+    {
+      lexer_eat(l);
+    }
+    else if (c == '\n')
+    {
+      // if the previous token was a terminator, we stop
+      // here and return a semicolon instead of eating the newline
+      if (l->insert_semicolon)
+      {
+        // // PEEK AHEAD: Skip whitespaces/newlines to see what's coming
+        // u64 temp_cursor = l->cursor + 1;
+        // while (temp_cursor < l->source.count && isspace(l->source.data[temp_cursor]))
+        // {
+        //   temp_cursor++;
+        // }
+
+        // // If the next actual token is a '{', don't insert a semicolon!
+        // if (temp_cursor < l->source.count && l->source.data[temp_cursor] == '{')
+        // {
+        //   // l->insert_semicolon = false;
+        //   lexer_eat(l); // Just eat the newline
+        //   continue;
+        // }
+
+        l->insert_semicolon = false; // reset
+        return (Token){ .kind = ';', .lexeme = str8_lit(";") };
+      }
+      lexer_eat(l);
+    }
+    else
+    {
+      break;
+    }
+  }
   l->start = l->cursor;
 
   if (!lexer_can_peek(l))
+  {
+    if (l->insert_semicolon)
+    {
+      l->insert_semicolon = false;
+      return (Token){ .kind = ';', .lexeme = str8_lit(";") };
+    }
     return lexer_make_token(l, TOKEN_EOF);
+  }
 
   Token t = {0};
 
@@ -805,13 +861,50 @@ lexer_next(Lexer *l)
       t = lexer_make_token(l, '<');
     }
     break;
-
   default:
     // ASCII Code token
     char c = lexer_peek(l);
     lexer_eat(l);
     // t = lexer_make_token(l, lexer_peek(l));
     t = lexer_make_token(l, c);
+    break;
+  }
+
+  switch (t.kind)
+  {
+  case TOKEN_IDENT:
+  case TOKEN_NIL:
+  case TOKEN_S8:
+  case TOKEN_S16:
+  case TOKEN_S32:
+  case TOKEN_S64:
+  case TOKEN_U8:
+  case TOKEN_U16:
+  case TOKEN_U32:
+  case TOKEN_U64:
+  case TOKEN_UINTPTR:
+  case TOKEN_INT:
+  case TOKEN_UINT:
+  case TOKEN_F32:
+  case TOKEN_F64:
+  case TOKEN_BOOL:
+  case TOKEN_STRING:
+  case TOKEN_TRUE:
+  case TOKEN_FALSE:
+  case TOKEN_INTEGER_LITERAL:
+  case TOKEN_FLOAT_LITERAL:
+  case TOKEN_STRING_LITERAL:
+  case TOKEN_CHAR_LITERAL:
+  case ')':
+  case ']':
+  case '}':
+  // case TOKEN_RETURN:
+  case TOKEN_BREAK:
+  case TOKEN_CONTINUE:
+    l->insert_semicolon = true;
+    break;
+  default:
+    l->insert_semicolon = false;
     break;
   }
 
