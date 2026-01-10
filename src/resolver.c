@@ -1259,7 +1259,7 @@ eval_int_binary(Token_Kind op, s64 left, s64 right)
   case TOKEN_LTEQ:        return left <= right;
   case '>':               return left > right;
   case '<':               return left < right;
-  case TOKEN_LOGICAL_OR:  return (left != 0) || (right != 0); // TODO: handle separately = short circuiting
+  case TOKEN_LOGICAL_OR:  return (left != 0) || (right != 0); // TODO(#20): handle separately = short circuiting
   case TOKEN_LOGICAL_AND: return (left != 0) && (right != 0);
   default:
     assert(0);
