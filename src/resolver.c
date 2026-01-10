@@ -1554,7 +1554,7 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
 {
   Operand result = {0};
 
-  // TODO: address constants
+  // TODO(#24): address constants
   switch (expr->kind)
   {
   case EXPR_INTEGER_LITERAL:
