@@ -1564,7 +1564,7 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
     result = resolved_rvalue(type_float);
     break;
   case EXPR_STRING_LITERAL:
-    // IMPORTANT TODO: get rid of char * and use sized string!!
+    // IMPORTANT TODO(#25): get rid of char * and use sized string!!
     result = resolved_rvalue(type_ptr(type_char));
     break;
   case EXPR_CHAR_LITERAL:
