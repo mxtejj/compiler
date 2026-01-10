@@ -1474,7 +1474,7 @@ resolve_expr_call(Expr *expr)
 internal Operand
 resolve_expr_ternary(Expr *expr, Type *expected_type)
 {
-  // TODO: have actual bool types
+  // TODO(#22): have actual bool types
   assert(expr->kind == EXPR_TERNARY);
   Operand cond = ptr_decay(resolve_expr(expr->ternary.cond));
   if (cond.type->kind != TYPE_INT && cond.type->kind != TYPE_PTR)
