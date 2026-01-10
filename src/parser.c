@@ -25,6 +25,22 @@ assignment         = += -= *= ...
 
 */
 
+//
+// TODO:
+// [ ] Instead of having a discriminated union for Expr, Stmt, Decl; do this?:
+// - ref: https://github.com/graphitemaster/codin/blob/main/src/tree.h#L237
+//
+// struct Expr {
+//   Expr_Kind kind;
+// };
+//
+// struct Unary_Expr {
+//   Expr base;
+//   Operator_Kind operator;
+//   Expr *operand;
+// }
+//
+
 internal Token
 advance(Parser *p);
 
@@ -60,7 +76,7 @@ parse_expr(Parser *p);
 internal void
 report_error(Parser *p, const char *fmt, ...)
 {
-  // TODO: duplicate of lexer_syntax_error
+  // TODO(#8): duplicate of lexer_syntax_error
   Lexer *l = p->lexer;
 
   va_list args;
@@ -427,6 +443,8 @@ parse_expr_postfix(Parser *p)
     }
 
     // FIELD: person.name
+    // TODO: rename this to selector and also parse
+    // .Enumerator
     if (match(p, '.'))
     {
       String8 name = parse_ident(p);
@@ -466,16 +484,22 @@ parse_expr_unary(Parser *p)
     Expr *expr = NULL;
 
     expect(p, '(');
-    if (match(p, ':'))
+    
+    // Distinguish between type and expression:
+    // - Explicit types: int, *int, [3]int, struct{}, proc(), etc.
+    // - Expressions: identifiers (could be vars or type names), literals, operators, etc.
+    // We use is_explicit_type_start to avoid ambiguity with identifiers.
+    if (is_explicit_type_start(p))
     {
-      // size_of(:Entity) TYPE
+      // size_of(int), size_of(*int), size_of([3]int)
       Type_Spec *type = parse_type(p);
       expect(p, ')');
       expr = expr_size_of_type(p, type);
     }
     else
     {
-      // size_of(f32)     EXPR
+      // size_of(x), size_of(Vector), size_of(1+2)
+      // Identifiers are parsed as expressions - resolver handles type names
       Expr *e = parse_expr(p);
       expect(p, ')');
       expr = expr_size_of_expr(p, e);
@@ -484,7 +508,7 @@ parse_expr_unary(Parser *p)
   }
 
   // prefix operators
-  // TODO(mxtej) add?: increment, decrement
+  // TODO add?: increment, decrement
   while (match(p, '!') || match(p, '-') || match(p, '+') || match(p, '~') || match(p, '&'))
   {
     Token op = p->prev;
@@ -1390,13 +1414,14 @@ parse_decl_nosemi(Parser *p)
     else               match(p, '=');
 
     // Is the value a Type Literal (struct/enum) or a Value Expression (5+2)?
-    if (is_explicit_type_start(p))
+    // But check if it's a compound literal first (e.g., [3]int.{1,2,3})
+    if (is_explicit_type_start(p) && !looks_like_dotted_compound(p))
     {
       init_type = parse_type(p); // Color :: enum { RED, BLUE }
     }
     else
     {
-      init_expr = parse_expr(p); // N :: 500
+      init_expr = parse_expr(p); // N :: 500 or a := [3]int.{1,2,3}
     }
   }
   // CASE B: Explicit Type (name : int ...)
