@@ -463,7 +463,7 @@ lexer_parse_ident_or_keyword(Lexer *l)
 
   Token t = lexer_make_token(l, TOKEN_IDENT);
 
-  // TODO: String interning for faster string checks
+  // TODO(#5): String interning for faster string checks
   for (u32 i = 0; i < array_count(keywords); i++)
   {
     if (str8_equal(t.lexeme, keywords[i].value))
