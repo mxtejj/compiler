@@ -1354,7 +1354,7 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
 
   if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION && type->kind != TYPE_ARRAY)
   {
-    // TODO: slices
+    // TODO(#21): slices
     fatal("Compound literals can only be used with struct, union and array types");
   }
 
