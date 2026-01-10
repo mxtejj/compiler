@@ -1113,7 +1113,7 @@ resolve_expr_field(Expr *expr)
 internal Operand
 ptr_decay(Operand expr)
 {
-  // TODO: dont do this
+  // TODO(#17): dont do this
   if (expr.type->kind == TYPE_ARRAY)
   {
     return resolved_rvalue(type_ptr(expr.type->array.base));
