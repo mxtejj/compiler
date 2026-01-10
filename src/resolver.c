@@ -1710,7 +1710,7 @@ resolve_test()
 
     "f3 :: proc(n: int) -> int {\n"
     "  square :: proc(m: int) -> int {\n"
-    "    return 2*m\n" // TODO: this inner proc can access symbol `n`, this is wrong
+    "    return 2*m\n" // TODO(#27): this inner proc can access symbol `n`, this is wrong
     "  }\n"
     "  return square(n)\n"
     "}\n"
