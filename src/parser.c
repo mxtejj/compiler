@@ -272,7 +272,7 @@ parse_compound_literal(Parser *p, Type_Spec *explicit_type)
 {
   expect(p, '{');
 
-  // TODO: use Compound_Field_Node and arena scratch for list; also in other places
+  // TODO(#9): use Compound_Field_Node and arena scratch for list; also in other places
   Compound_Field_List list = {0};
 
   if (!match(p, '}'))
