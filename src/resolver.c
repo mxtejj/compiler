@@ -1244,7 +1244,7 @@ eval_int_binary(Token_Kind op, s64 left, s64 right)
     return left % right;
   }
   // TODO(#18): Handle UB in shifts etc.
-  case TOKEN_LSHIFT: return left << right; // TODO: handle signed vs unsigned
+  case TOKEN_LSHIFT: return left << right; // TODO(#19): handle signed vs unsigned
   case TOKEN_RSHIFT: return left >> right;
   case '+': return left + right;
   case '-': return left - right;
