@@ -255,16 +255,18 @@ expr_compound(Parser *p, Type_Spec *type, Compound_Field_Array args)
 internal Expr *
 expr_size_of_expr(Parser *p, Expr *e)
 {
-  Expr *expr = expr_alloc(p, EXPR_SIZE_OF_EXPR);
-  expr->size_of_expr = e;
+  Expr *expr = expr_alloc(p, EXPR_SIZE_OF);
+  expr->size_of.is_expr = true;
+  expr->size_of.expr = e;
   return expr;
 }
 
 internal Expr *
 expr_size_of_type(Parser *p, Type_Spec *type)
 {
-  Expr *expr = expr_alloc(p, EXPR_SIZE_OF_TYPE);
-  expr->size_of_type = type;
+  Expr *expr = expr_alloc(p, EXPR_SIZE_OF);
+  expr->size_of.is_expr = false;
+  expr->size_of.type = type;
   return expr;
 }
 
@@ -377,7 +379,7 @@ make_token(char c)
 internal void
 print_type(Arena *arena, String8List *list, int *indent, Type_Spec *t)
 {
-  // TODO: Use read_only nil_typespec instead of actual NULL
+  // TODO(#2): Use read_only nil_typespec instead of actual NULL
   if (!t)
   {
     str8_list_pushf(arena, list, "nil");
@@ -690,14 +692,16 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
     }
     str8_list_pushf(arena, list, ")");
     break;
-  case EXPR_SIZE_OF_EXPR:
-    str8_list_pushf(arena, list, "(sizeof_expr ");
-    print_expr(arena, list, indent, e->size_of_expr);
-    str8_list_pushf(arena, list, ")");
-    break;
-  case EXPR_SIZE_OF_TYPE:
-    str8_list_pushf(arena, list, "(sizeof_type ");
-    print_type(arena, list, indent, e->size_of_type);
+  case EXPR_SIZE_OF:
+    str8_list_pushf(arena, list, "(sizeof ");
+    if (e->size_of.is_expr)
+    {
+      print_expr(arena, list, indent, e->size_of.expr);
+    }
+    else
+    {
+      print_type(arena, list, indent, e->size_of.type);
+    }
     str8_list_pushf(arena, list, ")");
     break;
   default:
