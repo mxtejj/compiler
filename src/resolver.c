@@ -817,7 +817,7 @@ resolve_cond_expr(Expr *expr)
   Operand cond = resolve_expr(expr);
   if (cond.type != type_int)
   {
-    // TODO: make it so cond has to be `bool` not `int`
+    // TODO(#14): make it so cond has to be `bool` not `int`
     fatal("condition expression must be of type int");
   }
 }
