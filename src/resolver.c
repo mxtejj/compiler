@@ -1502,7 +1502,7 @@ resolve_expr_index(Expr *expr)
   Operand operand = ptr_decay(resolve_expr(expr->index.expr));
   if (operand.type->kind != TYPE_PTR && operand.type->kind != TYPE_ARRAY)
   {
-    // IMPORTANT TODO: make it so u can only index arrays and add multipointer like in odin [^] == [*]
+    // IMPORTANT TODO(#23): make it so u can only index arrays and add multipointer like in odin [^] == [*]
     fatal("Can only index arrays or pointers");
   }
   Operand index   = resolve_expr(expr->index.index);
