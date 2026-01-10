@@ -1767,7 +1767,7 @@ resolve_test()
 
     "some_number: int = 0\n"
     // "some_number += 1;\n"
-    // "add_ints :: proc(a := 0, b: int) -> int {\n" // TODO: a gets inferred type void
+    // "add_ints :: proc(a := 0, b: int) -> int {\n" // TODO(#28): a gets inferred type void
     "add_ints :: proc(a: int, b: int) -> int {\n"
     "  c: int\n"
     "  c += a\n"
