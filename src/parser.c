@@ -525,7 +525,7 @@ parse_expr_factor(Parser *p)
   Expr *expr = parse_expr_unary(p);
 
   // TODO(#11): %  - modulo (truncated)  - integers
-  // TODO: %% - remainder (floored) - integers
+  // TODO(#12): %% - remainder (floored) - integers
   while (match(p, '/') || match(p, '*') || match(p, '%'))
   {
     Token op = p->prev;
