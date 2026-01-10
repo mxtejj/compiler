@@ -713,7 +713,7 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
 internal void
 print_stmt(Arena *arena, String8List *list, int *indent, Stmt *s)
 {
-  // TODO: Use read_only nil_stmt instead of actual NULL
+  // TODO(#4): Use read_only nil_stmt instead of actual NULL
   if (!s)
   {
     str8_list_pushf(arena, list, "nil");
