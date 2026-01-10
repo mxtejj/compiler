@@ -16,7 +16,7 @@ arena_alloc(u64 reserve_size, u64 commit_size, Arena_Flags flags)
     arena = NULL;
   }
 
-  // TODO: Graphical assert
+  // TODO(#1): Graphical assert
   assert(arena != NULL && "Failed to commit arena memory");
 
   // if (arena == NULL)
