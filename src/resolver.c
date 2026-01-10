@@ -1569,7 +1569,7 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
     break;
   case EXPR_CHAR_LITERAL:
     // result = resolved_rvalue(type_char);
-    // TODO: for now this will just be converted to int const
+    // TODO(#26): for now this will just be converted to int const
     result = resolved_const(expr->literal.character);
     break;
   case EXPR_IDENT:
