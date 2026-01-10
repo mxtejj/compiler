@@ -894,7 +894,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
   }
   case STMT_RETURN:
   {
-    // TODO: support multiple returns
+    // TODO(#15): support multiple returns
     if (stmt->return_expr)
     {
       Operand result = resolve_expected_expr(stmt->return_expr, ret_type);
