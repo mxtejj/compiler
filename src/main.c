@@ -198,7 +198,7 @@ main(int argc, char **argv)
     "  .5;\n"
     "  42E-1;\n"
     "  0e0;\n"
-    // "  .5e2;\n" // TODO: Support leading decimal (.5), not trailing (5.)?
+    // "  .5e2;\n" // TODO(#7): Support leading decimal (.5), not trailing (5.)?
     "  5.e-1;\n"
     "  0.0e0;\n"
     // ERRORS
