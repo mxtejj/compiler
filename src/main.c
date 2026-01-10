@@ -26,6 +26,7 @@
 #include "ast.c"
 #include "parser.c"
 #include "resolver.c"
+#include "codegen.c"
 #ifdef _WIN32
 # include "os_win32.c"
 #else
@@ -134,7 +135,7 @@ main(int argc, char **argv)
     "  tick_game(dt)\n"
     "}\n"
 
-    // TODO: This takes the array and gives me a slice of all elements
+    // TODO(#6): This takes the array and gives me a slice of all elements
     // or i can also do array[<lo>:<hi>]
     // "return array[:]\n"
     "return Person.{\"Joe\", 53}\n"
@@ -431,7 +432,7 @@ main(int argc, char **argv)
 
       { .input = S("Person.{name=\"Bob\", scores=[]int.{10,20,30}}"), .output = S("(compound Person name=Bob scores=(compound []int 10 20 30))") },
 
-      // TODO(mxtej): This test does not output the right result
+      // TODO: This test does not output the right result
       // { .input = S(
       //   "Foo{"
       //   "  a = Bar{"
@@ -527,8 +528,8 @@ main(int argc, char **argv)
 
   printf("\n");
   parser_test();
-  resolve_test();
-  // order_test();
+  // resolve_test();
+  codegen_test();
 
   arena_scratch_release(scratch);
   arena_delete(g_arena);
