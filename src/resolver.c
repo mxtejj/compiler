@@ -1021,7 +1021,7 @@ resolve_sym(Sym *sym)
     break;
   case SYM_CONST:
   {
-    // TODO: `distinct` keyword
+    // TODO(#16): `distinct` keyword
     // My_Int :: distinct int
     // #assert(My_Int != int)
 
