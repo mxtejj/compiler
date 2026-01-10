@@ -548,7 +548,7 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
 internal void
 print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
 {
-  // TODO: Use read_only nil_expr instead of actual NULL
+  // TODO(#3): Use read_only nil_expr instead of actual NULL
   if (!e)
   {
     str8_list_pushf(arena, list, "nil");
