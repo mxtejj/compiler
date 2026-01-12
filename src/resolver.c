@@ -926,6 +926,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
   {
     Decl *decl = stmt->decl;
     Sym *sym = sym_decl(decl);
+    decl->sym = sym; // @HACK
     resolve_sym(sym);
     sym_push(sym);
     break;
@@ -1055,7 +1056,23 @@ resolve_sym(Sym *sym)
   }
 
   sym->state = SYM_RESOLVED;
-  sym_list_push(&ordered_global_syms, sym);
+  
+  // Only add to ordered_global_syms if it's actually in the global symbol table
+  // (not a local variable or parameter inside a procedure)
+  bool is_global = false;
+  for each_node(it, Sym_Node, global_syms.first)
+  {
+    if (it->v == sym)
+    {
+      is_global = true;
+      break;
+    }
+  }
+  
+  if (is_global)
+  {
+    sym_list_push(&ordered_global_syms, sym);
+  }
 }
 
 internal void
@@ -1572,6 +1589,10 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
     // TODO(#26): for now this will just be converted to int const
     result = resolved_const(expr->literal.character);
     break;
+  case EXPR_BOOL_LITERAL:
+    // TODO: for now this will just be converted to int const
+    result = resolved_const(expr->literal.boolean);
+    break;
   case EXPR_IDENT:
     result = resolve_expr_name(expr);
     break;
@@ -1674,199 +1695,4 @@ sym_global_complete_syms()
   {
     complete_sym(it->v);
   }
-}
-
-internal void
-resolve_test()
-{
-  printf("\n");
-  printf("--- RESOLVE TEST\n");
-  printf("\n");
-
-  init_global_syms();
-
-  /*
-  TODO:
-  [ ] Fix parsing of compound literals
-  [ ] Fix being able to index array with constant index out of bounds
-  */
-
-  String8 source = S(
-    "i: int\n"
-
-    "f1 :: proc() {\n"
-    "  N :: 8\n"
-    "  a: [N]int\n"
-    "  j := 0\n"
-    "  i += 1\n"
-    "  return\n"
-    "}\n"
-
-    "f2 :: proc() {\n"
-    "  N :: 4\n"
-    "  a: [N]int\n"
-    // "  i += j\n" // this should error
-    "}\n"
-
-    "f3 :: proc(n: int) -> int {\n"
-    "  square :: proc(m: int) -> int {\n"
-    "    return 2*m\n" // TODO(#27): this inner proc can access symbol `n`, this is wrong
-    "  }\n"
-    "  return square(n)\n"
-    "}\n"
-
-    "f4 :: proc(x: int) -> int {\n"
-    "  if x {\n"
-    "    return -x\n"
-    "  } else if x % 2 == 0 {\n"
-    "    return 2\n"
-    "  } else {\n"
-    "    return -1\n"
-    "  }\n"
-    "}\n"
-
-    "f5 :: proc(n: int) -> int {\n"
-    "  for i in 0 ..< n {\n"
-    "    if i % 3 == 0 {\n"
-    "      return n\n"
-    "    }\n"
-    "  }\n"
-    "  return 0\n"
-    "}\n"
-
-    "f6 :: proc(x: int) -> int {\n"
-    "  switch x {\n"
-    "  case 0, 1:\n"
-    "    return 42\n"
-    "  case 3:\n"
-    "    fallthrough\n"
-    "  case:\n"
-    "    return -1\n"
-    "  }\n"
-    "  return 0\n"
-    "}\n"
-
-    "f7 :: proc(n: int) -> int {\n"
-    "  p := 1\n"
-    "  while n > 0 {\n"
-    "    p *= 2\n"
-    "    n -= 1\n"
-    "  }\n"
-    "  return p\n"
-    "}\n"
-
-    "f8 :: proc(n: int) -> int {\n"
-    "  p := 1\n"
-    "  do {\n"
-    "    p *= 2\n"
-    "    n -= 1\n"
-    "  } while n > 0\n"
-    "  return p\n"
-    "}\n"
-
-
-    "some_number: int = 0\n"
-    // "some_number += 1;\n"
-    // "add_ints :: proc(a := 0, b: int) -> int {\n" // TODO(#28): a gets inferred type void
-    "add_ints :: proc(a: int, b: int) -> int {\n"
-    "  c: int\n"
-    "  c += a\n"
-    "  c += b\n"
-    "  return c\n"
-    "}\n"
-
-    "Int_Or_Ptr :: union { i: int, p: *int, }\n"
-    "u1 := Int_Or_Ptr.{i = 42}\n"
-    "u2 := Int_Or_Ptr.{p = cast(*int)42}\n"
-    "ints := [256]int.{1, 2, ['a'] = 42, [255] = 123}\n"
-
-    "a: [3]int = .{1,2,3}\n"
-    // "a: [3]int\n"
-    "a := [3]int.{1,2,3}\n"
-    "b: [4]int\n"
-    "p := &a[1]\n"
-    "i := p[1]\n"
-    "j := p.*\n"
-    "N :: 5 + size_of(1 ? a : b)\n"
-    "M :: size_of(&a[0])\n"
-
-    "Vector :: struct { x, y: int, }\n"
-    "v: Vector\n"
-    "V_SIZE :: size_of(Vector)\n"
-    "v: Vector = 0 ? .{1,2} : .{3,4}\n"
-    "vs: [2][2]Vector = .{.{.{1,2},.{3,4}}, .{.{5,6},.{7,8}}}\n"
-
-    "pi := 3.14\n"
-    "name := \"stuff\"\n"
-
-    "v: Vector = .{1,2}\n"
-    "a := 42\n"
-    "p := cast(*void)a\n"
-    "j := cast(int)p\n"
-    "q := cast(*int)j\n"
-
-    "I :: 42\n"
-    "J :: +I\n"
-    "K :: -I\n"
-    "L :: !!I\n"
-    "M :: ~7 + 1 == -7\n"
-    "A :: 1000/((2*3-5) << 1)\n"
-
-    "K :: 1 ? 2 : 3\n"
-    "Vector_Alias :: Vector\n"
-    "addv :: proc(a: Vector_Alias, b: Vector) -> Vector { return .{ a.x + b.x, a.y + b.y }; }\n"
-    "x := addv(Vector.{1,2}, Vector.{3,4})\n"
-    "a: [3]int = .{1,2,3}\n"
-    "i := a[1]\n"
-    "p := &a[1]\n"
-    "i := p[1]\n"
-    "w := Vector.{3,4}\n"
-    "i := 42\n"
-    "u := Int_Or_Ptr.{ i, &i }\n"
-
-    "P :: 1 + size_of(p)\n" // 9
-    "p: *T\n" // 4
-    "u := p.*\n" // deref
-    "T :: struct { a: [N]int, }\n"
-    "r := &t.a\n"
-    "t: T\n"
-    "S :: [N+M]int\n"
-    "M :: size_of(t.a)\n" // 36
-    "nm := N+M\n" // [9 + 36] = 45
-    "ai := &i\n"
-    /*
-    */
-  );
-
-  Lexer l = lexer_init(source);
-  Parser p = parser_init(&l);
-
-  Decl_List list = parse_declarations(&p);
-  sym_global_decl_list(list);
-  sym_global_complete_syms();
-
-  Arena_Temp scratch = arena_scratch_get(0, 0);
-
-  for each_node(it, Sym_Node, ordered_global_syms.first)
-  {
-    Sym *sym = it->v;
-
-    String8 result;
-    if (sym->decl)
-    {
-      String8List list = {0};
-      int indent = 0;
-      print_decl(scratch.arena, &list, &indent, sym->decl);
-      str8_list_pushf(scratch.arena, &list, "  [=%d]", sym->const_value);
-      result = str8_list_join(scratch.arena, &list, NULL);
-    }
-    else
-    {
-      result = sym->name;
-    }
-
-    printf("%.*s\n", str8_varg(result));
-  }
-
-  arena_scratch_release(scratch);
 }

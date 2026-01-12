@@ -33,12 +33,6 @@
 # error "OS layer not implemented"
 #endif
 
-internal void
-usage(const char *program_name)
-{
-  printf("Usage: %s [INPUT]\n", program_name);
-}
-
 #if _WIN32
 # define WIN32_LEAN_AND_MEAN
 # include <windows.h>
@@ -71,17 +65,26 @@ tprint(const char *fmt, ...)
   return buf;
 }
 
+internal void
+usage(const char *program_name)
+{
+  printf("Usage: %s <file.kk>\n", program_name);
+  // printf("Usage: %s [command] [options] <file.kk>\n", program_name);
+  // printf("COMMANDS:\n");
+  // printf("  build - Builds specified file\n");
+  // printf("OPTIONS:\n");
+  // printf("  \n");
+}
+
 int
 main(int argc, char **argv)
 {
-#if 0
-  const char *program_name = shift_args(argc, argv);
-  if (argc == 0)
-  {
-    usage(program_name);
-    return 0;
-  }
-#endif
+  // const char *program_name = shift_args(argc, argv);
+  // if (argc == 0)
+  // {
+  //   usage(program_name);
+  //   return 0;
+  // }
 
 #if _WIN32
   win32_enable_vt_mode();
@@ -90,129 +93,18 @@ main(int argc, char **argv)
   g_arena = arena_alloc(GB(1), MB(8), 0);
   Arena_Temp scratch = arena_scratch_get(0, 0);
 
-  String8 source = S(
-    // "Person :: struct {\n"
-    // "  a, b, c: int,\n"
-    // "  name: string,\n"
-    // "}\n"
-    // "\n"
-    // "a := 5387219973821\n"
-    // "b := 3.14\n"
-    // "print(a + cast(int)b)\n"
-    // "\n"
+  // char *file_name = shift_args(argc, argv);
+  String8 source = os_read_entire_file(scratch.arena, str8_lit("test.kk"));
 
+  // if (source.count == 0)
+  // {
+  //   fprintf(stderr, "File not found: %s", file_name);
+  //   return 1;
+  // }
 
-    "x = 5 + 3\n"
-    "x = -a\n"
-    "x = (2 + 3) * 4\n"
-    "x = a > b ? 1 : 0\n"
-    "x = a && b\n"
-    "x = y = z = 42\n"
-    // "{\n"
-    // "  a = 5\n"
-    // // "  defer a = 40\n"
-    // // "  defer if a < b { print(a); }\n"
-    // // "  defer { b = c; }\n"
-    // "  if a > b {\n"
-    // "    x = a\n"
-    // "  } else if a > c {\n"
-    // "    x = c\n"
-    // "  } else if c > a {\n"
-    // "    x = a\n"
-    // "  } else {\n"
-    // "    x = b\n"
-    // "  }\n"
-    // "}\n"
+  // printf("%.*s", str8_varg(source));
 
-    // "defer { a = 41; }\n"
-
-    "do {\n"
-    "  a -= 1\n"
-    "} while (a > b)\n"
-
-    "while !request_shutdown() {\n"
-    "  dt: f32 = 1.0 / 60.0\n"
-    "  tick_game(dt)\n"
-    "}\n"
-
-    // TODO(#6): This takes the array and gives me a slice of all elements
-    // or i can also do array[<lo>:<hi>]
-    // "return array[:]\n"
-    "return Person.{\"Joe\", 53}\n"
-
-    "return [10]Person.{}\n"
-
-    "update_proc: proc(en: Entity)\n"
-
-    "break\n"
-    "continue\n"
-
-    "x = 5\n"
-    "x = y = z\n"
-
-    "for i := 0; i < 10; i += 1 {}\n"
-    "for i = 0; i < 10; i += 1 {}\n"
-    "for ; i < 10; i += 1 {}\n"
-
-    "for i in 0 ..< 10 {}\n"
-    "for i in 0 ..= 9 {}\n"
-    "for i in 0 ..< 2*5 {}\n"
-
-    "people: []Person\n"
-    "for person in people {}\n"
-
-    "switch c {\n"
-    // "{\n"
-    "case 'a' ..= 'z', 'A' ..= 'Z':\n"
-    "  print(\"letter\")\n"
-    "case '_':\n"
-    "  print(\"underscore\")\n"
-    "case 0..=9:\n"
-    "  print(\"number\")\n"
-    "case:\n"
-    "  print(\"default case\")\n"
-    "}\n"
-
-    /*
-    "struct Person\n"
-    "{\n"
-    "  name: string,\n"
-    "  age:  int,\n"
-    "}\n"
-    "\n"
-    "\n"
-    "proc main()\n"
-    "{\n"
-   // "  var a = 18446744073709551616;\n"
-    "  var hex = 0xCAFEBABE;\n"
-    "  var bin = 0b10010101010;\n"
-    "  var oct = 0o10;\n"
-    "  123.456;\n"
-    "  1e+600;\n"
-    "  1e3;\n"     // 1000
-    "  1e-3;\n"    // 0.001
-    "  1.5e2;\n"   // 150
-    "  3.14e0;\n"  // 3.14
-    "  0.5e+10;\n"
-    "  1e10;\n"
-    "  .5;\n"
-    "  42E-1;\n"
-    "  0e0;\n"
-    // "  .5e2;\n" // TODO(#7): Support leading decimal (.5), not trailing (5.)?
-    "  5.e-1;\n"
-    "  0.0e0;\n"
-    // ERRORS
-    // "  .;\n" // TODO: this gets lexed as '.' token
-    // "  e10;\n"
-    // "  1e;\n"
-    // "  1e+;\n"
-    // "  1.2.3;\n" // TODO: FLOAT(1.2) '.' INT(3)
-    // "  1ee10;\n"
-    "  print(\"Hello KK!\");\n"
-    "}\n"
-    */
-  );
-
+  #if 0
   {
     // READ SOURCE FILE
     Lexer l = lexer_init(source);
@@ -530,6 +422,24 @@ main(int argc, char **argv)
   parser_test();
   // resolve_test();
   codegen_test();
+  #endif
+
+  {
+    init_global_syms();
+
+    Lexer l = lexer_init(source);
+    Parser p = parser_init(&l);
+
+    Decl_List list = parse_declarations(&p);
+    sym_global_decl_list(list);
+    sym_global_complete_syms();
+
+    String8 result = gen_all(scratch.arena);
+    printf("%.*s\n", str8_varg(result));
+
+    b32 ok = os_write_entire_file(str8_lit("tests\\out.c"), result);
+    assert(ok);
+  }
 
   arena_scratch_release(scratch);
   arena_delete(g_arena);

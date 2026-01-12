@@ -490,7 +490,7 @@ lexer_next(Lexer *l)
     {
       lexer_eat(l);
     }
-    else if (c == '\n')
+    else if (c == '\r' || c == '\n')
     {
       // if the previous token was a terminator, we stop
       // here and return a semicolon instead of eating the newline

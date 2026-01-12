@@ -142,6 +142,53 @@ str8_list_pushf(Arena *arena, String8List *list, char *fmt, ...)
   str8_list_push(arena, list, string);
 }
 
+internal void
+str8_list_push_front_explicit(String8List *list, String8 string, String8Node *node_memory)
+{
+  node_memory->string = string;
+  sll_queue_push_front(list->first, list->last, node_memory);
+  list->node_count  += 1;
+  list->strings_count += string.count;
+}
+
+internal void
+str8_list_push_front(Arena *arena, String8List *list, String8 string)
+{
+  String8Node *node = push_array(arena, String8Node, 1);
+  str8_list_push_front_explicit(list, string, node);
+}
+
+internal void
+str8_list_push_frontf(Arena *arena, String8List *list, char *fmt, ...)
+{
+  va_list args;
+  va_start(args, fmt);
+  String8 string = str8fv(arena, fmt, args);
+  va_end(args);
+  str8_list_push_front(arena, list, string);
+}
+
+internal void
+str8_list_concat(String8List *dst, String8List *src)
+{
+  if (src->first == 0) return;
+
+  if (dst->first == 0)
+  {
+    // dst is empty -> take src wholesale
+    *dst = *src;
+  }
+  else
+  {
+    // link them together
+    dst->last->next = src->first;
+    dst->last = src->last;
+
+    dst->node_count += src->node_count;
+    dst->strings_count += src->strings_count;
+  }
+}
+
 internal String8
 str8_list_join(Arena *arena, String8List *list, StringJoin *optional_join)
 {
@@ -255,7 +302,7 @@ str_decode_utf8(u8 *data, u64 count)
 {
   local_persist u32 replacement_char = 0xFFFD; // "�" (U+FFFD)
 
-  // TODO(mxtej): better implementation
+  // TODO: better implementation
   Unicode result = {0};
   b32 err = false;
 

@@ -80,6 +80,10 @@ internal String8 str8f(Arena *arena, char *fmt, ...);
 internal void    str8_list_push_explicit(String8List *list, String8 string, String8Node *node_memory);
 internal void    str8_list_push(Arena *arena, String8List *list, String8 string);
 internal void    str8_list_pushf(Arena *arena, String8List *list, char *fmt, ...);
+internal void    str8_list_push_front_explicit(String8List *list, String8 string, String8Node *node_memory);
+internal void    str8_list_push_front(Arena *arena, String8List *list, String8 string);
+internal void    str8_list_push_frontf(Arena *arena, String8List *list, char *fmt, ...);
+internal void    str8_list_concat(String8List *dst, String8List *src);
 internal String8 str8_list_join(Arena *arena, String8List *list, StringJoin *optional_join);
 internal String8List str8_split_chars(Arena *arena, String8 string, u8 *split_characters, u32 count);
 internal String8List str8_split(Arena *arena, String8 string, String8 split);
@@ -92,7 +96,7 @@ internal String32 str32(u32 *data, u64 count);
 internal String16 str16_cstr(u8 *cstr);
 internal String32 str32_cstr(u8 *cstr);
 
-// TODO(mxtej): Cleanup
+// TODO: Cleanup
 internal Unicode str_decode_utf8(u8 *data, u64 count);
 internal u32     str_encode_utf8(u8 *data, u32 codepoint);
 internal Unicode str_decode_utf16(u16 *data, u64 count);

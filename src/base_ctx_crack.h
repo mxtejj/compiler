@@ -16,11 +16,11 @@
 
 # if defined(__amd64__)
 #  define ARCH_X64 1
-# elif defined(__i386__) // @TODO: Verify this works on clang.
+# elif defined(__i386__) // TODO: Verify this works on clang.
 #  define ARCH_X86 1
-# elif defined(__arm__) // @TODO: Verify this works on clang.
+# elif defined(__arm__) // TODO: Verify this works on clang.
 #  define ARCH_ARM32 1
-# elif defined(__aarch64__) // @TODO: Verify this works on clang.
+# elif defined(__aarch64__) // TODO: Verify this works on clang.
 #  define ARCH_ARM64
 # else
 #  error Architecture not supported.
@@ -45,7 +45,7 @@
 #  define ARCH_X86 1
 # elif defined(_M_ARM)
 #  define ARCH_ARM32 1
-# elif defined(_M_ARM64) // @TODO: Verify this works on MSVC.
+# elif defined(_M_ARM64) // TODO: Verify this works on MSVC.
 #  define ARCH_ARM64 1
 # else
 #  error Architecture not supported.
@@ -69,11 +69,11 @@
 
 # if defined(__amd64__)
 #  define ARCH_X64 1
-# elif defined(__i386__) // @TODO: Verify this works on GCC.
+# elif defined(__i386__) // TODO: Verify this works on GCC.
 #  define ARCH_X86 1
-# elif defined(__arm__) // @TODO: Verify this works on GCC.
+# elif defined(__arm__) // TODO: Verify this works on GCC.
 #  define ARCH_ARM32 1
-# elif defined(__aarch64__) // @TODO: Verify this works on GCC.
+# elif defined(__aarch64__) // TODO: Verify this works on GCC.
 #  define ARCH_ARM64
 # else
 #  error Architecture not supported.

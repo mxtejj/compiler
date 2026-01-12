@@ -37,6 +37,9 @@ internal Parser parser_init(Lexer *l);
 //   AST_STRUCTURED_TYPE, // array, pointer, struct, union, fn
 // };
 
+// from resolver
+struct Type;
+
 typedef enum Stmt_Kind Stmt_Kind;
 enum Stmt_Kind
 {
@@ -404,6 +407,7 @@ STRUCT(Decl_Typedef)
 struct Decl
 {
   Decl_Kind kind;
+  struct Sym *sym;
   String8   name;
   Type_Spec *type_hint; // The 'T' in 'x: T = ...'
 
@@ -473,8 +477,7 @@ enum Expr_Kind
   EXPR_INDEX,        // postfix
   EXPR_FIELD,        // postfix
   EXPR_COMPOUND,     // primary/postfix hybrid | Type{}, [5]Type{...}, proc(a: int) -> float {}, &something
-  EXPR_SIZE_OF_EXPR, // unary
-  EXPR_SIZE_OF_TYPE, // unary
+  EXPR_SIZE_OF,      // unary
 };
 
 // TODO: rename to compound_field, add compound_field_node for linked list
@@ -524,6 +527,7 @@ STRUCT(Expr_List)
 struct Expr
 {
   Expr_Kind kind;
+  struct Type *type;
 
   Expr *next;
 
@@ -571,21 +575,21 @@ struct Expr
 
     struct
     {
-      Expr *expr;
+      Expr *expr; // TODO callee
       Expr_Array args;
     }
     call;
 
     struct
     {
-      Expr *expr;
+      Expr *expr; // TODO: operand
       Expr *index;
     }
     index;
 
     struct
     {
-      Expr *expr;
+      Expr *expr; // TODO: operand
       String8 name;
     }
     field;
@@ -598,8 +602,16 @@ struct Expr
     }
     compound;
 
-    Expr      *size_of_expr;
-    Type_Spec *size_of_type;
+    struct
+    {
+      b32 is_expr;
+      union
+      {
+        Expr      *expr;
+        Type_Spec *type;
+      };
+    }
+    size_of;
   };
 };
 // raddbg_type_view(Expr,
