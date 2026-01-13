@@ -476,7 +476,7 @@ lexer_parse_ident_or_keyword(Lexer *l)
   return t;
 }
 
-Token
+internal Token
 lexer_next(Lexer *l)
 {
   // lexer_eat_whitespace(l);
@@ -486,7 +486,7 @@ lexer_next(Lexer *l)
     if (!lexer_can_peek(l)) break;
 
     char c = lexer_peek(l);
-    if (c == ' ' || c == '\t' || c == '\r')
+    if (c == ' ' || c == '\t')
     {
       lexer_eat(l);
     }
