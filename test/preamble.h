@@ -181,7 +181,10 @@ typedef struct {
   u64 length;
 } string;
 
-typedef u8 *cstring;
+typedef u8  *cstring;
+typedef u16 *cstring16;
+
+#define STR(s) ((string){(u8*)(s), sizeof(s)-1})
 
 //
 //- Safe Operations for All Integer Types

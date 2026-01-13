@@ -62,7 +62,7 @@ parser_init(Lexer *l)
 }
 
 internal void
-push_compound_field(Compound_Field_List *list, Compound_Field *field)
+push_compound_field(Parser *p, Compound_Field_List *list, Compound_Field *field)
 {
   sll_queue_push(list->first, list->last, field);
   list->count += 1;
@@ -95,7 +95,10 @@ report_error(Parser *p, const char *fmt, ...)
 
   printf(CLR_CYN "%.*s\n", (int)(line_end - line_start), &l->source.data[line_start]);
   u64 col = lexer_col(l) - 1;
-  printf("%*s" CLR_GRN "^ here\n" CLR_RESET, (int)col, "");
+  u64 highlight_len = (p->curr.pos.length > 0) ? p->curr.pos.length : 1;
+  printf("%*s" CLR_GRN, (int)col, "");
+  for (u64 i = 0; i < highlight_len; i++) printf("^");
+  printf(" here\n" CLR_RESET);
 
   va_end(args);
 
@@ -279,9 +282,11 @@ parse_compound_literal(Parser *p, Type_Spec *explicit_type)
   {
     do
     {
+      Source_Pos pos = p->curr.pos;
       Compound_Field *field = parse_compound_field(p);
-      push_compound_field(&list, field);
-    } while (match(p, ','));
+      push_compound_field(p, &list, field);
+      field->pos = pos;
+    } while (match(p, ',') && !check(p, '}'));
 
     expect(p, '}');
   }
@@ -851,7 +856,7 @@ parse_stmt_do_while(Parser *p)
   expect(p, TOKEN_WHILE);
   Expr *cond = parse_expr(p);
   expect(p, ';');
-  return stmt_while(p, cond, body);
+  return stmt_do_while(p, cond, body);
 }
 
 internal Stmt *
@@ -1253,7 +1258,7 @@ parse_type_aggr(Parser *p, Type_Spec_Kind kind)
     list.count += 1;
     count += 1;
 
-    if (match(p, ','))
+    if (match(p, ';'))
     {
       continue;
     }

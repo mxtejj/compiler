@@ -26,7 +26,14 @@ STRUCT(Codegen)
   String8List list;
   int indent;
   int temp_counter;
+  
+  // Track parameter -> temp mapping for current function
+  String8 *param_names;
+  String8 *param_temps;
+  u64 param_count;
 };
+
+internal String8 gen_temp(Codegen *g, Type *type);
 
 internal void
 gen_pushf(Codegen *g, char *fmt, ...)
@@ -61,8 +68,6 @@ internal String8 gen_array_type_name(Arena *arena, Type *base, u64 length);
 
 internal void gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type);
 internal void gen_stmt_block(Codegen *g, Stmt_Array block, Type *ret_type);
-
-internal String8 gen_array_type_name(Arena *arena, Type *base, u64 length);
 internal void gen_expr_simple(Codegen *g, Expr *expr, String8 dest);
 
 internal String8
@@ -70,16 +75,23 @@ cdecl_name(Arena *arena, Type *type)
 {
   switch (type->kind)
   {
-  case TYPE_VOID:  return str8_lit("void");
-  case TYPE_CHAR:  return str8_lit("char");
-  case TYPE_INT:   return str8_lit("int");
-  case TYPE_FLOAT: return str8_lit("float");
+  case TYPE_VOID:   return str8_lit("void");
+  case TYPE_CHAR:   return str8_lit("char");
+  case TYPE_INT:    return str8_lit("int");
+  case TYPE_FLOAT:  return str8_lit("f32");
+  case TYPE_STRING: return str8_lit("string");
 
-  case TYPE_ARRAY: return gen_array_type_name(arena, type, type->array.length);
+  case TYPE_ARRAY: return gen_array_type_name(arena, type->array.base, type->array.length);
 
   case TYPE_STRUCT:
   case TYPE_UNION:
     return type->sym->name;
+
+  case TYPE_PTR:
+  {
+    String8 base = cdecl_name(arena, type->ptr.base);
+    return str8f(arena, "%.*s*", str8_varg(base));
+  }
 
   default:
     assert(0);
@@ -91,15 +103,18 @@ cdecl_name(Arena *arena, Type *type)
 internal void
 cdecl_from_type(Arena *arena, CDecl_Builder *b, Type *type)
 {
+  Arena_Temp scratch = arena_scratch_get(&arena, 1);
+
   switch (type->kind)
   {
   case TYPE_VOID:
   case TYPE_CHAR:
   case TYPE_INT:
   case TYPE_FLOAT:
+  case TYPE_STRING:
   case TYPE_STRUCT:
   case TYPE_UNION:
-    str8_list_push_frontf(arena, &b->type, "%.*s ", str8_varg(cdecl_name(arena, type)));
+    str8_list_push_frontf(arena, &b->type, "%.*s ", str8_varg(cdecl_name(scratch.arena, type)));
     break;
   case TYPE_PTR:
     cdecl_from_type(arena, b, type->ptr.base);
@@ -125,9 +140,13 @@ cdecl_from_type(Arena *arena, CDecl_Builder *b, Type *type)
     // return type
     cdecl_from_type(arena, b, type->proc.ret);
 
+    //
+    // TODO: if this is a forward decl it should not be a function pointer
+    // @CLEANUP
+    //
     // wrap
-    str8_list_push_frontf(arena, &b->prefix, "(*");
-    str8_list_pushf(arena, &b->suffix, ")");
+    // str8_list_push_frontf(arena, &b->prefix, "(*");
+    // str8_list_pushf(arena, &b->suffix, ")");
 
     // build parameter list
     str8_list_pushf(arena, &b->suffix, "(");
@@ -160,6 +179,8 @@ cdecl_from_type(Arena *arena, CDecl_Builder *b, Type *type)
     assert(0);
     break;
   }
+
+  arena_scratch_release(scratch);
 }
 
 internal String8
@@ -181,6 +202,8 @@ internal String8
 gen_array_type_name(Arena *arena, Type *base, u64 length)
 {
   // Recursively build array type name
+  Arena_Temp scratch = arena_scratch_get(&arena, 1);
+
   String8 base_name;
   if (base->kind == TYPE_ARRAY)
   {
@@ -190,8 +213,11 @@ gen_array_type_name(Arena *arena, Type *base, u64 length)
   {
     base_name = cdecl_name(arena, base);
   }
-  
-  return str8f(arena, "Array_%llu_%.*s", length, str8_varg(base_name));
+
+  String8 result = str8f(arena, "Array_%llu_%.*s", length, str8_varg(base_name));
+
+  arena_scratch_release(scratch);
+  return result;
 }
 
 //=============================================================================
@@ -328,11 +354,35 @@ gen_proc(Codegen *g, Sym *sym)
   gen_pushf(g, ") {");
   g->indent++;
   
-  // Generate body - parameters are already named variables!
+  // Generate temporaries for all parameters (fixes eval order UB)
+  g->param_count = params.count;
+  if (params.count > 0)
+  {
+    g->param_names = push_array(g->arena, String8, params.count);
+    g->param_temps = push_array(g->arena, String8, params.count);
+    
+    for each_index(i, params.count)
+    {
+      Decl *param = params.v[i];
+      g->param_names[i] = param->name;
+      g->param_temps[i] = gen_temp(g, type->proc.params.v[i]);
+      
+      String8 type_name = cdecl_name(g->arena, type->proc.params.v[i]);
+      gen_pushlnf(g, "%.*s %.*s = %.*s;", 
+        str8_varg(type_name), str8_varg(g->param_temps[i]), str8_varg(param->name));
+    }
+  }
+  
+  // Generate body - references to parameters will use temps
   if (decl->init_type->proc.body)
   {
     gen_stmt_block(g, decl->init_type->proc.body->block, type->proc.ret);
   }
+  
+  // Clear param tracking
+  g->param_count = 0;
+  g->param_names = NULL;
+  g->param_temps = NULL;
   
   g->indent--;
   gen_pushlnf(g, "}\n");
@@ -354,6 +404,9 @@ gen_sym(Codegen *g, Sym *sym)
   }
   case DECL_CONST:
   {
+    // TODO: dont generate !!!:
+    // N :: 40            -> int N = {0};
+    // Alias :: My_Struct -> My_Struct Alias = {0};
     if (decl->init_type)
     {
       switch (decl->init_type->kind)
@@ -410,7 +463,7 @@ gen_all(Arena *arena)
 }
 
 //=============================================================================
-//- Expression Lowering (SSA-style with temporaries)
+//- Expression Generation (inline with temps only for function args)
 //=============================================================================
 
 internal String8
@@ -420,13 +473,14 @@ gen_temp(Codegen *g, Type *type)
   return str8f(g->arena, "__t%d", g->temp_counter++);
 }
 
+internal String8 gen_expr(Codegen *g, Expr *expr);
+
 internal String8
 gen_binary_op_name(Codegen *g, Token_Kind op, Type *type)
 {
   char *base_name = NULL;
   switch (op)
   {
-  case '=':           base_name = "(TODO:=)"; break;
   case '+':           base_name = "add"; break;
   case '-':           base_name = "sub"; break;
   case '*':           base_name = "mul"; break;
@@ -459,47 +513,38 @@ gen_binary_op_name(Codegen *g, Token_Kind op, Type *type)
   return str8f(g->arena, "%s_%s", base_name, type_suffix);
 }
 
-internal void
-gen_expr(Codegen *g, Expr *expr, String8 dest)
+// Generate expression as a C string - only uses temps for function arguments
+internal String8
+gen_expr(Codegen *g, Expr *expr)
 {
   switch (expr->kind)
   {
   case EXPR_INTEGER_LITERAL:
-    gen_pushlnf(g, "%.*s = %lld;", str8_varg(dest), expr->literal.integer);
-    break;
+    return str8f(g->arena, "%lld", expr->literal.integer);
     
   case EXPR_FLOAT_LITERAL:
-    gen_pushlnf(g, "%.*s = %f;", str8_varg(dest), expr->literal.floating);
-    break;
+    return str8f(g->arena, "%f", expr->literal.floating);
     
   case EXPR_STRING_LITERAL:
-    gen_pushlnf(g, "%.*s = \"%.*s\";", str8_varg(dest), str8_varg(expr->literal.string));
-    break;
+    return str8f(g->arena, "STR(\"%.*s\")", str8_varg(expr->literal.string));
     
   case EXPR_IDENT:
   {
-    // Use the variable name directly - preserves debug info!
-    // No symbol lookup needed - just use the identifier name
-    gen_pushlnf(g, "%.*s = %.*s;", str8_varg(dest), str8_varg(expr->ident));
-    break;
+    // Check if this identifier is a parameter - if so, use the temp
+    for each_index(i, g->param_count)
+    {
+      if (str8_equal(expr->ident, g->param_names[i]))
+      {
+        return g->param_temps[i];
+      }
+    }
+    // Not a parameter, use the identifier directly
+    return expr->ident;
   }
   
   case EXPR_UNARY:
   {
-    String8 operand_temp = gen_temp(g, expr->unary.right->type);
-    String8 type_name = cdecl_name(g->arena, expr->type);
-    
-    if (expr_is_simple(expr->unary.right))
-    {
-      gen_pushlnf(g, "%.*s %.*s = ", str8_varg(type_name), str8_varg(operand_temp));
-      gen_expr_simple(g, expr->unary.right, operand_temp);
-      gen_pushf(g, ";");
-    }
-    else
-    {
-      gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(operand_temp));
-      gen_expr(g, expr->unary.right, operand_temp);
-    }
+    String8 operand = gen_expr(g, expr->unary.right);
     
     switch (expr->unary.op.kind)
     {
@@ -507,373 +552,183 @@ gen_expr(Codegen *g, Expr *expr, String8 dest)
     {
       String8 op_func = str8f(g->arena, "neg_%s", 
         expr->type->kind == TYPE_INT ? "s32" : "f32");
-      gen_pushlnf(g, "%.*s = %.*s(%.*s);", 
-        str8_varg(dest), str8_varg(op_func), str8_varg(operand_temp));
-      break;
+      return str8f(g->arena, "%.*s(%.*s)", str8_varg(op_func), str8_varg(operand));
     }
     case '!':
-      gen_pushlnf(g, "%.*s = !%.*s;", str8_varg(dest), str8_varg(operand_temp));
-      break;
+      return str8f(g->arena, "!%.*s", str8_varg(operand));
     case '~':
     {
       String8 op_func = str8f(g->arena, "not_%s", 
         expr->type->kind == TYPE_INT ? "s32" : "s32");
-      gen_pushlnf(g, "%.*s = %.*s(%.*s);", 
-        str8_varg(dest), str8_varg(op_func), str8_varg(operand_temp));
-      break;
+      return str8f(g->arena, "%.*s(%.*s)", str8_varg(op_func), str8_varg(operand));
     }
     case '+':
-      gen_pushlnf(g, "%.*s = %.*s;", str8_varg(dest), str8_varg(operand_temp));
-      break;
+      return operand;
+    case TOKEN_DEREF:
+      return str8f(g->arena, "*%.*s", str8_varg(operand));
+    case '&':
+      return str8f(g->arena, "&%.*s", str8_varg(operand));
     default:
       assert(0);
-      break;
+      return str8_lit("0");
     }
-    break;
   }
     
   case EXPR_BINARY:
   {
     if (expr->binary.op.kind == '=')
     {
-      // Assignment: evaluate rhs and assign to lhs
-      Expr *lhs = expr->binary.left;
-      Expr *rhs = expr->binary.right;
-      
-      if (expr_is_simple(rhs) && lhs->kind == EXPR_IDENT)
-      {
-        // Simple assignment: x = 5 or x = y
-        gen_pushlnf(g, "%.*s = ", str8_varg(lhs->ident));
-        gen_expr_simple(g, rhs, lhs->ident);
-        gen_pushf(g, ";");
-        // Assignment expression evaluates to the assigned value
-        gen_pushlnf(g, "%.*s = %.*s;", str8_varg(dest), str8_varg(lhs->ident));
-      }
-      else
-      {
-        // Complex assignment - use temporary for rhs
-        String8 rhs_temp = gen_temp(g, rhs->type);
-        String8 type_name = cdecl_name(g->arena, rhs->type);
-        
-        gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(rhs_temp));
-        gen_expr(g, rhs, rhs_temp);
-        
-        if (lhs->kind == EXPR_IDENT)
-        {
-          gen_pushlnf(g, "%.*s = %.*s;", str8_varg(lhs->ident), str8_varg(rhs_temp));
-          gen_pushlnf(g, "%.*s = %.*s;", str8_varg(dest), str8_varg(rhs_temp));
-        }
-        else
-        {
-          // TODO: Handle complex lvalue like arr[i], v.field, *ptr
-          gen_pushlnf(g, "/* TODO: complex lvalue assignment */");
-          gen_pushlnf(g, "%.*s = %.*s;", str8_varg(dest), str8_varg(rhs_temp));
-        }
-      }
+      // Assignment - emit the assignment statement and return lhs
+      String8 lhs = gen_expr(g, expr->binary.left);
+      String8 rhs = gen_expr(g, expr->binary.right);
+      gen_pushlnf(g, "%.*s = %.*s;", str8_varg(lhs), str8_varg(rhs));
+      return lhs;
     }
     else
     {
       // Regular binary operation
-      // Generate temporaries for operands
-      String8 left_temp = gen_temp(g, expr->binary.left->type);
-      String8 right_temp = gen_temp(g, expr->binary.right->type);
-      
-      String8 type_name = cdecl_name(g->arena, expr->type);
-      
-      if (expr_is_simple(expr->binary.left))
+      String8 left = gen_expr(g, expr->binary.left);
+      String8 right = gen_expr(g, expr->binary.right);
+      String8 op_func = {0};
+      bool is_compound_assign = false;
+      switch (expr->binary.op.kind)
       {
-        gen_pushlnf(g, "%.*s %.*s = ", str8_varg(type_name), str8_varg(left_temp));
-        gen_expr_simple(g, expr->binary.left, left_temp);
-        gen_pushf(g, ";");
+      case TOKEN_LOGICAL_AND: return str8f(g->arena, "%.*s && %.*s", str8_varg(left), str8_varg(right)); break;
+      case TOKEN_LOGICAL_OR:  return str8f(g->arena, "%.*s || %.*s", str8_varg(left), str8_varg(right)); break;
+      case TOKEN_LSHIFT_ASSIGN: op_func = gen_binary_op_name(g, TOKEN_LSHIFT, expr->type); is_compound_assign = true; break;
+      case TOKEN_RSHIFT_ASSIGN: op_func = gen_binary_op_name(g, TOKEN_RSHIFT, expr->type); is_compound_assign = true; break;
+      case TOKEN_ADD_ASSIGN:    op_func = gen_binary_op_name(g, '+', expr->type);          is_compound_assign = true; break;
+      case TOKEN_SUB_ASSIGN:    op_func = gen_binary_op_name(g, '-', expr->type);          is_compound_assign = true; break;
+      case TOKEN_DIV_ASSIGN:    op_func = gen_binary_op_name(g, '/', expr->type);          is_compound_assign = true; break;
+      case TOKEN_MUL_ASSIGN:    op_func = gen_binary_op_name(g, '*', expr->type);          is_compound_assign = true; break;
+      case TOKEN_AND_ASSIGN:    op_func = gen_binary_op_name(g, '&', expr->type);          is_compound_assign = true; break;
+      case TOKEN_OR_ASSIGN:     op_func = gen_binary_op_name(g, '|', expr->type);          is_compound_assign = true; break;
+      case TOKEN_XOR_ASSIGN:    op_func = gen_binary_op_name(g, '^', expr->type);          is_compound_assign = true; break;
+      default: op_func = gen_binary_op_name(g, expr->binary.op.kind, expr->type); break;
       }
-      else
+
+      if (is_compound_assign)
       {
-        gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(left_temp));
-        gen_expr(g, expr->binary.left, left_temp);
+        return str8f(g->arena, "%.*s = %.*s(%.*s, %.*s)", str8_varg(left), str8_varg(op_func), str8_varg(left), str8_varg(right));
       }
-      
-      if (expr_is_simple(expr->binary.right))
-      {
-        gen_pushlnf(g, "%.*s %.*s = ", str8_varg(type_name), str8_varg(right_temp));
-        gen_expr_simple(g, expr->binary.right, right_temp);
-        gen_pushf(g, ";");
-      }
-      else
-      {
-        gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(right_temp));
-        gen_expr(g, expr->binary.right, right_temp);
-      }
-      
-      // Use safe operation
-      String8 op_func = gen_binary_op_name(g, expr->binary.op.kind, expr->type);
-      gen_pushlnf(g, "%.*s = %.*s(%.*s, %.*s);", 
-        str8_varg(dest), str8_varg(op_func),
-        str8_varg(left_temp), str8_varg(right_temp));
+      return str8f(g->arena, "%.*s(%.*s, %.*s)", str8_varg(op_func), str8_varg(left), str8_varg(right));
     }
-    break;
   }
   
   case EXPR_CALL:
   {
-    // Evaluate all arguments into temporaries first (fixes param eval order UB)
-    String8 *arg_temps = push_array(g->arena, String8, expr->call.args.count);
-    
-    for each_index(i, expr->call.args.count)
-    {
-      Expr *arg = expr->call.args.v[i];
-      arg_temps[i] = gen_temp(g, arg->type);
-      
-      String8 type_name = cdecl_name(g->arena, arg->type);
-      if (expr_is_simple(arg))
-      {
-        gen_pushlnf(g, "%.*s %.*s = ", str8_varg(type_name), str8_varg(arg_temps[i]));
-        gen_expr_simple(g, arg, arg_temps[i]);
-        gen_pushf(g, ";");
-      }
-      else
-      {
-        gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(arg_temps[i]));
-        gen_expr(g, arg, arg_temps[i]);
-      }
-    }
-    
-    // Now call with all arguments evaluated
-    // Just use the function name from the expression
+    // Just generate the call directly - temporaries handled in function body
     String8 callee_name = expr->call.expr->ident;
-    gen_pushlnf(g, "%.*s = %.*s(", str8_varg(dest), str8_varg(callee_name));
+    String8List call_parts = {0};
+    str8_list_pushf(g->arena, &call_parts, "%.*s(", str8_varg(callee_name));
     
     for each_index(i, expr->call.args.count)
     {
-      if (i > 0) gen_pushf(g, ", ");
-      gen_pushf(g, "%.*s", str8_varg(arg_temps[i]));
+      if (i > 0) str8_list_push(g->arena, &call_parts, str8_lit(", "));
+      Expr *arg = expr->call.args.v[i];
+      String8 arg_expr = gen_expr(g, arg);
+      str8_list_pushf(g->arena, &call_parts, "%.*s", str8_varg(arg_expr));
     }
     
-    gen_pushf(g, ");");
-    break;
+    str8_list_push(g->arena, &call_parts, str8_lit(")"));
+    return str8_list_join(g->arena, &call_parts, NULL);
   }
   
   case EXPR_INDEX:
   {
     // Array indexing: a[i] becomes a.data[i]
-    String8 array_temp = gen_temp(g, expr->index.expr->type);
-    String8 index_temp = gen_temp(g, expr->index.index->type);
-    
-    String8 array_type = cdecl_name(g->arena, expr->index.expr->type);
-    gen_pushlnf(g, "%.*s %.*s;", str8_varg(array_type), str8_varg(array_temp));
-    gen_pushlnf(g, "int %.*s;", str8_varg(index_temp));
-    
-    gen_expr(g, expr->index.expr, array_temp);
-    gen_expr(g, expr->index.index, index_temp);
-    
-    gen_pushlnf(g, "%.*s = %.*s.data[%.*s];", 
-      str8_varg(dest), str8_varg(array_temp), str8_varg(index_temp));
-    break;
+    String8 array = gen_expr(g, expr->index.expr);
+    String8 index = gen_expr(g, expr->index.index);
+    return str8f(g->arena, "%.*s.data[%.*s]", str8_varg(array), str8_varg(index));
   }
   
   case EXPR_FIELD:
   {
     // Struct field access: v.x
-    String8 operand_temp = gen_temp(g, expr->field.expr->type);
-    String8 operand_type = cdecl_name(g->arena, expr->field.expr->type);
-    
-    gen_pushlnf(g, "%.*s %.*s;", str8_varg(operand_type), str8_varg(operand_temp));
-    gen_expr(g, expr->field.expr, operand_temp);
-    
-    gen_pushlnf(g, "%.*s = %.*s.%.*s;", 
-      str8_varg(dest), str8_varg(operand_temp), str8_varg(expr->field.name));
-    break;
+    String8 operand = gen_expr(g, expr->field.expr);
+    return str8f(g->arena, "%.*s.%.*s", str8_varg(operand), str8_varg(expr->field.name));
   }
-
-  //TODO
-  // case EXPR_ADDR_OF:
-  // {
-  //   String8 operand_temp = gen_temp(g, expr->unary.operand->type);
-  //   String8 operand_type = cdecl_name(g->arena, expr->unary.operand->type);
-    
-  //   gen_pushlnf(g, "%.*s %.*s;", str8_varg(operand_type), str8_varg(operand_temp));
-  //   gen_expr(g, expr->unary.operand, operand_temp);
-    
-  //   gen_pushlnf(g, "%.*s = &%.*s;", str8_varg(dest), str8_varg(operand_temp));
-  //   break;
-  // }
-  
-  // case EXPR_DEREF:
-  // {
-  //   String8 operand_temp = gen_temp(g, expr->unary.operand->type);
-  //   String8 operand_type = cdecl_name(g->arena, expr->unary.operand->type);
-    
-  //   gen_pushlnf(g, "%.*s %.*s;", str8_varg(operand_type), str8_varg(operand_temp));
-  //   gen_expr(g, expr->unary.operand, operand_temp);
-    
-  //   gen_pushlnf(g, "%.*s = *%.*s;", str8_varg(dest), str8_varg(operand_temp));
-  //   break;
-  // }
   
   case EXPR_CAST:
   {
-    String8 operand_temp = gen_temp(g, expr->cast.expr->type);
-    String8 operand_type = cdecl_name(g->arena, expr->cast.expr->type);
+    String8 operand = gen_expr(g, expr->cast.expr);
     String8 target_type = cdecl_name(g->arena, expr->type);
-    
-    gen_pushlnf(g, "%.*s %.*s;", str8_varg(operand_type), str8_varg(operand_temp));
-    gen_expr(g, expr->cast.expr, operand_temp);
-    
-    gen_pushlnf(g, "%.*s = (%.*s)%.*s;", 
-      str8_varg(dest), str8_varg(target_type), str8_varg(operand_temp));
-    break;
+    return str8f(g->arena, "(%.*s)%.*s", str8_varg(target_type), str8_varg(operand));
   }
   
   case EXPR_TERNARY:
   {
-    String8 cond_temp = gen_temp(g, expr->ternary.cond->type);
-    String8 then_temp = gen_temp(g, expr->type);
-    String8 else_temp = gen_temp(g, expr->type);
-    
-    String8 type_name = cdecl_name(g->arena, expr->type);
-    
-    gen_pushlnf(g, "bool %.*s;", str8_varg(cond_temp));
-    gen_expr(g, expr->ternary.cond, cond_temp);
-    
-    gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(then_temp));
-    gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(else_temp));
-    
-    gen_expr(g, expr->ternary.then, then_temp);
-    gen_expr(g, expr->ternary.else_, else_temp);
-    
-    gen_pushlnf(g, "%.*s = %.*s ? %.*s : %.*s;", 
-      str8_varg(dest), str8_varg(cond_temp), 
-      str8_varg(then_temp), str8_varg(else_temp));
-    break;
+    String8 cond = gen_expr(g, expr->ternary.cond);
+    String8 then = gen_expr(g, expr->ternary.then);
+    String8 else_ = gen_expr(g, expr->ternary.else_);
+    return str8f(g->arena, "%.*s ? %.*s : %.*s", 
+      str8_varg(cond), str8_varg(then), str8_varg(else_));
   }
 
   case EXPR_COMPOUND:
   {
-    // Build compound literal by assigning each field individually
+    // Compound literals need to be assigned field-by-field
+    // Create a temp, assign fields, return temp name
+    String8 temp = gen_temp(g, expr->type);
     String8 type_name = cdecl_name(g->arena, expr->type);
     
-    // First, zero-initialize the destination
-    gen_pushlnf(g, "%.*s = (%.*s){0};", str8_varg(dest), str8_varg(type_name));
+    gen_pushlnf(g, "%.*s %.*s = {0};", str8_varg(type_name), str8_varg(temp));
     
-    // Then assign each field
     for each_index(i, expr->compound.args.count)
     {
       Compound_Field *field = expr->compound.args.v[i];
+      String8 value = gen_expr(g, field->init);
       
-      // Evaluate the init expression into a temporary
-      String8 value_temp = gen_temp(g, field->init->type);
-      String8 value_type = cdecl_name(g->arena, field->init->type);
-      gen_pushlnf(g, "%.*s %.*s;", str8_varg(value_type), str8_varg(value_temp));
-      gen_expr(g, field->init, value_temp);
-      
-      // Now assign based on field kind
       switch (field->kind)
       {
       case COMPOUND_FIELD_NAME:
-        // Struct field: dest.fieldname = value
         gen_pushlnf(g, "%.*s.%.*s = %.*s;", 
-          str8_varg(dest), str8_varg(field->name), str8_varg(value_temp));
+          str8_varg(temp), str8_varg(field->name), str8_varg(value));
         break;
         
       case COMPOUND_FIELD_INDEX:
       {
-        // Array with designator: dest.data[index] = value
-        String8 index_temp = gen_temp(g, field->index->type);
-        gen_pushlnf(g, "int %.*s;", str8_varg(index_temp));
-        gen_expr(g, field->index, index_temp);
+        String8 index = gen_expr(g, field->index);
         gen_pushlnf(g, "%.*s.data[%.*s] = %.*s;", 
-          str8_varg(dest), str8_varg(index_temp), str8_varg(value_temp));
+          str8_varg(temp), str8_varg(index), str8_varg(value));
         break;
       }
         
       case COMPOUND_FIELD_NONE:
-        // Positional init - determine if array or struct
         if (expr->type->kind == TYPE_ARRAY)
         {
-          // Array: dest.data[i] = value
           gen_pushlnf(g, "%.*s.data[%llu] = %.*s;", 
-            str8_varg(dest), i, str8_varg(value_temp));
+            str8_varg(temp), i, str8_varg(value));
         }
         else
         {
-          // Struct: assign to i-th field (need field name from type)
           Type_Field struct_field = expr->type->aggregate.fields.v[i];
           gen_pushlnf(g, "%.*s.%.*s = %.*s;", 
-            str8_varg(dest), str8_varg(struct_field.name), str8_varg(value_temp));
+            str8_varg(temp), str8_varg(struct_field.name), str8_varg(value));
         }
         break;
       }
     }
-    break;
+    
+    return temp;
   }
 
-  default:
-    gen_pushlnf(g, "%.*s = {0}; // TODO: expr kind %d", str8_varg(dest), expr->kind);
-    break;
-  }
-}
-
-// Helper: Check if an expression is simple enough to inline (no temporaries needed)
-internal bool
-expr_is_simple(Expr *expr)
-{
-  if (!expr) return false;
-  
-  switch (expr->kind)
+  case EXPR_SIZE_OF:
   {
-  case EXPR_INTEGER_LITERAL:
-  case EXPR_FLOAT_LITERAL:
-  case EXPR_STRING_LITERAL:
-  case EXPR_IDENT:
-    return true;
-  default:
-    return false;
+    Type *target_type = expr->size_of.is_expr ? expr->size_of.expr->type : expr->type;
+    return str8f(g->arena, "/*size_of*/%d", target_type->size);
+    // String8 type_name = cdecl_name(g->arena, target_type);
+    // return str8f(g->arena, "sizeof(%.*s)", str8_varg(type_name));
   }
-}
 
-// Helper: Generate simple expression directly (for literals and identifiers)
-internal void
-gen_expr_simple(Codegen *g, Expr *expr, String8 dest)
-{
-  switch (expr->kind)
-  {
-  case EXPR_INTEGER_LITERAL:
-    gen_pushf(g, "%lld", expr->literal.integer);
-    break;
-  case EXPR_FLOAT_LITERAL:
-    gen_pushf(g, "%f", expr->literal.floating);
-    break;
-  case EXPR_STRING_LITERAL:
-    gen_pushf(g, "\"%.*s\"", str8_varg(expr->literal.string));
-    break;
-  case EXPR_IDENT:
-    gen_pushf(g, "%.*s", str8_varg(expr->ident));
-    break;
   default:
-    assert(0 && "Not a simple expression");
-    break;
+    return str8_lit("/* TODO: expr */");
   }
 }
 
 internal void
 gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
 {
-  /*
-  
-STMT_BLOCK
-STMT_IF
-STMT_DO_WHILE
-STMT_WHILE
-STMT_FOR
-STMT_FOR_IN
-STMT_SWITCH
-STMT_RETURN
-STMT_DEFER
-STMT_BREAK
-STMT_CONTINUE
-STMT_EXPR
-STMT_DECL
-  */
-
   switch (stmt->kind)
   {
   case STMT_DECL:
@@ -886,28 +741,12 @@ STMT_DECL
     
     if (decl->init_expr)
     {
-      // If initializer is simple (literal or identifier), inline it
-      if (expr_is_simple(decl->init_expr))
-      {
-        gen_pushlnf(g, "%.*s %.*s = ", str8_varg(type_name), str8_varg(var_name));
-        gen_expr_simple(g, decl->init_expr, var_name);
-        gen_pushf(g, ";");
-      }
-      else
-      {
-        // Complex expression - use temporary
-        gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(var_name));
-        
-        String8 temp = gen_temp(g, type);
-        gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(temp));
-        gen_expr(g, decl->init_expr, temp);
-        
-        gen_pushlnf(g, "%.*s = %.*s;", str8_varg(var_name), str8_varg(temp));
-      }
+      String8 init_val = gen_expr(g, decl->init_expr);
+      gen_pushlnf(g, "%.*s %.*s = %.*s;", 
+        str8_varg(type_name), str8_varg(var_name), str8_varg(init_val));
     }
     else
     {
-      // Zero-initialize
       gen_pushlnf(g, "%.*s %.*s = {0};", str8_varg(type_name), str8_varg(var_name));
     }
     break;
@@ -915,47 +754,14 @@ STMT_DECL
 
   case STMT_EXPR:
   {
-    // Standalone expression statement
-    // Special case: if it's an assignment, just execute it without capturing the result
-    if (stmt->expr->kind == EXPR_BINARY && stmt->expr->binary.op.kind == '=')
+    // Just evaluate the expression (might have side effects like assignments or calls)
+    String8 expr_val = gen_expr(g, stmt->expr);
+    // For pure expression statements (not assignments which gen_expr handles),
+    // we would emit it, but assignments already emit themselves
+    if (stmt->expr->kind != EXPR_BINARY || stmt->expr->binary.op.kind != '=')
     {
-      Expr *lhs = stmt->expr->binary.left;
-      Expr *rhs = stmt->expr->binary.right;
-      
-      if (expr_is_simple(rhs) && lhs->kind == EXPR_IDENT)
-      {
-        // Simple assignment: a = 5
-        gen_pushlnf(g, "%.*s = ", str8_varg(lhs->ident));
-        gen_expr_simple(g, rhs, lhs->ident);
-        gen_pushf(g, ";");
-      }
-      else
-      {
-        // Complex assignment - use temporary for rhs
-        String8 rhs_temp = gen_temp(g, rhs->type);
-        String8 type_name = cdecl_name(g->arena, rhs->type);
-        
-        gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(rhs_temp));
-        gen_expr(g, rhs, rhs_temp);
-        
-        if (lhs->kind == EXPR_IDENT)
-        {
-          gen_pushlnf(g, "%.*s = %.*s;", str8_varg(lhs->ident), str8_varg(rhs_temp));
-        }
-        else
-        {
-          // TODO: Handle complex lvalue like arr[i], v.field, *ptr
-          gen_pushlnf(g, "/* TODO: complex lvalue assignment */");
-        }
-      }
-    }
-    else
-    {
-      // Other expressions - need to evaluate (e.g., function calls for side effects)
-      String8 temp = gen_temp(g, stmt->expr->type);
-      String8 type_name = cdecl_name(g->arena, stmt->expr->type);
-      gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(temp));
-      gen_expr(g, stmt->expr, temp);
+      // For non-assignment expressions (like function calls), emit as statement
+      gen_pushlnf(g, "%.*s;", str8_varg(expr_val));
     }
     break;
   }
@@ -964,11 +770,8 @@ STMT_DECL
   {
     if (stmt->return_expr)
     {
-      String8 temp = gen_temp(g, ret_type);
-      String8 type_name = cdecl_name(g->arena, ret_type);
-      gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(temp));
-      gen_expr(g, stmt->return_expr, temp);
-      gen_pushlnf(g, "return %.*s;", str8_varg(temp));
+      String8 ret_val = gen_expr(g, stmt->return_expr);
+      gen_pushlnf(g, "return %.*s;", str8_varg(ret_val));
     }
     else
     {
@@ -979,22 +782,35 @@ STMT_DECL
   
   case STMT_IF:
   {
-    // Evaluate condition into temporary
-    String8 cond_temp = gen_temp(g, type_int);
-    gen_pushlnf(g, "bool %.*s;", str8_varg(cond_temp));
-    gen_expr(g, stmt->if0.cond, cond_temp);
-    
-    gen_pushlnf(g, "if (%.*s) {", str8_varg(cond_temp));
+    String8 cond = gen_expr(g, stmt->if0.cond);
+    gen_pushlnf(g, "if (%.*s) {", str8_varg(cond));
     g->indent++;
     gen_stmt_block(g, stmt->if0.then_block->block, ret_type);
     g->indent--;
-    
-    if (stmt->if0.else_stmt)
+
+    Stmt *else_part = stmt->if0.else_stmt;
+    while (else_part != NULL)
     {
-      gen_pushlnf(g, "} else {");
-      g->indent++;
-      gen_stmt(g, stmt->if0.else_stmt, ret_type);
-      g->indent--;
+      if (else_part->kind == STMT_IF)
+      {
+        // else if - generate on same line as closing brace
+        String8 else_cond = gen_expr(g, else_part->if0.cond);
+        gen_pushlnf(g, "} else if (%.*s) {", str8_varg(else_cond));
+        g->indent++;
+        gen_stmt_block(g, else_part->if0.then_block->block, ret_type);
+        g->indent--;
+        else_part = else_part->if0.else_stmt;
+      }
+      else
+      {
+        // final else block
+        assert(else_part->kind == STMT_BLOCK);
+        gen_pushlnf(g, "} else {");
+        g->indent++;
+        gen_stmt_block(g, else_part->block, ret_type);
+        g->indent--;
+        else_part = NULL;
+      }
     }
     
     gen_pushlnf(g, "}");
@@ -1003,18 +819,11 @@ STMT_DECL
   
   case STMT_WHILE:
   {
-    String8 cond_temp = gen_temp(g, type_int);
-    gen_pushlnf(g, "while (1) {");
+    String8 cond = gen_expr(g, stmt->while0.cond);
+    gen_pushlnf(g, "while (%.*s) {", str8_varg(cond));
     g->indent++;
-    
-    // Evaluate condition
-    gen_pushlnf(g, "bool %.*s;", str8_varg(cond_temp));
-    gen_expr(g, stmt->while0.cond, cond_temp);
-    gen_pushlnf(g, "if (!%.*s) break;", str8_varg(cond_temp));
-    
-    // Body
+    // gen_pushlnf(g, "if (!%.*s) break;", str8_varg(cond));
     gen_stmt_block(g, stmt->while0.body->block, ret_type);
-    
     g->indent--;
     gen_pushlnf(g, "}");
     break;
@@ -1022,43 +831,25 @@ STMT_DECL
   
   case STMT_DO_WHILE:
   {
-    String8 cond_temp = gen_temp(g, type_int);
     gen_pushlnf(g, "do {");
     g->indent++;
-    
     gen_stmt_block(g, stmt->while0.body->block, ret_type);
-    
     g->indent--;
-    gen_pushlnf(g, "} while (");
-    
-    gen_pushlnf(g, "bool %.*s;", str8_varg(cond_temp));
-    gen_expr(g, stmt->while0.cond, cond_temp);
-    gen_pushf(g, "%.*s);", str8_varg(cond_temp));
+    gen_pushlnf(g, "}");
+    String8 cond = gen_expr(g, stmt->while0.cond);
+    gen_pushf(g, " while (%.*s);", str8_varg(cond));
     break;
   }
   
   case STMT_FOR:
-  {
-    // String8 operand_temp = gen_temp(g, stmt->if0.cond->type);
-    // String8 type_name = cdecl_name(g->arena, stmt->if0.cond->type);
-    
-    // gen_pushlnf(g, "%.*s %.*s;", str8_varg(type_name), str8_varg(operand_temp));
-    // gen_expr(g, expr->unary.right, operand_temp);
-
-    gen_pushlnf(g, "// TODO: for loop");
-    break;
-  }
-  
   case STMT_FOR_IN:
   {
-    // TODO: Implement for-in loop properly
     gen_pushlnf(g, "// TODO: for loop");
     break;
   }
   
   case STMT_SWITCH:
   {
-    // TODO: Implement switch statement
     gen_pushlnf(g, "// TODO: switch statement");
     break;
   }

@@ -431,6 +431,7 @@ main(int argc, char **argv)
     Parser p = parser_init(&l);
 
     Decl_List list = parse_declarations(&p);
+    sym_set_source_text(l.source);
     sym_global_decl_list(list);
     sym_global_complete_syms();
 

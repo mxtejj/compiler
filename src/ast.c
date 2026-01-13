@@ -12,6 +12,7 @@ internal Type_Spec *
 type_spec_alloc(Parser *p, Type_Spec_Kind kind)
 {
   Type_Spec *t = push_struct(p->arena, Type_Spec);
+  t->pos = p->prev.pos; // TODO: this should probably accumulate for []*ident everything there
   t->kind = kind;
   return t;
 }
@@ -80,6 +81,7 @@ internal Decl *
 decl_alloc(Parser *p, String8 name, Decl_Kind kind)
 {
   Decl *decl = push_struct(p->arena, Decl);
+  decl->pos  = p->curr.pos; // TODO
   decl->kind = kind;
   decl->name = name;
   return decl;
@@ -111,6 +113,8 @@ internal Expr *
 expr_alloc(Parser *p, Expr_Kind kind)
 {
   Expr *expr = push_struct(p->arena, Expr);
+  // TODO: maybe we should explicitly set the position??
+  expr->pos = p->prev.pos; // TODO: this might be wrong since we call `expr_alloc` at the end when we are done parsing??
   expr->kind = kind;
   return expr;
 }
@@ -163,6 +167,7 @@ internal Expr *
 expr_string_lit(Parser *p, String8 s)
 {
   Expr *expr = expr_alloc(p, EXPR_STRING_LITERAL);
+  expr->pos = p->prev.pos;
   expr->literal.string = s;
   return expr;
 }
@@ -171,6 +176,7 @@ internal Expr *
 expr_integer_lit(Parser *p, u64 n)
 {
   Expr *expr = expr_alloc(p, EXPR_INTEGER_LITERAL);
+  expr->pos = p->prev.pos;
   expr->literal.integer = n;
   return expr;
 }
@@ -179,6 +185,7 @@ internal Expr *
 expr_float_lit(Parser *p, f64 f)
 {
   Expr *expr = expr_alloc(p, EXPR_FLOAT_LITERAL);
+  expr->pos = p->prev.pos;
   expr->literal.floating = f;
   return expr;
 }
@@ -187,6 +194,7 @@ internal Expr *
 expr_bool_lit(Parser *p, bool b)
 {
   Expr *expr = expr_alloc(p, EXPR_BOOL_LITERAL);
+  expr->pos = p->prev.pos;
   expr->literal.boolean = b;
   return expr;
 }
@@ -195,6 +203,7 @@ internal Expr *
 expr_char_lit(Parser *p, char c)
 {
   Expr *expr = expr_alloc(p, EXPR_CHAR_LITERAL);
+  expr->pos = p->prev.pos;
   expr->literal.character = c;
   return expr;
 }
@@ -276,6 +285,7 @@ internal Stmt *
 stmt_alloc(Parser *p, Stmt_Kind kind)
 {
   Stmt *s = push_struct(p->arena, Stmt);
+  s->pos = p->curr.pos; // TODO
   s->kind = kind;
   return s;
 }
@@ -302,6 +312,15 @@ internal Stmt *
 stmt_while(Parser *p, Expr *cond, Stmt *body)
 {
   Stmt *stmt = stmt_alloc(p, STMT_WHILE);
+  stmt->while0.cond = cond;
+  stmt->while0.body = body;
+  return stmt;
+}
+
+internal Stmt *
+stmt_do_while(Parser *p, Expr *cond, Stmt *body)
+{
+  Stmt *stmt = stmt_alloc(p, STMT_DO_WHILE);
   stmt->while0.cond = cond;
   stmt->while0.body = body;
   return stmt;

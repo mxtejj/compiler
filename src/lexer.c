@@ -150,6 +150,12 @@ is_symbol(Lexer *l)
   return c == '_' || isalnum(c);
 }
 
+internal bool
+is_symbol_char(char c)
+{
+  return c == '_' || isalnum(c);
+}
+
 internal Token
 lexer_make_token(Lexer *l, Token_Kind kind)
 {
@@ -496,23 +502,43 @@ lexer_next(Lexer *l)
       // here and return a semicolon instead of eating the newline
       if (l->insert_semicolon)
       {
-        // // PEEK AHEAD: Skip whitespaces/newlines to see what's coming
-        // u64 temp_cursor = l->cursor + 1;
-        // while (temp_cursor < l->source.count && isspace(l->source.data[temp_cursor]))
-        // {
-        //   temp_cursor++;
-        // }
+        // PEEK AHEAD: Skip whitespaces/newlines to see what's coming
+        u64 temp_cursor = l->cursor + 1;
+        while (temp_cursor < l->source.count && isspace(l->source.data[temp_cursor]))
+        {
+          temp_cursor++;
+        }
 
-        // // If the next actual token is a '{', don't insert a semicolon!
-        // if (temp_cursor < l->source.count && l->source.data[temp_cursor] == '{')
-        // {
-        //   // l->insert_semicolon = false;
-        //   lexer_eat(l); // Just eat the newline
-        //   continue;
-        // }
+        // If the next actual token is a '{' or 'else', don't insert a semicolon!
+        if (temp_cursor < l->source.count && l->source.data[temp_cursor] == '{')
+        {
+          l->insert_semicolon = false;
+          lexer_eat(l); // Just eat the newline
+          continue;
+        }
+        
+        // Check for "else" keyword
+        if (temp_cursor + 4 <= l->source.count &&
+            l->source.data[temp_cursor + 0] == 'e' &&
+            l->source.data[temp_cursor + 1] == 'l' &&
+            l->source.data[temp_cursor + 2] == 's' &&
+            l->source.data[temp_cursor + 3] == 'e' &&
+            (temp_cursor + 4 >= l->source.count || !is_symbol_char(l->source.data[temp_cursor + 4])))
+        {
+          l->insert_semicolon = false;
+          lexer_eat(l); // Just eat the newline
+          continue;
+        }
 
         l->insert_semicolon = false; // reset
-        return (Token){ .kind = ';', .lexeme = str8_lit(";") };
+
+        Token t = {0};
+        t.pos.row = lexer_row(l) + 1;
+        t.pos.col = l->cursor - l->bol + 1;
+        t.pos.length = 1;
+        t.kind = ';';
+        t.lexeme = str8_lit(";");
+        return t;
       }
       lexer_eat(l);
     }
@@ -527,11 +553,23 @@ lexer_next(Lexer *l)
   {
     if (l->insert_semicolon)
     {
+      Token t = {0};
+      t.pos.row = lexer_row(l) + 1;
+      t.pos.col = l->start - l->bol + 1;
+      t.pos.length = 1;
+      t.kind = ';';
+      t.lexeme = str8_lit(";");
+
       l->insert_semicolon = false;
-      return (Token){ .kind = ';', .lexeme = str8_lit(";") };
+      return t;
     }
     return lexer_make_token(l, TOKEN_EOF);
   }
+
+  // TODO: make lexer_row, lexer_col return with +1
+  Source_Pos pos = {0};
+  pos.row = lexer_row(l) + 1;
+  pos.col = l->start - l->bol + 1;
 
   Token t = {0};
 
@@ -869,6 +907,9 @@ lexer_next(Lexer *l)
     t = lexer_make_token(l, c);
     break;
   }
+
+  t.pos = pos;
+  t.pos.length = l->cursor - l->start; // Set token length
 
   switch (t.kind)
   {

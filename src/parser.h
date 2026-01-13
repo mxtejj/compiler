@@ -113,6 +113,7 @@ STRUCT(Switch_Case_Array)
 struct Stmt
 {
   Stmt_Kind kind;
+  Source_Pos pos;
 
   Stmt *next;
 
@@ -181,6 +182,7 @@ internal Stmt *stmt_alloc(Parser *p, Stmt_Kind kind);
 internal Stmt *stmt_block(Parser *p, Stmt_Array stmts);
 internal Stmt *stmt_if(Parser *p, Expr *cond, Stmt *then_block, Stmt *else_stmt);
 internal Stmt *stmt_while(Parser *p, Expr *cond, Stmt *body);
+internal Stmt *stmt_do_while(Parser *p, Expr *cond, Stmt *body);
 internal Stmt *stmt_for(Parser *p, Stmt *init, Expr *cond, Stmt *loop, Stmt *body);
 internal Stmt *stmt_for_in(Parser *p, Expr *item, Expr *iter, Stmt *body);
 internal Stmt *stmt_return(Parser *p, Expr *expr);
@@ -248,7 +250,7 @@ STRUCT(Decl_Array)
 struct Type_Spec
 {
   Type_Spec_Kind kind;
-
+  Source_Pos pos;
   Type_Spec *next;
 
   union
@@ -407,6 +409,7 @@ STRUCT(Decl_Typedef)
 struct Decl
 {
   Decl_Kind kind;
+  Source_Pos pos;
   struct Sym *sym;
   String8   name;
   Type_Spec *type_hint; // The 'T' in 'x: T = ...'
@@ -491,6 +494,7 @@ ENUM(Compound_Field_Kind)
 STRUCT(Compound_Field)
 {
   Compound_Field *next;
+  Source_Pos pos;
 
   Compound_Field_Kind kind;
   Expr *init;
@@ -515,7 +519,7 @@ STRUCT(Compound_Field_Array)
   u64 count;
 };
 
-internal void push_compound_field(Compound_Field_List *list, Compound_Field *field);
+internal void push_compound_field(Parser *p, Compound_Field_List *list, Compound_Field *field);
 
 STRUCT(Expr_List)
 {
@@ -527,6 +531,7 @@ STRUCT(Expr_List)
 struct Expr
 {
   Expr_Kind kind;
+  Source_Pos pos;
   struct Type *type;
 
   Expr *next;

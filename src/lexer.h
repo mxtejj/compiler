@@ -103,10 +103,19 @@ union Literal_Value
   char    character;
 };
 
+typedef struct Source_Pos Source_Pos;
+struct Source_Pos
+{
+  u64 row; // x
+  u64 col; // y
+  u64 length; // token length for error highlighting
+};
+
 typedef struct Token Token;
 struct Token
 {
   Token_Kind    kind;
+  Source_Pos    pos;
   String8       lexeme;
   Literal_Value value;
 };

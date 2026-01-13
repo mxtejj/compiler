@@ -11,18 +11,64 @@
 // [ ] Fix compound literal parsing
 //
 
-internal void
-fatal(char *fmt, ...)
-{
-  Arena_Temp scratch = arena_scratch_get(0, 0);
+String8 source_text; // @HACK for getting the source from lexer without having the pass it to every function
+// TODO: we can also add source_path here
 
+internal void
+fatal(Source_Pos pos, char *fmt, ...)
+{
   va_list args;
   va_start(args, fmt);
-  String8 s = str8fv(scratch.arena, fmt, args);
-  printf(CLR_RED "%.*s\n" CLR_RESET, str8_varg(s));
-  va_end(args);
 
-  arena_scratch_release(scratch);
+  // printf(CLR_WHT "%.*s(%llu:%llu) ", str8_varg(source_file_path), pos.row, pos.col);
+  printf(CLR_WHT "(%llu:%llu) ", pos.row, pos.col);
+  printf(CLR_RED "error: " CLR_RESET);
+  vprintf(fmt, args);
+  printf("\n");
+
+  u64 line_start = 0;
+  u64 current_line = 1;
+
+  // find the start of the error line
+  for (u64 i = 0; i < source_text.count && current_line < pos.row; i++)
+  {
+    if (source_text.data[i] == '\n')
+    {
+      current_line++;
+      line_start = i + 1;
+    }
+  }
+
+  // find the end of the error line
+  u64 line_end = line_start;
+  while (line_end < source_text.count && 
+         source_text.data[line_end] != '\n' && 
+         source_text.data[line_end] != '\r')
+  {
+    line_end++;
+  }
+
+  int line_length = line_end - line_start;
+  String8 line = str8_substr(source_text, line_start, line_end);
+
+  u64 col0 = pos.col - 1;
+  u64 tok_start = clamp_top(col0, line.count);
+  u64 tok_end   = clamp_top(tok_start + pos.length, line.count);
+
+  String8 before = str8_substr(line, 0, tok_start);
+  String8 token  = str8_substr(line, tok_start, tok_end);
+  String8 after  = str8_substr(line, tok_end, line.count);
+
+  printf(CLR_CYN "%.*s", str8_varg(before));
+  printf(CLR_RED "%.*s", str8_varg(token));
+  printf(CLR_CYN "%.*s\n", str8_varg(after));
+
+  printf("%*s", (int)tok_start, "");
+  printf(CLR_GRN);
+  for (u64 i = 0; i < token.count; i++) printf("^");
+  printf(CLR_RESET "\n");
+
+  va_end(args);
   trap();
   os_exit(1);
 }
@@ -36,6 +82,7 @@ ENUM(Type_Kind)
   TYPE_CHAR,
   TYPE_INT,
   TYPE_FLOAT,
+  TYPE_STRING,
   TYPE_PTR,
   TYPE_ARRAY,
   TYPE_STRUCT,
@@ -113,7 +160,7 @@ STRUCT(Type_Field)
 
 // STRUCT(Type_Field_List)
 // {
-  
+
 //   u64 count;
 // };
 
@@ -130,10 +177,11 @@ type_alloc(Type_Kind kind)
   return t;
 }
 
-Type *type_void  = &(Type){ .kind = TYPE_VOID,  .size = 0, .align = 0 };
-Type *type_char  = &(Type){ .kind = TYPE_CHAR,  .size = 1, .align = 1 };
-Type *type_int   = &(Type){ .kind = TYPE_INT,   .size = 4, .align = 4 };
-Type *type_float = &(Type){ .kind = TYPE_FLOAT, .size = 4, .align = 4 };
+Type *type_void   = &(Type){ .kind = TYPE_VOID,   .size = 0,  .align = 0 };
+Type *type_char   = &(Type){ .kind = TYPE_CHAR,   .size = 1,  .align = 1 };
+Type *type_int    = &(Type){ .kind = TYPE_INT,    .size = 4,  .align = 4 };
+Type *type_float  = &(Type){ .kind = TYPE_FLOAT,  .size = 4,  .align = 4 };
+Type *type_string = &(Type){ .kind = TYPE_STRING, .size = 16, .align = 8 };
 
 const usize PTR_SIZE  = 8;
 const usize PTR_ALIGN = 8;
@@ -434,16 +482,11 @@ sym_decl(Decl *decl)
   Sym_Kind kind = SYM_NONE;
   switch (decl->kind)
   {
-  // case DECL_STRUCT:
-  // case DECL_UNION:
-  // case DECL_TYPEDEF:
-  // case DECL_ENUM: // TODO
-  //   kind = SYM_TYPE;
-  //   break;
   case DECL_VAR:
     kind = SYM_VAR;
     break;
   case DECL_CONST:
+    // Type declarations: Matrix :: [4][4]int, Color :: enum {...}, etc.
     if (decl->init_type)
     {
       if (decl->init_type->kind == TYPE_SPEC_PROC)
@@ -452,23 +495,22 @@ sym_decl(Decl *decl)
       }
       else
       {
+        // All non-proc init_types are type aliases
         kind = SYM_TYPE;
       }
     }
+    // Constant value declarations: PI :: 3.14, N :: size_of(int), etc.
     else if (decl->init_expr)
     {
       kind = SYM_CONST;
     }
+    else
+    {
+      // Should not happen - parser should ensure const has either init_type or init_expr
+      fatal(decl->pos, "constant declaration '%.*s' has neither a type nor an expression", str8_varg(decl->name));
+    }
     break;
-  // case DECL_PROC:
-  //   kind = SYM_PROC;
-  //   break;
-    // kind = SYM_TYPE;
-  // case DECL_ENUM:
-    // kind = SYM_ENUM_CONST;
-    // break;
   default:
-    // assert(0);
     break;
   }
 
@@ -515,7 +557,7 @@ sym_push(Sym *sym)
 {
   if (local_syms_end == local_syms + MAX_LOCAL_SYMS)
   {
-    fatal("Too many local symbols");
+    fatal(sym->decl->pos, "too many local symbols");
   }
   *local_syms_end++ = sym;
 }
@@ -589,12 +631,13 @@ resolved_const(s64 const_value)
 }
 
 // :forward declarations
-internal Sym *resolve_name(String8 name);
+internal Sym *resolve_name(Source_Pos pos, String8 name);
 internal s64 resolve_const_expr(Expr *expr);
 internal Operand resolve_expr(Expr *expr);
 internal Operand resolve_expected_expr(Expr *expr, Type *expected_type);
 internal Type *resolve_decl_var(Decl *decl);
 internal void resolve_sym(Sym *sym);
+internal String8 string_from_type(Arena *arena, Type *type);
 
 internal Type *
 resolve_typespec(Type_Spec *typespec)
@@ -611,10 +654,10 @@ resolve_typespec(Type_Spec *typespec)
     break;
   case TYPE_SPEC_NAME:
   {
-    Sym *sym = resolve_name(typespec->name);
+    Sym *sym = resolve_name(typespec->pos, typespec->name);
     if (sym->kind != SYM_TYPE)
     {
-      fatal("%.*s must denote a type", str8_varg(typespec->name));
+      fatal(sym->decl->pos, "%.*s must denote a type", str8_varg(typespec->name));
       return NULL;
     }
     return sym->type;
@@ -674,7 +717,7 @@ complete_type(Type *type)
 {
   if (type->kind == TYPE_COMPLETING)
   {
-    fatal("Type completion cycle");
+    fatal(type->sym->decl->pos, "type completion cycle");
     return;
   }
   else if (type->kind != TYPE_INCOMPLETE)
@@ -695,7 +738,7 @@ complete_type(Type *type)
 
   if (total_field_count == 0)
   {
-    fatal("No fields");
+    fatal(decl->pos, "no fields in aggregate declaration");
   }
 
   Type_Field_Array fields = {0};
@@ -741,10 +784,48 @@ resolve_decl_type(Decl *decl)
   return resolve_typespec(decl->init_type);
 }
 
+internal String8
+string_from_type(Arena *arena, Type *type)
+{
+  // TODO: better strings like `[2]int` instead of `array`
+  //                           `Person` instead of `struct`
+  switch (type->kind)
+  {
+  case TYPE_NONE:       return str8_lit("<NONE>");
+  case TYPE_INCOMPLETE: return str8_lit("<INCOMPLETE>");
+  case TYPE_COMPLETING: return str8_lit("<COMPLETING>");
+  case TYPE_VOID:       return str8_lit("void");
+  case TYPE_CHAR:       return str8_lit("char");
+  case TYPE_INT:        return str8_lit("int");
+  case TYPE_FLOAT:      return str8_lit("float");
+  case TYPE_STRING:     return str8_lit("string");
+  case TYPE_PTR:
+  {
+    return str8f(arena, "*%.*s", str8_varg(string_from_type(arena, type->ptr.base)));
+  }
+  case TYPE_ARRAY:
+  {
+    return str8f(arena, "[%llu]%.*s", type->array.length, str8_varg(string_from_type(arena, type->array.base)));
+  }
+  case TYPE_STRUCT:
+  case TYPE_UNION:
+  {
+    return str8f(arena, "%.*s", str8_varg(type->sym->decl->name));
+  }
+  // case TYPE_ENUM:       return str8_lit("enum");
+  // case TYPE_PROC:       return str8_lit("proc");
+  }
+  assert(0);
+  return str8_lit("unreachable");
+}
+
 internal Type *
 resolve_decl_var(Decl *decl)
 {
   assert(decl->kind == DECL_VAR);
+
+  Arena_Temp scratch = arena_scratch_get(0, 0);
+
   Type *type = NULL;
   if (decl->type_hint)
   {
@@ -755,7 +836,9 @@ resolve_decl_var(Decl *decl)
     Operand result = resolve_expected_expr(decl->init_expr, type);
     if (type && result.type != type)
     {
-      fatal("Declared var type does not match inferred type");
+      // TODO: the length of the decl->init_expr->pos is 1 even tho the string literal is like way longer???
+      fatal(decl->init_expr->pos, "cannot assign `%.*s` to variable of type `%.*s`",
+        str8_varg(string_from_type(scratch.arena, result.type)), str8_varg(string_from_type(scratch.arena, type)));
     }
     type = result.type;
   }
@@ -766,9 +849,13 @@ resolve_decl_var(Decl *decl)
     type = resolve_typespec(decl->init_type);
     if (type_hint && type != type_hint)
     {
-      fatal("Declared var type does not match type hint");
+      // TODO: improve
+      fatal(decl->init_type->pos, "declared variable type does not match type hint");
     }
   }
+
+  arena_scratch_release(scratch);
+
   complete_type(type);
   return type;
 }
@@ -781,7 +868,7 @@ resolve_decl_const(Decl *decl, s64 *const_value)
   Operand result = resolve_expr(decl->init_expr);
   if (!result.is_const)
   {
-    fatal("Initializer for const is not a constant expression");
+    fatal(decl->pos, "initializer is not a constant expression");
   }
   *const_value = result.const_value;
   return result.type;
@@ -818,7 +905,7 @@ resolve_cond_expr(Expr *expr)
   if (cond.type != type_int)
   {
     // TODO(#14): make it so cond has to be `bool` not `int`
-    fatal("condition expression must be of type int");
+    fatal(expr->pos, "condition expression must be of type int");
   }
 }
 
@@ -885,7 +972,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
         Operand case_result = resolve_expr(expr);
         if (case_result.type != result.type)
         {
-          fatal("Switch case expression type mismatch");
+          fatal(stmt->pos, "switch case expression type mismatch");
         }
         resolve_stmt_block(it.block->block, ret_type);
       }
@@ -900,7 +987,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
       Operand result = resolve_expected_expr(stmt->return_expr, ret_type);
       if (result.type != ret_type)
       {
-        fatal("Return type mismatch");
+        fatal(stmt->pos, "return type mismatch");
       }
     }
     else
@@ -908,7 +995,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
       // Empty return statement
       if (ret_type && ret_type != type_void)
       {
-        fatal("Cannot return without a value from procedure with non-void return type");
+        fatal(stmt->pos, "cannot return without a value from procedure with non-void return type");
       }
     }
     break;
@@ -1005,7 +1092,7 @@ resolve_sym(Sym *sym)
   }
   else if (sym->state == SYM_RESOLVING)
   {
-    fatal("Cyclic dependency");
+    fatal(sym->decl->pos, "cyclic dependency");
     return;
   }
 
@@ -1028,19 +1115,20 @@ resolve_sym(Sym *sym)
 
     // Check if this is actually a type alias (e.g., My_Int :: int)
     Decl *decl = sym->decl;
-    if (decl->init_expr && decl->init_expr->kind == EXPR_IDENT)
-    {
-      Sym *ref_sym = sym_get(decl->init_expr->ident);
-      if (ref_sym && ref_sym->kind == SYM_TYPE)
-      {
-        // This is a type alias, not a constant
-        // @CLEANUP
-        sym->kind = SYM_TYPE;
-        resolve_sym(ref_sym);
-        sym->type = ref_sym->type;
-        break;
-      }
-    }
+    // TODO i dont think we need this?
+    // if (decl->init_expr && decl->init_expr->kind == EXPR_IDENT)
+    // {
+    //   Sym *ref_sym = sym_get(decl->init_expr->ident);
+    //   if (ref_sym && ref_sym->kind == SYM_TYPE)
+    //   {
+    //     // This is a type alias, not a constant
+    //     // @CLEANUP
+    //     sym->kind = SYM_TYPE;
+    //     resolve_sym(ref_sym);
+    //     sym->type = ref_sym->type;
+    //     break;
+    //   }
+    // }
     sym->type = resolve_decl_const(decl, &sym->const_value);
     break;
   }
@@ -1056,7 +1144,7 @@ resolve_sym(Sym *sym)
   }
 
   sym->state = SYM_RESOLVED;
-  
+
   // Only add to ordered_global_syms if it's actually in the global symbol table
   // (not a local variable or parameter inside a procedure)
   bool is_global = false;
@@ -1068,7 +1156,7 @@ resolve_sym(Sym *sym)
       break;
     }
   }
-  
+
   if (is_global)
   {
     sym_list_push(&ordered_global_syms, sym);
@@ -1090,12 +1178,12 @@ complete_sym(Sym *sym)
 }
 
 internal Sym *
-resolve_name(String8 name)
+resolve_name(Source_Pos pos, String8 name)
 {
   Sym *sym = sym_get(name);
   if (!sym)
   {
-    fatal("Non-existent name '%.*s'", str8_varg(name));
+    fatal(pos, "undeclared identifier '%.*s'", str8_varg(name));
     return NULL;
   }
   resolve_sym(sym);
@@ -1111,7 +1199,7 @@ resolve_expr_field(Expr *expr)
   complete_type(type);
   if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION)
   {
-    fatal("Can only access fields on aggregate types");
+    fatal(expr->pos, "cannot access field on non struct/union type");
     return nil_operand;
   }
   for (Type_Field *it = type->aggregate.fields.v;
@@ -1123,7 +1211,10 @@ resolve_expr_field(Expr *expr)
       return left.is_lvalue ? resolved_lvalue(it->type) : resolved_rvalue(it->type);
     }
   }
-  fatal("No field named '%.*s'", str8_varg(expr->field.name));
+  Arena_Temp scratch = arena_scratch_get(0, 0);
+  fatal(expr->pos, "'%.*s' has no field `%.*s`", str8_varg(string_from_type(scratch.arena, type)), str8_varg(expr->field.name));
+  arena_scratch_release(scratch);
+  // TODO: maybe we can show the struct definition?
   return nil_operand;
 }
 
@@ -1142,7 +1233,7 @@ internal Operand
 resolve_expr_name(Expr *expr)
 {
   assert(expr->kind == EXPR_IDENT);
-  Sym *sym = resolve_name(expr->ident);
+  Sym *sym = resolve_name(expr->pos, expr->ident);
 
   switch (sym->kind)
   {
@@ -1154,7 +1245,7 @@ resolve_expr_name(Expr *expr)
   case SYM_TYPE:
     return resolved_rvalue(sym->type);
   default:
-    fatal("%.*s must be a var or const", str8_varg(expr->ident));
+    fatal(expr->pos, "%.*s must be a var or const", str8_varg(expr->ident));
     return nil_operand;
   }
 
@@ -1198,7 +1289,7 @@ resolve_expr_unary(Expr *expr)
     operand = ptr_decay(operand);
     if (type->kind != TYPE_PTR)
     {
-      fatal("Cannot dereference non-pointer type");
+      fatal(expr->pos, "cannot dereference non-pointer type");
     }
     return resolved_lvalue(type->ptr.base);
   }
@@ -1206,7 +1297,7 @@ resolve_expr_unary(Expr *expr)
   {
     if (!operand.is_lvalue)
     {
-      fatal("Cannot take address of non-lvalue");
+      fatal(expr->pos, "cannot take address of non-lvalue");
     }
     return resolved_rvalue(type_ptr(type));
   }
@@ -1217,7 +1308,7 @@ resolve_expr_unary(Expr *expr)
   {
     if (type->kind != TYPE_INT)
     {
-      fatal("Can use unary %.*s with ints only", str8_varg(str_from_token_kind(scratch.arena, expr->unary.op.kind)));
+      fatal(expr->pos, "can use unary %.*s with ints only", str8_varg(str_from_token_kind(scratch.arena, expr->unary.op.kind)));
     }
     if (operand.is_const)
     {
@@ -1296,11 +1387,14 @@ resolve_expr_binary(Expr *expr)
   Arena_Temp scratch = arena_scratch_get(0, 0);
   if (left.type != type_int)
   {
-    fatal("left operand of %.*s must be int", str8_varg(str_from_token_kind(scratch.arena, expr->binary.op.kind)));
+    fatal(expr->pos, "left operand of %.*s must be int", str8_varg(str_from_token_kind(scratch.arena, expr->binary.op.kind)));
   }
   if (left.type != right.type)
   {
-    fatal("left and right operand of %.*s must have same type", str8_varg(str_from_token_kind(scratch.arena, expr->binary.op.kind)));
+    String8 op  = str_from_token_kind(scratch.arena, expr->binary.op.kind);
+    String8 lhs = string_from_type(scratch.arena, left.type);
+    String8 rhs = string_from_type(scratch.arena, right.type);
+    fatal(expr->pos, "operator %.*s cannot be applied to types `%.*s` and `%.*s`", str8_varg(op), str8_varg(lhs), str8_varg(rhs));
   }
   arena_scratch_release(scratch);
 
@@ -1315,7 +1409,7 @@ resolve_expr_binary(Expr *expr)
   {
     if (!left.is_lvalue)
     {
-      fatal("Left side of assignment must be an lvalue");
+      fatal(expr->pos, "left side of assignment must be an lvalue");
     }
     // Types already checked above, assignment is valid
     // Return lvalue so assignments can be chained: a = b = c
@@ -1338,7 +1432,9 @@ aggregate_field_index(Type *type, String8 name)
       return i;
     }
   }
-  fatal("Field '%.*s' in compound literal not found in struct/union", str8_varg(name));
+  Arena_Temp scratch = arena_scratch_get(0, 0);
+  fatal(type->sym->decl->pos, "'%.*s' has no field `%.*s`", str8_varg(string_from_type(scratch.arena, type)), str8_varg(name));
+  arena_scratch_release(scratch);
   return SIZE_MAX;
 }
 
@@ -1349,7 +1445,7 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
 
   if (!expected_type && !expr->compound.type)
   {
-    fatal("Implicitly typed compound literal used in context without expected type");
+    fatal(expr->pos, "implicitly typed compound literal used in context without expected type");
   }
 
   Type *type = NULL;
@@ -1358,7 +1454,7 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
     type = resolve_typespec(expr->compound.type);
     // if (expected_type && expected_type != type)
     // {
-    //   fatal("Explicit compound literal type does not match expected type");
+    //   fatal("explicit compound literal type does not match expected type");
     // }
   }
   else
@@ -1372,7 +1468,7 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
   if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION && type->kind != TYPE_ARRAY)
   {
     // TODO(#21): slices
-    fatal("Compound literals can only be used with struct, union and array types");
+    fatal(expr->pos, "compound literals can only be used with struct, union and array types");
   }
 
   if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION)
@@ -1380,7 +1476,7 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
     assert(type->aggregate.fields.count > 0);
     // if (expr->compound.args.count > type->aggregate.fields.count)
     // {
-    //   fatal("Compound literal has too many fields");
+    //   fatal("compound literal has too many fields");
     // }
 
     u32 index = 0;
@@ -1389,7 +1485,7 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
       Compound_Field *field = expr->compound.args.v[i];
       if (field->kind == COMPOUND_FIELD_INDEX)
       {
-        fatal("Index field initializer not allowed for struct/union compound literal");
+        fatal(field->pos, "index field initializer not allowed for struct/union compound literal");
       }
       else if (field->kind == COMPOUND_FIELD_NAME)
       {
@@ -1397,17 +1493,17 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
       }
       if (index >= type->aggregate.fields.count)
       {
-        fatal("Field initializer in struct/union compound literal out of range");
+        fatal(field->pos, "field initializer in struct/union compound literal out of range");
       }
       Operand init = resolve_expected_expr(field->init, type->aggregate.fields.v[index].type);
       if (init.type != type->aggregate.fields.v[index].type)
       {
-        fatal("Compound literal field type mismatch");
+        fatal(field->pos, "compound literal field type mismatch");
       }
       // if (arg->optional_name.count > 0 && !str8_equal(arg->optional_name, type->aggregate.fields.v[i].name))
       // {
       //   // TODO: Make it so u can specify the named fields out of order
-      //   fatal("Compound literal field name mismatch");
+      //   fatal("compound literal field name mismatch");
       // }
 
       index += 1;
@@ -1427,25 +1523,25 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
       Compound_Field *field = expr->compound.args.v[i];
       if (field->kind == COMPOUND_FIELD_NAME)
       {
-        fatal("Named field initializer not allowed in array compound literal");
+        fatal(field->pos, "named field initializer not allowed in array compound literal");
       }
       else if (field->kind == COMPOUND_FIELD_INDEX)
       {
         s64 result = resolve_const_expr(field->index);
         if (result < 0)
         {
-          fatal("Field initializer index cannot be negative");
+          fatal(field->pos, "field initializer index cannot be negative");
         }
         index = result;
       }
       if (index >= type->array.length)
       {
-        fatal("Field initializer in array compound literal out of range");
+        fatal(field->pos, "array initializer has too many elements");
       }
       Operand init = resolve_expected_expr(field->init, type->array.base);
       if (init.type != type->array.base)
       {
-        fatal("Compound literal element type mismatch");
+        fatal(field->pos, "compound literal element type mismatch");
       }
       index += 1;
     }
@@ -1464,24 +1560,25 @@ resolve_expr_call(Expr *expr)
 
   if (proc.type->kind != TYPE_PROC)
   {
-    fatal("Trying to call non-procedure value");
+    fatal(expr->pos, "trying to call non-procedure value");
   }
   if (expr->call.args.count < proc.type->proc.params.count)
   {
-    fatal("Too few arguments for procedure call");
+    fatal(expr->pos, "too few arguments for procedure call");
   }
   else if (expr->call.args.count > proc.type->proc.params.count)
   {
-    fatal("Too many arguments for procedure call");
+    fatal(expr->pos, "too many arguments for procedure call");
   }
 
   for (u32 i = 0; i < expr->call.args.count; i += 1)
   {
     Type *param_type = proc.type->proc.params.v[i];
-    Operand arg = resolve_expected_expr(expr->call.args.v[i], param_type);
+    Expr *arg_expr = expr->call.args.v[i];
+    Operand arg = resolve_expected_expr(arg_expr, param_type);
     if (arg.type != param_type)
     {
-      fatal("Procedure call argument type mismatch");
+      fatal(arg_expr->pos, "procedure call argument type mismatch");
     }
   }
 
@@ -1496,13 +1593,13 @@ resolve_expr_ternary(Expr *expr, Type *expected_type)
   Operand cond = ptr_decay(resolve_expr(expr->ternary.cond));
   if (cond.type->kind != TYPE_INT && cond.type->kind != TYPE_PTR)
   {
-    fatal("Ternary condition expression must have type int or ptr");
+    fatal(expr->pos, "ternary condition expression must have type int or ptr");
   }
   Operand then_expr = ptr_decay(resolve_expected_expr(expr->ternary.then, expected_type));
   Operand else_expr = ptr_decay(resolve_expected_expr(expr->ternary.else_, expected_type));
   if (then_expr.type != else_expr.type)
   {
-    fatal("Ternary then/else expression must have matching types");
+    fatal(expr->pos, "ternary then/else expression must have matching types");
   }
   if (cond.is_const && then_expr.is_const && else_expr.const_value)
   {
@@ -1520,12 +1617,12 @@ resolve_expr_index(Expr *expr)
   if (operand.type->kind != TYPE_PTR && operand.type->kind != TYPE_ARRAY)
   {
     // IMPORTANT TODO(#23): make it so u can only index arrays and add multipointer like in odin [^] == [*]
-    fatal("Can only index arrays or pointers");
+    fatal(expr->pos, "can only index arrays or pointers");
   }
   Operand index   = resolve_expr(expr->index.index);
   if (index.type->kind != TYPE_INT)
   {
-    fatal("Index expression must have type int");
+    fatal(expr->pos, "index expression must be of type int");
   }
   if (operand.type->kind == TYPE_PTR)
   {
@@ -1548,19 +1645,19 @@ resolve_expr_cast(Expr *expr)
   {
     if (result.type->kind != TYPE_PTR && result.type->kind != TYPE_INT)
     {
-      fatal("Invalid cast to pointer type");
+      fatal(expr->pos, "invalid cast to pointer type");
     }
   }
   else if (type->kind == TYPE_INT)
   {
     if (result.type->kind != TYPE_PTR && result.type->kind != TYPE_INT)
     {
-      fatal("Invalid cast to int type");
+      fatal(expr->pos, "invalid cast to int type");
     }
   }
   else
   {
-    fatal("Invalid target cast type");
+    fatal(expr->pos, "invalid target cast type");
   }
 
   return resolved_rvalue(type);
@@ -1581,8 +1678,7 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
     result = resolved_rvalue(type_float);
     break;
   case EXPR_STRING_LITERAL:
-    // IMPORTANT TODO(#25): get rid of char * and use sized string!!
-    result = resolved_rvalue(type_ptr(type_char));
+    result = resolved_rvalue(type_string);
     break;
   case EXPR_CHAR_LITERAL:
     // result = resolved_rvalue(type_char);
@@ -1665,7 +1761,7 @@ resolve_const_expr(Expr *expr)
   Operand result = resolve_expr(expr);
   if (!result.is_const)
   {
-    fatal("Expected constant expression");
+    fatal(expr->pos, "expected constant expression");
   }
   return result.const_value;
 }
@@ -1677,6 +1773,14 @@ init_global_syms()
   sym_global_type(str8_lit("char"),  type_char);
   sym_global_type(str8_lit("int"),   type_int);
   sym_global_type(str8_lit("float"), type_float);
+  sym_global_type(str8_lit("string"), type_string);
+}
+
+internal void
+sym_set_source_text(String8 source)
+{
+  // @HACK for getting the lexer source text into here
+  source_text = source;
 }
 
 internal void
