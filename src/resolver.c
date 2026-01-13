@@ -868,7 +868,7 @@ resolve_decl_const(Decl *decl, s64 *const_value)
   Operand result = resolve_expr(decl->init_expr);
   if (!result.is_const)
   {
-    fatal(decl->pos, "initializer is not a constant expression");
+    fatal(decl->init_expr->pos, "initializer is not a constant expression");
   }
   *const_value = result.const_value;
   return result.type;
@@ -1183,6 +1183,7 @@ resolve_name(Source_Pos pos, String8 name)
   Sym *sym = sym_get(name);
   if (!sym)
   {
+    // TODO: we could do a fuzzy search through all symbols and suggest????
     fatal(pos, "undeclared identifier '%.*s'", str8_varg(name));
     return NULL;
   }
@@ -1578,6 +1579,7 @@ resolve_expr_call(Expr *expr)
     Operand arg = resolve_expected_expr(arg_expr, param_type);
     if (arg.type != param_type)
     {
+      // TODO: improve
       fatal(arg_expr->pos, "procedure call argument type mismatch");
     }
   }
