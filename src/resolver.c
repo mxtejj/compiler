@@ -1220,17 +1220,6 @@ resolve_expr_field(Expr *expr)
 }
 
 internal Operand
-ptr_decay(Operand expr)
-{
-  // TODO(#17): dont do this
-  if (expr.type->kind == TYPE_ARRAY)
-  {
-    return resolved_rvalue(type_ptr(expr.type->array.base));
-  }
-  return expr;
-}
-
-internal Operand
 resolve_expr_name(Expr *expr)
 {
   assert(expr->kind == EXPR_IDENT);
@@ -1287,7 +1276,6 @@ resolve_expr_unary(Expr *expr)
   {
   case TOKEN_DEREF:
   {
-    operand = ptr_decay(operand);
     if (type->kind != TYPE_PTR)
     {
       fatal(expr->pos, "cannot dereference non-pointer type");
@@ -1592,13 +1580,13 @@ resolve_expr_ternary(Expr *expr, Type *expected_type)
 {
   // TODO(#22): have actual bool types
   assert(expr->kind == EXPR_TERNARY);
-  Operand cond = ptr_decay(resolve_expr(expr->ternary.cond));
+  Operand cond = resolve_expr(expr->ternary.cond);
   if (cond.type->kind != TYPE_INT && cond.type->kind != TYPE_PTR)
   {
     fatal(expr->pos, "ternary condition expression must have type int or ptr");
   }
-  Operand then_expr = ptr_decay(resolve_expected_expr(expr->ternary.then, expected_type));
-  Operand else_expr = ptr_decay(resolve_expected_expr(expr->ternary.else_, expected_type));
+  Operand then_expr = resolve_expected_expr(expr->ternary.then, expected_type);
+  Operand else_expr = resolve_expected_expr(expr->ternary.else_, expected_type);
   if (then_expr.type != else_expr.type)
   {
     fatal(expr->pos, "ternary then/else expression must have matching types");
@@ -1615,7 +1603,7 @@ resolve_expr_index(Expr *expr)
 {
   assert(expr->kind == EXPR_INDEX);
 
-  Operand operand = ptr_decay(resolve_expr(expr->index.expr));
+  Operand operand = resolve_expr(expr->index.expr);
   if (operand.type->kind != TYPE_PTR && operand.type->kind != TYPE_ARRAY)
   {
     // IMPORTANT TODO(#23): make it so u can only index arrays and add multipointer like in odin [^] == [*]
@@ -1640,7 +1628,7 @@ resolve_expr_cast(Expr *expr)
   assert(expr->kind == EXPR_CAST);
 
   Type *type = resolve_typespec(expr->cast.type);
-  Operand result = ptr_decay(resolve_expr(expr->cast.expr));
+  Operand result = resolve_expr(expr->cast.expr);
 
   // ptr -> ptr, ptr -> int, int -> ptr
   if (type->kind == TYPE_PTR)
