@@ -178,7 +178,7 @@ typedef uintptr_t uintptr;
 
 typedef struct {
   u8 *data;
-  u64 length;
+  u64 len;
 } string;
 
 typedef u8  *cstring;

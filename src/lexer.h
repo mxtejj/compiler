@@ -78,6 +78,8 @@
   X(CAST)             \
   X(TRANSMUTE)        \
   X(IN)               \
+  X(THEN)             \
+  X(FOREIGN)          \
   X(KEYWORD_END)      \
 
 typedef enum Token_Kind Token_Kind;

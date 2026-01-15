@@ -80,8 +80,18 @@ ENUM(Type_Kind)
   TYPE_COMPLETING,
   TYPE_VOID,
   TYPE_CHAR,
+  TYPE_S8,
+  TYPE_S16,
+  TYPE_S32,
+  TYPE_S64,
+  TYPE_U8,
+  TYPE_U16,
+  TYPE_U32,
+  TYPE_U64,
   TYPE_INT,
-  TYPE_FLOAT,
+  TYPE_UINT,
+  TYPE_F32,
+  TYPE_F64,
   TYPE_STRING,
   TYPE_PTR,
   TYPE_ARRAY,
@@ -177,11 +187,35 @@ type_alloc(Type_Kind kind)
   return t;
 }
 
+internal Type *type_ptr(Type *base);
+
 Type *type_void   = &(Type){ .kind = TYPE_VOID,   .size = 0,  .align = 0 };
-Type *type_char   = &(Type){ .kind = TYPE_CHAR,   .size = 1,  .align = 1 };
-Type *type_int    = &(Type){ .kind = TYPE_INT,    .size = 4,  .align = 4 };
-Type *type_float  = &(Type){ .kind = TYPE_FLOAT,  .size = 4,  .align = 4 };
+Type *type_s8     = &(Type){ .kind = TYPE_S8,     .size = 1,  .align = 1 };
+Type *type_s16    = &(Type){ .kind = TYPE_S16,    .size = 2,  .align = 2 };
+Type *type_s32    = &(Type){ .kind = TYPE_S32,    .size = 4,  .align = 4 };
+Type *type_s64    = &(Type){ .kind = TYPE_S64,    .size = 8,  .align = 8 };
+Type *type_u8     = &(Type){ .kind = TYPE_U8,     .size = 1,  .align = 1 };
+Type *type_u16    = &(Type){ .kind = TYPE_U16,    .size = 2,  .align = 2 };
+Type *type_u32    = &(Type){ .kind = TYPE_U32,    .size = 4,  .align = 4 };
+Type *type_u64    = &(Type){ .kind = TYPE_U64,    .size = 8,  .align = 8 };
+Type *type_int    = &(Type){ .kind = TYPE_INT,    .size = 4,  .align = 4 }; // platform-sized   signed integer
+Type *type_uint   = &(Type){ .kind = TYPE_UINT,   .size = 4,  .align = 4 }; // platform-sized unsigned integer
+Type *type_f32    = &(Type){ .kind = TYPE_F32,    .size = 4,  .align = 4 };
+Type *type_f64    = &(Type){ .kind = TYPE_F64,    .size = 8,  .align = 8 };
 Type *type_string = &(Type){ .kind = TYPE_STRING, .size = 16, .align = 8 };
+
+internal void
+init_string_type_fields()
+{
+  Type_Field_Array fields = {0};
+  fields.count = 2;
+  fields.v = push_array_nz(resolve_arena, Type_Field, fields.count);
+
+  fields.v[0] = (Type_Field){ .name = S("data"), .type = type_ptr(type_u8) };
+  fields.v[1] = (Type_Field){ .name = S("len"),  .type = type_u64 };
+
+  type_string->aggregate.fields = fields;
+}
 
 const usize PTR_SIZE  = 8;
 const usize PTR_ALIGN = 8;
@@ -796,8 +830,18 @@ string_from_type(Arena *arena, Type *type)
   case TYPE_COMPLETING: return str8_lit("<COMPLETING>");
   case TYPE_VOID:       return str8_lit("void");
   case TYPE_CHAR:       return str8_lit("char");
+  case TYPE_S8:         return str8_lit("s8");
+  case TYPE_S16:        return str8_lit("s16");
+  case TYPE_S32:        return str8_lit("s32");
+  case TYPE_S64:        return str8_lit("s64");
+  case TYPE_U8:         return str8_lit("u8");
+  case TYPE_U16:        return str8_lit("u16");
+  case TYPE_U32:        return str8_lit("u32");
+  case TYPE_U64:        return str8_lit("u64");
   case TYPE_INT:        return str8_lit("int");
-  case TYPE_FLOAT:      return str8_lit("float");
+  case TYPE_UINT:       return str8_lit("uint");
+  case TYPE_F32:        return str8_lit("f32");
+  case TYPE_F64:        return str8_lit("f64");
   case TYPE_STRING:     return str8_lit("string");
   case TYPE_PTR:
   {
@@ -1198,9 +1242,10 @@ resolve_expr_field(Expr *expr)
   Operand left = resolve_expr(expr->field.expr);
   Type *type = left.type;
   complete_type(type);
-  if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION)
+  // TODO: for now we can do s.data, s.len on strings
+  if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION && type->kind != TYPE_STRING)
   {
-    fatal(expr->pos, "cannot access field on non struct/union type");
+    fatal(expr->pos, "cannot access field on non struct/union/string type");
     return nil_operand;
   }
   for (Type_Field *it = type->aggregate.fields.v;
@@ -1667,7 +1712,7 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
     result = resolved_const(expr->literal.integer);
     break;
   case EXPR_FLOAT_LITERAL:
-    result = resolved_rvalue(type_float);
+    result = resolved_rvalue(type_f32);
     break;
   case EXPR_STRING_LITERAL:
     result = resolved_rvalue(type_string);
@@ -1761,11 +1806,23 @@ resolve_const_expr(Expr *expr)
 internal void
 init_global_syms()
 {
-  sym_global_type(str8_lit("void"),  type_void);
-  sym_global_type(str8_lit("char"),  type_char);
-  sym_global_type(str8_lit("int"),   type_int);
-  sym_global_type(str8_lit("float"), type_float);
+  // TODO: get rid of void?
+  sym_global_type(str8_lit("void"),   type_void);
+  sym_global_type(str8_lit("s8"),     type_s8);
+  sym_global_type(str8_lit("s16"),    type_s16);
+  sym_global_type(str8_lit("s32"),    type_s32);
+  sym_global_type(str8_lit("s64"),    type_s64);
+  sym_global_type(str8_lit("u8"),     type_u8);
+  sym_global_type(str8_lit("u16"),    type_u16);
+  sym_global_type(str8_lit("u32"),    type_u32);
+  sym_global_type(str8_lit("u64"),    type_u64);
+  sym_global_type(str8_lit("int"),    type_int);
+  sym_global_type(str8_lit("uint"),   type_uint);
+  sym_global_type(str8_lit("f32"),    type_f32);
+  sym_global_type(str8_lit("f64"),    type_f64);
   sym_global_type(str8_lit("string"), type_string);
+
+  init_string_type_fields();
 }
 
 internal void

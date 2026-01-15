@@ -1401,6 +1401,12 @@ parse_type(Parser *p)
 internal Decl *
 parse_decl_nosemi(Parser *p)
 {
+  b32 is_foreign = false;
+  if (match(p, TOKEN_FOREIGN))
+  {
+    is_foreign = true;
+  }
+
   String8 name = parse_ident(p);
   expect(p, ':');
 
@@ -1442,14 +1448,21 @@ parse_decl_nosemi(Parser *p)
     }
   }
 
+  Decl *decl = NULL;
+
   // Return the appropriate node
   if (is_const)
   {
     // Your decl_const should be updated to accept both init_expr and init_type
-    return decl_const(p, name, type_hint, init_expr, init_type);
+    decl = decl_const(p, name, type_hint, init_expr, init_type);
+  }
+  else
+  {
+    decl = decl_var(p, name, type_hint, init_expr);
   }
 
-  return decl_var(p, name, type_hint, init_expr);
+  decl->is_foreign = is_foreign;
+  return decl;
 }
 
 internal Decl *

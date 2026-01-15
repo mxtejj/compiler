@@ -408,11 +408,12 @@ STRUCT(Decl_Typedef)
 
 struct Decl
 {
-  Decl_Kind kind;
-  Source_Pos pos;
+  Decl_Kind   kind;
+  Source_Pos  pos;
   struct Sym *sym;
-  String8   name;
-  Type_Spec *type_hint; // The 'T' in 'x: T = ...'
+  String8     name;
+  Type_Spec  *type_hint; // The 'T' in 'x: T = ...'
+  b32         is_foreign;
 
   // payload
   Expr      *init_expr; // 'N :: 5'

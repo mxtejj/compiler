@@ -75,9 +75,18 @@ cdecl_name(Arena *arena, Type *type)
   switch (type->kind)
   {
   case TYPE_VOID:   return str8_lit("void");
-  case TYPE_CHAR:   return str8_lit("char");
-  case TYPE_INT:    return str8_lit("int");
-  case TYPE_FLOAT:  return str8_lit("f32");
+  case TYPE_S8:     return str8_lit("s8");
+  case TYPE_S16:    return str8_lit("s16");
+  case TYPE_S32:    return str8_lit("s32");
+  case TYPE_S64:    return str8_lit("s64");
+  case TYPE_U8:     return str8_lit("u8");
+  case TYPE_U16:    return str8_lit("u16");
+  case TYPE_U32:    return str8_lit("u32");
+  case TYPE_U64:    return str8_lit("u64");
+  case TYPE_INT:    return str8_lit("s64"); // TODO: use isize (platform-sized   signed integer)
+  case TYPE_UINT:   return str8_lit("u64"); // TODO: use usize (platform-sized unsigned integer)
+  case TYPE_F32:    return str8_lit("f32");
+  case TYPE_F64:    return str8_lit("f64");
   case TYPE_STRING: return str8_lit("string");
 
   case TYPE_ARRAY: return gen_array_type_name(arena, type->array.base, type->array.length);
@@ -107,9 +116,18 @@ cdecl_from_type(Arena *arena, CDecl_Builder *b, Type *type)
   switch (type->kind)
   {
   case TYPE_VOID:
-  case TYPE_CHAR:
+  case TYPE_S8:
+  case TYPE_S16:
+  case TYPE_S32:
+  case TYPE_S64:
+  case TYPE_U8:
+  case TYPE_U16:
+  case TYPE_U32:
+  case TYPE_U64:
   case TYPE_INT:
-  case TYPE_FLOAT:
+  case TYPE_UINT:
+  case TYPE_F32:
+  case TYPE_F64:
   case TYPE_STRING:
   case TYPE_STRUCT:
   case TYPE_UNION:
@@ -499,14 +517,24 @@ gen_binary_op_name(Codegen *g, Token_Kind op, Type *type)
   default: assert(0); return (String8){0};
   }
   
-  char *type_suffix = NULL;
+  char *type_suffix = NULL; // use cdecl name function here TODO
   switch (type->kind)
   {
-  case TYPE_INT:   type_suffix = "s32"; break;
-  case TYPE_CHAR:  type_suffix = "s8";  break;
-  case TYPE_FLOAT: type_suffix = "f32"; break;
-  // TODO: Extend for more types (s64, u32, etc.)
-  default: type_suffix = "s32"; break;
+  case TYPE_VOID:   type_suffix = "void";   break;
+  case TYPE_S8:     type_suffix = "s8";     break;
+  case TYPE_S16:    type_suffix = "s16";    break;
+  case TYPE_S32:    type_suffix = "s32";    break;
+  case TYPE_S64:    type_suffix = "s64";    break;
+  case TYPE_U8:     type_suffix = "u8";     break;
+  case TYPE_U16:    type_suffix = "u16";    break;
+  case TYPE_U32:    type_suffix = "u32";    break;
+  case TYPE_U64:    type_suffix = "u64";    break;
+  case TYPE_INT:    type_suffix = "s64";    break; // TODO: use isize (platform-sized   signed integer)
+  case TYPE_UINT:   type_suffix = "u64";    break; // TODO: use usize (platform-sized unsigned integer)
+  case TYPE_F32:    type_suffix = "f32";    break;
+  case TYPE_F64:    type_suffix = "f64";    break;
+  case TYPE_STRING: type_suffix = "string"; break;
+  default: assert(0); break;
   }
   
   return str8f(g->arena, "%s_%s", base_name, type_suffix);
