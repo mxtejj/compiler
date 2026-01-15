@@ -1184,7 +1184,7 @@ resolve_name(Source_Pos pos, String8 name)
   if (!sym)
   {
     // TODO: we could do a fuzzy search through all symbols and suggest????
-    fatal(pos, "undeclared identifier '%.*s'", str8_varg(name));
+    fatal(pos, "undeclared identifier `%.*s`", str8_varg(name));
     return NULL;
   }
   resolve_sym(sym);
@@ -1213,7 +1213,7 @@ resolve_expr_field(Expr *expr)
     }
   }
   Arena_Temp scratch = arena_scratch_get(0, 0);
-  fatal(expr->pos, "'%.*s' has no field `%.*s`", str8_varg(string_from_type(scratch.arena, type)), str8_varg(expr->field.name));
+  fatal(expr->pos, "`%.*s` has no field `%.*s`", str8_varg(string_from_type(scratch.arena, type)), str8_varg(expr->field.name));
   arena_scratch_release(scratch);
   // TODO: maybe we can show the struct definition?
   return nil_operand;
@@ -1235,7 +1235,7 @@ resolve_expr_name(Expr *expr)
   case SYM_TYPE:
     return resolved_rvalue(sym->type);
   default:
-    fatal(expr->pos, "%.*s must be a var or const", str8_varg(expr->ident));
+    fatal(expr->pos, "`%.*s` must be a var or const", str8_varg(expr->ident));
     return nil_operand;
   }
 
@@ -1278,6 +1278,7 @@ resolve_expr_unary(Expr *expr)
   {
     if (type->kind != TYPE_PTR)
     {
+      // TODO: say which type
       fatal(expr->pos, "cannot dereference non-pointer type");
     }
     return resolved_lvalue(type->ptr.base);
@@ -1286,6 +1287,7 @@ resolve_expr_unary(Expr *expr)
   {
     if (!operand.is_lvalue)
     {
+      // TODO: say which type
       fatal(expr->pos, "cannot take address of non-lvalue");
     }
     return resolved_rvalue(type_ptr(type));
@@ -1297,7 +1299,7 @@ resolve_expr_unary(Expr *expr)
   {
     if (type->kind != TYPE_INT)
     {
-      fatal(expr->pos, "can use unary %.*s with ints only", str8_varg(str_from_token_kind(scratch.arena, expr->unary.op.kind)));
+      fatal(expr->pos, "can use unary `%.*s` with ints only", str8_varg(str_from_token_kind(scratch.arena, expr->unary.op.kind)));
     }
     if (operand.is_const)
     {
@@ -1376,14 +1378,14 @@ resolve_expr_binary(Expr *expr)
   Arena_Temp scratch = arena_scratch_get(0, 0);
   if (left.type != type_int)
   {
-    fatal(expr->pos, "left operand of %.*s must be int", str8_varg(str_from_token_kind(scratch.arena, expr->binary.op.kind)));
+    fatal(expr->pos, "left operand of operator `%.*s` must be int", str8_varg(str_from_token_kind(scratch.arena, expr->binary.op.kind)));
   }
   if (left.type != right.type)
   {
     String8 op  = str_from_token_kind(scratch.arena, expr->binary.op.kind);
     String8 lhs = string_from_type(scratch.arena, left.type);
     String8 rhs = string_from_type(scratch.arena, right.type);
-    fatal(expr->pos, "operator %.*s cannot be applied to types `%.*s` and `%.*s`", str8_varg(op), str8_varg(lhs), str8_varg(rhs));
+    fatal(expr->pos, "operator `%.*s` cannot be applied to types `%.*s` and `%.*s`", str8_varg(op), str8_varg(lhs), str8_varg(rhs));
   }
   arena_scratch_release(scratch);
 
@@ -1422,7 +1424,7 @@ aggregate_field_index(Type *type, String8 name)
     }
   }
   Arena_Temp scratch = arena_scratch_get(0, 0);
-  fatal(type->sym->decl->pos, "'%.*s' has no field `%.*s`", str8_varg(string_from_type(scratch.arena, type)), str8_varg(name));
+  fatal(type->sym->decl->pos, "`%.*s` has no field `%.*s`", str8_varg(string_from_type(scratch.arena, type)), str8_varg(name));
   arena_scratch_release(scratch);
   return SIZE_MAX;
 }
@@ -1670,7 +1672,7 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
   case EXPR_STRING_LITERAL:
     result = resolved_rvalue(type_string);
     break;
-  case EXPR_CHAR_LITERAL:
+  case EXPR_CHAR_LITERAL: // TODO: rename to rune
     // result = resolved_rvalue(type_char);
     // TODO(#26): for now this will just be converted to int const
     result = resolved_const(expr->literal.character);

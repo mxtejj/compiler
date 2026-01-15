@@ -68,7 +68,6 @@ internal String8 gen_array_type_name(Arena *arena, Type *base, u64 length);
 
 internal void gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type);
 internal void gen_stmt_block(Codegen *g, Stmt_Array block, Type *ret_type);
-internal void gen_expr_simple(Codegen *g, Expr *expr, String8 dest);
 
 internal String8
 cdecl_name(Arena *arena, Type *type)
@@ -842,9 +841,26 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
   }
   
   case STMT_FOR:
-  case STMT_FOR_IN:
   {
     gen_pushlnf(g, "// TODO: for loop");
+    // TODO: need to make gen_stmt return a string8 like gen_expr with an option to disable semicolon
+    // gen_pushlnf(g, "");
+    // gen_pushf(g, "for (");
+    // gen_stmt(g, stmt->for0.init, NULL);
+    // String8 cond = gen_expr(g, stmt->for0.cond);
+    // gen_pushf(g, " %.*s;", str8_varg(cond));
+    // gen_stmt(g, stmt->for0.loop, NULL); // TODO this generates an extra ; which causes an error,
+    // gen_pushf(g, ") {");
+    // g->indent++;
+    // gen_stmt_block(g, stmt->for0.body->block, NULL);
+    // g->indent--;
+    // gen_pushlnf(g, "}");
+    break;
+  }
+
+  case STMT_FOR_IN:
+  {
+    gen_pushlnf(g, "// TODO: for in loop");
     break;
   }
   

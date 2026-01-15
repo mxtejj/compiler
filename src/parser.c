@@ -182,9 +182,6 @@ peek(Parser *p, Token_Kind kind)
 internal bool
 is_type_start(Parser *p)
 {
-  // TODO: Support inline types thingy
-  // like a := [2]struct{ name: string, age: int }{}
-  //      a := [2]Person{}
   switch (p->curr.kind)
   {
   case TOKEN_IDENT:
