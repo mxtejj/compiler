@@ -233,7 +233,13 @@ lexer_parse_string(Lexer *l)
   }
 
   Token t = lexer_make_token(l, TOKEN_STRING_LITERAL);
-  t.value.string = str8_copy(g_arena, str8(string_buf, string_len));
+  // t.value.string = str8_copy(g_arena, str8(string_buf, string_len));
+
+  // @HACK since we cant emit escape codes in C codegen,
+  // for now we just take the original literal text with the quotes chopped off
+  t.value.string = t.lexeme;
+  t.value.string = str8_skip(t.value.string, 1);
+  t.value.string = str8_chop(t.value.string, 1);
 
   arena_delete(string_arena);
 

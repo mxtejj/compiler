@@ -293,6 +293,7 @@ gen_forward_decls(Codegen *g)
     if (!decl) continue;
     if (decl->kind != DECL_CONST) continue;
     if (!decl->init_type) continue;
+    if (decl->is_foreign) continue;
 
     switch (decl->init_type->kind)
     {
@@ -322,6 +323,11 @@ gen_aggregate(Codegen *g, Sym *sym)
   Decl *decl = sym->decl;
   Type *type = sym->type;
 
+  if (decl->is_foreign)
+  {
+    return;
+  }
+
   gen_pushf(g, "%s %.*s {", 
     (sym->type->kind == TYPE_STRUCT ? "struct" : "union"), 
     str8_varg(decl->name));
@@ -345,6 +351,12 @@ gen_proc(Codegen *g, Sym *sym)
   Decl *decl = sym->decl;
   Type *type = sym->type;
 
+  if (decl->is_foreign)
+  {
+    // Don't generate foreign proc bodies.
+    return;
+  }
+
   // Generate function signature WITH NAMED PARAMETERS (preserves debug info!)
   gen_pushf(g, "%.*s %.*s(", 
     str8_varg(cdecl_name(g->arena, type->proc.ret)), 
@@ -367,10 +379,10 @@ gen_proc(Codegen *g, Sym *sym)
       gen_pushf(g, "%.*s", str8_varg(param_decl));
     }
   }
-  
+
   gen_pushf(g, ") {");
   g->indent++;
-  
+
   // Generate temporaries for all parameters (fixes eval order UB)
   g->param_count = params.count;
   if (params.count > 0)
@@ -746,6 +758,17 @@ gen_expr(Codegen *g, Expr *expr)
     return str8f(g->arena, "/*size_of*/%d", target_type->size);
     // String8 type_name = cdecl_name(g->arena, target_type);
     // return str8f(g->arena, "sizeof(%.*s)", str8_varg(type_name));
+  }
+
+  case EXPR_GROUP:
+  {
+    String8 e = gen_expr(g, expr->group.expr);
+    return str8f(g->arena, "(%.*s)", str8_varg(e));
+  }
+
+  case EXPR_CHAR_LITERAL:
+  {
+    return str8f(g->arena, "/*char*/%d", expr->literal.character);
   }
 
   default:

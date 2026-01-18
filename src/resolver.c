@@ -99,6 +99,11 @@ ENUM(Type_Kind)
   TYPE_UNION,
   TYPE_ENUM,
   TYPE_PROC,
+
+  TYPE_UNTYPED_INT,
+  TYPE_UNTYPED_FLOAT,
+  TYPE_UNTYPED_BOOL,
+  TYPE_UNTYPED_STRING, // TODO: string, cstring, cstring16 ...
 };
 
 STRUCT(Type_Field);
@@ -203,6 +208,11 @@ Type *type_uint   = &(Type){ .kind = TYPE_UINT,   .size = 4,  .align = 4 }; // p
 Type *type_f32    = &(Type){ .kind = TYPE_F32,    .size = 4,  .align = 4 };
 Type *type_f64    = &(Type){ .kind = TYPE_F64,    .size = 8,  .align = 8 };
 Type *type_string = &(Type){ .kind = TYPE_STRING, .size = 16, .align = 8 };
+
+Type *type_untyped_int    = &(Type){ .kind = TYPE_UNTYPED_INT,    .size = 0, .align = 0 };
+Type *type_untyped_float  = &(Type){ .kind = TYPE_UNTYPED_FLOAT,  .size = 0, .align = 0 };
+Type *type_untyped_bool   = &(Type){ .kind = TYPE_UNTYPED_BOOL,   .size = 0, .align = 0 };
+Type *type_untyped_string = &(Type){ .kind = TYPE_UNTYPED_STRING, .size = 0, .align = 0 };
 
 internal void
 init_string_type_fields()
@@ -394,6 +404,13 @@ type_complete_struct(Type *type, Type_Field_Array fields)
     type->align = clamp_bot(type->align, type_align_of(it.type));
   }
 
+  // Empty structs: size = 1, align = 1 (for C compatibility with opaque types)
+  if (fields.count == 0)
+  {
+    type->size = 1;
+    type->align = 1;
+  }
+
   type->aggregate.fields.v = push_array_nz(resolve_arena, Type_Field, fields.count);
   type->aggregate.fields.count = fields.count;
 
@@ -414,6 +431,13 @@ type_complete_union(Type *type, Type_Field_Array fields)
     type->align = MAX(type->align, type_align_of(it->type));
   }
 
+  // Empty unions: size = 1, align = 1
+  if (fields.count == 0)
+  {
+    type->size = 1;
+    type->align = 1;
+  }
+
   type->aggregate.fields.v = push_array_nz(resolve_arena, Type_Field, fields.count);
   type->aggregate.fields.count = fields.count;
 
@@ -430,19 +454,19 @@ type_incomplete(Sym *sym)
 
 ENUM(Sym_Kind)// 176
 {
-  SYM_NONE,
-  SYM_VAR,
-  SYM_CONST,
-  SYM_PROC,
-  SYM_TYPE,
-  SYM_ENUM_CONST,
+  SymKind_Null,
+  SymKind_Var,
+  SymKind_Const,
+  SymKind_Proc,
+  SymKind_Type,
+  SymKind_EnumConst,
 };
 
 ENUM(Sym_State)
 {
-  SYM_UNRESOLVED,
-  SYM_RESOLVING,
-  SYM_RESOLVED,
+  SymState_Unresolved,
+  SymState_Resolving,
+  SymState_Resolved,
 };
 
 STRUCT(Sym)
@@ -502,10 +526,10 @@ sym_alloc(Sym_Kind kind, String8 name, Decl *decl)
 }
 
 internal Sym *
-sym_var(String8 name, Type *type)
+SymKind_Var(String8 name, Type *type)
 {
-  Sym *sym = sym_alloc(SYM_VAR, name, NULL);
-  sym->state = SYM_RESOLVED;
+  Sym *sym = sym_alloc(SymKind_Var, name, NULL);
+  sym->state = SymState_Resolved;
   sym->type  = type;
   return sym;
 }
@@ -513,11 +537,11 @@ sym_var(String8 name, Type *type)
 internal Sym *
 sym_decl(Decl *decl)
 {
-  Sym_Kind kind = SYM_NONE;
+  Sym_Kind kind = SymKind_Null;
   switch (decl->kind)
   {
   case DECL_VAR:
-    kind = SYM_VAR;
+    kind = SymKind_Var;
     break;
   case DECL_CONST:
     // Type declarations: Matrix :: [4][4]int, Color :: enum {...}, etc.
@@ -525,18 +549,18 @@ sym_decl(Decl *decl)
     {
       if (decl->init_type->kind == TYPE_SPEC_PROC)
       {
-        kind = SYM_PROC;
+        kind = SymKind_Proc;
       }
       else
       {
         // All non-proc init_types are type aliases
-        kind = SYM_TYPE;
+        kind = SymKind_Type;
       }
     }
     // Constant value declarations: PI :: 3.14, N :: size_of(int), etc.
     else if (decl->init_expr)
     {
-      kind = SYM_CONST;
+      kind = SymKind_Const;
     }
     else
     {
@@ -551,16 +575,16 @@ sym_decl(Decl *decl)
   Sym *sym = sym_alloc(kind, decl->name, decl);
   if (decl->init_type && (decl->init_type->kind == TYPE_SPEC_STRUCT || decl->init_type->kind == TYPE_SPEC_UNION))
   {
-    sym->state = SYM_RESOLVED;
+    sym->state = SymState_Resolved;
     sym->type  = type_incomplete(sym);
   }
   return sym;
 }
 
 internal Sym *
-sym_enum_const(String8 name, Decl *decl)
+SymKind_EnumConst(String8 name, Decl *decl)
 {
-  return sym_alloc(SYM_ENUM_CONST, name, decl);
+  return sym_alloc(SymKind_EnumConst, name, decl);
 }
 
 internal Sym *
@@ -620,7 +644,7 @@ sym_global_decl(Decl *decl)
     for each_index(i, decl->init_type->enum_members.count)
     {
       Enum_Member it = decl->init_type->enum_members.v[i];
-      sym_list_push(&global_syms, sym_enum_const(it.name, decl));
+      sym_list_push(&global_syms, SymKind_EnumConst(it.name, decl));
     }
   }
   return sym;
@@ -629,8 +653,8 @@ sym_global_decl(Decl *decl)
 internal Sym *
 sym_global_type(String8 name, Type *type)
 {
-  Sym *sym = sym_alloc(SYM_TYPE, name, NULL);
-  sym->state = SYM_RESOLVED;
+  Sym *sym = sym_alloc(SymKind_Type, name, NULL);
+  sym->state = SymState_Resolved;
   sym->type  = type;
   sym_list_push(&global_syms, sym);
   return sym;
@@ -689,7 +713,7 @@ resolve_typespec(Type_Spec *typespec)
   case TYPE_SPEC_NAME:
   {
     Sym *sym = resolve_name(typespec->pos, typespec->name);
-    if (sym->kind != SYM_TYPE)
+    if (sym->kind != SymKind_Type)
     {
       fatal(sym->decl->pos, "%.*s must denote a type", str8_varg(typespec->name));
       return NULL;
@@ -770,16 +794,13 @@ complete_type(Type *type)
     total_field_count += it.names.node_count;
   }
 
-  if (total_field_count == 0)
-  {
-    fatal(decl->pos, "no fields in aggregate declaration");
-  }
-
+  // Empty structs are allowed (useful for opaque/forward declarations in FFI)
   Type_Field_Array fields = {0};
   fields.count = total_field_count;
-  fields.v = push_array(resolve_arena, Type_Field, fields.count);
-
-  assert(decl->init_type->aggr_fields.count > 0);
+  if (total_field_count > 0)
+  {
+    fields.v = push_array(resolve_arena, Type_Field, fields.count);
+  }
 
   for each_index(i, decl->init_type->aggr_fields.count)
   {
@@ -1086,7 +1107,13 @@ resolve_proc(Sym *sym)
   Decl *decl = sym->decl;
   assert(decl->kind == DECL_CONST);
   assert(decl->init_type && decl->init_type->kind == TYPE_SPEC_PROC);
-  assert(sym->state == SYM_RESOLVED);
+  assert(sym->state == SymState_Resolved);
+
+  if (decl->is_foreign)
+  {
+    // Skip body resolution for foreign procedures
+    return;
+  }
 
   Type_Spec *proc_spec = decl->init_type;
   Decl_Array params = proc_spec->proc.params;
@@ -1095,7 +1122,7 @@ resolve_proc(Sym *sym)
   for each_index(i, params.count)
   {
     Decl *param = params.v[i];
-    sym_push(sym_var(param->name, resolve_typespec(param->type_hint)));
+    sym_push(SymKind_Var(param->name, resolve_typespec(param->type_hint)));
     // resolve_decl_var(param);
   }
   if (proc_spec->proc.body)
@@ -1112,7 +1139,7 @@ resolve_proc(Sym *sym)
 {
   Decl *decl = sym->decl;
   assert(decl->kind == DECL_PROC);
-  assert(sym->state == SYM_RESOLVED);
+  assert(sym->state == SymState_Resolved);
   Type *type = sym->type;
   assert(type->kind == TYPE_PROC);
 
@@ -1120,7 +1147,7 @@ resolve_proc(Sym *sym)
   for each_index(i, type->proc.params.count)
   {
     // Type_Param param = type->proc.params.v[i];
-    // sym_push(sym_var());
+    // sym_push(SymKind_Var());
   }
   sym_leave(syms);
 }
@@ -1130,28 +1157,28 @@ resolve_proc(Sym *sym)
 internal void
 resolve_sym(Sym *sym)
 {
-  if (sym->state == SYM_RESOLVED)
+  if (sym->state == SymState_Resolved)
   {
     return;
   }
-  else if (sym->state == SYM_RESOLVING)
+  else if (sym->state == SymState_Resolving)
   {
     fatal(sym->decl->pos, "cyclic dependency");
     return;
   }
 
-  assert(sym->state == SYM_UNRESOLVED);
-  sym->state = SYM_RESOLVING;
+  assert(sym->state == SymState_Unresolved);
+  sym->state = SymState_Resolving;
 
   switch (sym->kind)
   {
-  case SYM_TYPE:
+  case SymKind_Type:
     sym->type = resolve_decl_type(sym->decl);
     break;
-  case SYM_VAR:
+  case SymKind_Var:
     sym->type = resolve_decl_var(sym->decl);
     break;
-  case SYM_CONST:
+  case SymKind_Const:
   {
     // TODO(#16): `distinct` keyword
     // My_Int :: distinct int
@@ -1163,11 +1190,11 @@ resolve_sym(Sym *sym)
     // if (decl->init_expr && decl->init_expr->kind == EXPR_IDENT)
     // {
     //   Sym *ref_sym = sym_get(decl->init_expr->ident);
-    //   if (ref_sym && ref_sym->kind == SYM_TYPE)
+    //   if (ref_sym && ref_sym->kind == SymKind_Type)
     //   {
     //     // This is a type alias, not a constant
     //     // @CLEANUP
-    //     sym->kind = SYM_TYPE;
+    //     sym->kind = SymKind_Type;
     //     resolve_sym(ref_sym);
     //     sym->type = ref_sym->type;
     //     break;
@@ -1176,10 +1203,10 @@ resolve_sym(Sym *sym)
     sym->type = resolve_decl_const(decl, &sym->const_value);
     break;
   }
-  // case SYM_TYPEDEF:
+  // case SymKind_TypeDEF:
     // sym->type = resolve_decl_type(sym->decl);
     // break;
-  case SYM_PROC:
+  case SymKind_Proc:
     sym->type = resolve_decl_proc(sym->decl);
     break;
   default:
@@ -1187,7 +1214,7 @@ resolve_sym(Sym *sym)
     break;
   }
 
-  sym->state = SYM_RESOLVED;
+  sym->state = SymState_Resolved;
 
   // Only add to ordered_global_syms if it's actually in the global symbol table
   // (not a local variable or parameter inside a procedure)
@@ -1211,11 +1238,11 @@ internal void
 complete_sym(Sym *sym)
 {
   resolve_sym(sym);
-  if (sym->kind == SYM_TYPE)
+  if (sym->kind == SymKind_Type)
   {
     complete_type(sym->type);
   }
-  else if (sym->kind == SYM_PROC)
+  else if (sym->kind == SymKind_Proc)
   {
     resolve_proc(sym);
   }
@@ -1272,12 +1299,12 @@ resolve_expr_name(Expr *expr)
 
   switch (sym->kind)
   {
-  case SYM_VAR:
+  case SymKind_Var:
     return resolved_lvalue(sym->type);
-  case SYM_CONST:
+  case SymKind_Const:
     return resolved_const(sym->const_value);
-  case SYM_PROC:
-  case SYM_TYPE:
+  case SymKind_Proc:
+  case SymKind_Type:
     return resolved_rvalue(sym->type);
   default:
     fatal(expr->pos, "`%.*s` must be a var or const", str8_varg(expr->ident));
@@ -1293,14 +1320,10 @@ eval_int_unary(Token_Kind op, s64 value)
 {
   switch (op)
   {
-  case '+':
-    return +value;
-  case '-':
-    return -value;
-  case '!':
-    return !value;
-  case '~':
-    return ~value;
+  case '+': return +value;
+  case '-': return -value;
+  case '!': return !value;
+  case '~': return ~value;
   default:
     assert(0);
     break;
@@ -1390,8 +1413,8 @@ eval_int_binary(Token_Kind op, s64 left, s64 right)
   // TODO(#18): Handle UB in shifts etc.
   case TOKEN_LSHIFT: return left << right; // TODO(#19): handle signed vs unsigned
   case TOKEN_RSHIFT: return left >> right;
-  case '+': return left + right;
-  case '-': return left - right;
+  case '+':          return left + right;
+  case '-':          return left - right;
   // TODO: %%
   case '^':          return left ^ right;
   case '&':          return left & right;
@@ -1421,11 +1444,12 @@ resolve_expr_binary(Expr *expr)
   Operand right = resolve_expected_expr(expr->binary.right, left.type);
 
   Arena_Temp scratch = arena_scratch_get(0, 0);
-  if (left.type != type_int)
+  if (!is_integer_type(left.type))
   {
-    fatal(expr->pos, "left operand of operator `%.*s` must be int", str8_varg(str_from_token_kind(scratch.arena, expr->binary.op.kind)));
+    fatal(expr->pos, "left operand of operator `%.*s` must be integer", str8_varg(str_from_token_kind(scratch.arena, expr->binary.op.kind)));
   }
-  if (left.type != right.type)
+  // if (left.type != right.type)
+  if (!is_integer_type(left.type) && !is_integer_type(right.type))
   {
     String8 op  = str_from_token_kind(scratch.arena, expr->binary.op.kind);
     String8 lhs = string_from_type(scratch.arena, left.type);
@@ -1680,14 +1704,14 @@ resolve_expr_cast(Expr *expr)
   // ptr -> ptr, ptr -> int, int -> ptr
   if (type->kind == TYPE_PTR)
   {
-    if (result.type->kind != TYPE_PTR && result.type->kind != TYPE_INT)
+    if (result.type->kind != TYPE_PTR && !is_integer_type(result.type))
     {
       fatal(expr->pos, "invalid cast to pointer type");
     }
   }
-  else if (type->kind == TYPE_INT)
+  else if (is_integer_type(type))
   {
-    if (result.type->kind != TYPE_PTR && result.type->kind != TYPE_INT)
+    if (result.type->kind != TYPE_PTR && !is_integer_type(result.type))
     {
       fatal(expr->pos, "invalid cast to int type");
     }
@@ -1700,6 +1724,95 @@ resolve_expr_cast(Expr *expr)
   return resolved_rvalue(type);
 }
 
+internal b32
+is_untyped(Type *type)
+{
+  switch (type->kind)
+  {
+  case TYPE_UNTYPED_INT:
+  case TYPE_UNTYPED_FLOAT:
+  case TYPE_UNTYPED_BOOL:
+  case TYPE_UNTYPED_STRING:
+    return true;
+  }
+  return false;
+}
+
+internal b32
+is_integer_type(Type *type)
+{
+  switch (type->kind)
+  {
+  case TYPE_U8:
+  case TYPE_U16:
+  case TYPE_U32:
+  case TYPE_U64:
+  case TYPE_S8:
+  case TYPE_S16:
+  case TYPE_S32:
+  case TYPE_S64:
+  case TYPE_INT:
+  case TYPE_UINT:
+    return true;
+  }
+  return false;
+}
+
+internal b32
+is_float_type(Type *type)
+{
+  switch (type->kind)
+  {
+  case TYPE_F32:
+  case TYPE_F64:
+    return true;
+  }
+  return false;
+}
+
+internal b32
+can_convert_untyped(Type *from, Type *to)
+{
+  if (from->kind == TYPE_UNTYPED_INT)
+  {
+    return is_integer_type(to) || is_float_type(to);
+  }
+  if (from->kind == TYPE_UNTYPED_FLOAT)
+  {
+    return is_float_type(to);
+  }
+  if (from->kind == TYPE_UNTYPED_BOOL)
+  {
+    return to->kind == TYPE_INT; // TODO; dedicated bool type
+  }
+  return false;
+}
+
+internal Operand
+convert_untyped(Operand operand, Type *target)
+{
+  if (!is_untyped(operand.type))
+  {
+    return operand;
+  }
+  if (target && can_convert_untyped(operand.type, target))
+  {
+    operand.type = target;
+    return operand;
+  }
+
+  // default conversions when no target type
+  switch (operand.type->kind)
+  {
+  case TYPE_UNTYPED_INT:   operand.type = type_int; break;
+  case TYPE_UNTYPED_FLOAT: operand.type = type_f64; break;
+  case TYPE_UNTYPED_BOOL:  operand.type = type_int; break; // TODO: actual bool type
+  default: assert(0);
+  }
+
+  return operand;
+}
+
 internal Operand
 resolve_expected_expr(Expr *expr, Type *expected_type)
 {
@@ -1709,10 +1822,17 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
   switch (expr->kind)
   {
   case EXPR_INTEGER_LITERAL:
-    result = resolved_const(expr->literal.integer);
+    // result = resolved_const(expr->literal.integer);
+    result.type = type_untyped_int;
+    result.is_const = true;
+    result.const_value = expr->literal.integer;
     break;
   case EXPR_FLOAT_LITERAL:
-    result = resolved_rvalue(type_f32);
+    // result = resolved_rvalue(type_f32);
+    result.type = type_untyped_float;
+    result.is_const = true;
+    // result.const_value_f32 = expr->literal.floating; // TODO
+    printf("TODO: Expr float literal value.\n");
     break;
   case EXPR_STRING_LITERAL:
     result = resolved_rvalue(type_string);
@@ -1724,7 +1844,10 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
     break;
   case EXPR_BOOL_LITERAL:
     // TODO: for now this will just be converted to int const
-    result = resolved_const(expr->literal.boolean);
+    // result = resolved_const(expr->literal.boolean);
+    result.type = type_untyped_bool;
+    result.is_const = true;
+    result.const_value = expr->literal.boolean;
     break;
   case EXPR_IDENT:
     result = resolve_expr_name(expr);
@@ -1778,6 +1901,9 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
     result = nil_operand;
     break;
   }
+
+  // convert untyped to expected type
+  result = convert_untyped(result, expected_type);
 
   if (result.type)
   {

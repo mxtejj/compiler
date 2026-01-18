@@ -1450,10 +1450,8 @@ parse_decl_nosemi(Parser *p)
 
   Decl *decl = NULL;
 
-  // Return the appropriate node
   if (is_const)
   {
-    // Your decl_const should be updated to accept both init_expr and init_type
     decl = decl_const(p, name, type_hint, init_expr, init_type);
   }
   else
@@ -1461,6 +1459,7 @@ parse_decl_nosemi(Parser *p)
     decl = decl_var(p, name, type_hint, init_expr);
   }
 
+  // TODO: foreign stuff
   decl->is_foreign = is_foreign;
   return decl;
 }
