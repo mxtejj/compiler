@@ -73,58 +73,62 @@ fatal(Source_Pos pos, char *fmt, ...)
   os_exit(1);
 }
 
-ENUM(Type_Kind)
+typedef enum Type_Kind Type_Kind;
+enum Type_Kind
 {
-  TYPE_NONE,
-  TYPE_INCOMPLETE,
-  TYPE_COMPLETING,
-  TYPE_VOID,
-  TYPE_CHAR,
-  TYPE_S8,
-  TYPE_S16,
-  TYPE_S32,
-  TYPE_S64,
-  TYPE_U8,
-  TYPE_U16,
-  TYPE_U32,
-  TYPE_U64,
-  TYPE_INT,
-  TYPE_UINT,
-  TYPE_F32,
-  TYPE_F64,
-  TYPE_STRING,
-  TYPE_PTR,
-  TYPE_ARRAY,
-  TYPE_STRUCT,
-  TYPE_UNION,
-  TYPE_ENUM,
-  TYPE_PROC,
-
-  TYPE_UNTYPED_INT,
-  TYPE_UNTYPED_FLOAT,
-  TYPE_UNTYPED_BOOL,
-  TYPE_UNTYPED_STRING, // TODO: string, cstring, cstring16 ...
+  TypeKind_None,
+  TypeKind_Incomplete,
+  TypeKind_Completing,
+  TypeKind_Void,
+  TypeKind_Char,
+  TypeKind_S8,
+  TypeKind_S16,
+  TypeKind_S32,
+  TypeKind_S64,
+  TypeKind_U8,
+  TypeKind_U16,
+  TypeKind_U32,
+  TypeKind_U64,
+  TypeKind_Int,
+  TypeKind_Uint,
+  TypeKind_F32,
+  TypeKind_F64,
+  TypeKind_String,
+  TypeKind_Ptr,
+  TypeKind_Array,
+  TypeKind_Struct,
+  TypeKind_Union,
+  TypeKind_Enum,
+  TypeKind_Proc,
+  TypeKind_UntypedInt,
+  TypeKind_UntypedFloat,
+  TypeKind_UntypedBool,
+  TypeKind_UntypedString, // TODO: string, cstring, cstring16 ...
 };
 
-STRUCT(Type_Field);
-STRUCT(Type_Field_Array)
+typedef struct Type_Field Type_Field;
+typedef struct Type_Field_Array Type_Field_Array;
+
+struct Type_Field_Array
 {
   Type_Field *v;
   u64 count;
 };
 
-STRUCT(Type);
+typedef struct Type Type;
 typedef Type *Type_Param;
 
-STRUCT(Type_Param_Array)
+typedef struct Type_Param_Array Type_Param_Array;
+struct Type_Param_Array
 {
   Type_Param *v;
   u64 count;
 };
 
-STRUCT(Sym);
+typedef struct Sym Sym;
 
-STRUCT(Type)
+typedef struct Type Type;
+struct Type
 {
   Type_Kind kind;
   usize size;
@@ -161,7 +165,8 @@ STRUCT(Type)
   };
 };
 
-STRUCT(Type_Field)
+typedef struct Type_Field Type_Field;
+struct Type_Field
 {
   String8 name;
   Type   *type;
@@ -194,25 +199,24 @@ type_alloc(Type_Kind kind)
 
 internal Type *type_ptr(Type *base);
 
-Type *type_void   = &(Type){ .kind = TYPE_VOID,   .size = 0,  .align = 0 };
-Type *type_s8     = &(Type){ .kind = TYPE_S8,     .size = 1,  .align = 1 };
-Type *type_s16    = &(Type){ .kind = TYPE_S16,    .size = 2,  .align = 2 };
-Type *type_s32    = &(Type){ .kind = TYPE_S32,    .size = 4,  .align = 4 };
-Type *type_s64    = &(Type){ .kind = TYPE_S64,    .size = 8,  .align = 8 };
-Type *type_u8     = &(Type){ .kind = TYPE_U8,     .size = 1,  .align = 1 };
-Type *type_u16    = &(Type){ .kind = TYPE_U16,    .size = 2,  .align = 2 };
-Type *type_u32    = &(Type){ .kind = TYPE_U32,    .size = 4,  .align = 4 };
-Type *type_u64    = &(Type){ .kind = TYPE_U64,    .size = 8,  .align = 8 };
-Type *type_int    = &(Type){ .kind = TYPE_INT,    .size = 4,  .align = 4 }; // platform-sized   signed integer
-Type *type_uint   = &(Type){ .kind = TYPE_UINT,   .size = 4,  .align = 4 }; // platform-sized unsigned integer
-Type *type_f32    = &(Type){ .kind = TYPE_F32,    .size = 4,  .align = 4 };
-Type *type_f64    = &(Type){ .kind = TYPE_F64,    .size = 8,  .align = 8 };
-Type *type_string = &(Type){ .kind = TYPE_STRING, .size = 16, .align = 8 };
-
-Type *type_untyped_int    = &(Type){ .kind = TYPE_UNTYPED_INT,    .size = 0, .align = 0 };
-Type *type_untyped_float  = &(Type){ .kind = TYPE_UNTYPED_FLOAT,  .size = 0, .align = 0 };
-Type *type_untyped_bool   = &(Type){ .kind = TYPE_UNTYPED_BOOL,   .size = 0, .align = 0 };
-Type *type_untyped_string = &(Type){ .kind = TYPE_UNTYPED_STRING, .size = 0, .align = 0 };
+Type *type_void           = &(Type){ .kind = TypeKind_Void,   .size = 0,  .align = 0 };
+Type *type_s8             = &(Type){ .kind = TypeKind_S8,     .size = 1,  .align = 1 };
+Type *type_s16            = &(Type){ .kind = TypeKind_S16,    .size = 2,  .align = 2 };
+Type *type_s32            = &(Type){ .kind = TypeKind_S32,    .size = 4,  .align = 4 };
+Type *type_s64            = &(Type){ .kind = TypeKind_S64,    .size = 8,  .align = 8 };
+Type *type_u8             = &(Type){ .kind = TypeKind_U8,     .size = 1,  .align = 1 };
+Type *type_u16            = &(Type){ .kind = TypeKind_U16,    .size = 2,  .align = 2 };
+Type *type_u32            = &(Type){ .kind = TypeKind_U32,    .size = 4,  .align = 4 };
+Type *type_u64            = &(Type){ .kind = TypeKind_U64,    .size = 8,  .align = 8 };
+Type *type_int            = &(Type){ .kind = TypeKind_Int,    .size = 4,  .align = 4 }; // platform-sized   signed integer
+Type *type_uint           = &(Type){ .kind = TypeKind_Uint,   .size = 4,  .align = 4 }; // platform-sized unsigned integer
+Type *type_f32            = &(Type){ .kind = TypeKind_F32,    .size = 4,  .align = 4 };
+Type *type_f64            = &(Type){ .kind = TypeKind_F64,    .size = 8,  .align = 8 };
+Type *type_string         = &(Type){ .kind = TypeKind_String, .size = 16, .align = 8 };
+Type *type_untyped_int    = &(Type){ .kind = TypeKind_UntypedInt,    .size = 0, .align = 0 };
+Type *type_untyped_float  = &(Type){ .kind = TypeKind_UntypedFloat,  .size = 0, .align = 0 };
+Type *type_untyped_bool   = &(Type){ .kind = TypeKind_UntypedBool,   .size = 0, .align = 0 };
+Type *type_untyped_string = &(Type){ .kind = TypeKind_UntypedString, .size = 0, .align = 0 };
 
 internal void
 init_string_type_fields()
@@ -233,7 +237,7 @@ const usize PTR_ALIGN = 8;
 internal usize
 type_size_of(Type *type)
 {
-  assert(type->kind > TYPE_COMPLETING);
+  assert(type->kind > TypeKind_Completing);
   assert(type->size != 0);
   return type->size;
 }
@@ -241,18 +245,20 @@ type_size_of(Type *type)
 internal usize
 type_align_of(Type *type)
 {
-  assert(type->kind > TYPE_COMPLETING);
+  assert(type->kind > TypeKind_Completing);
   assert(is_pow2(type->align));
   return type->align;
 }
 
-STRUCT(Cached_Ptr_Type)
+typedef struct Cached_Ptr_Type Cached_Ptr_Type;
+struct Cached_Ptr_Type
 {
   Cached_Ptr_Type *next;
   Type v;
 };
 
-STRUCT(Cached_Ptr_Type_List)
+typedef struct Cached_Ptr_Type_List Cached_Ptr_Type_List;
+struct Cached_Ptr_Type_List
 {
   Cached_Ptr_Type *first;
   Cached_Ptr_Type *last;
@@ -273,27 +279,29 @@ type_ptr(Type *base)
     }
   }
 
-  // Type *t = type_alloc(TYPE_PTR);
+  // Type *t = type_alloc(TypeKind_Ptr);
   // t->ptr.base = base;
-  Type t = (Type){ .kind = TYPE_PTR, .ptr.base = base };
+  Type t = (Type){ .kind = TypeKind_Ptr, .ptr.base = base };
   t.size  = PTR_SIZE;
   t.align = PTR_ALIGN;
 
   Cached_Ptr_Type *cached = push_struct(resolve_arena, Cached_Ptr_Type);
   cached->v = t;
 
-  sll_queue_push(cached_ptr_types.first, cached_ptr_types.last, cached);
+  queue_push(cached_ptr_types.first, cached_ptr_types.last, cached);
 
   return &cached->v;
 }
 
-STRUCT(Cached_Array_Type)
+typedef struct Cached_Array_Type Cached_Array_Type;
+struct Cached_Array_Type
 {
   Cached_Array_Type *next;
   Type v;
 };
 
-STRUCT(Cached_Array_Type_List)
+typedef struct Cached_Array_Type_List Cached_Array_Type_List;
+struct Cached_Array_Type_List
 {
   Cached_Array_Type *first;
   Cached_Array_Type *last;
@@ -316,27 +324,29 @@ type_array(Type *base, u64 length)
 
   complete_type(base);
 
-  // Type *t = type_alloc(TYPE_PTR);
+  // Type *t = type_alloc(TypeKind_Ptr);
   // t->ptr.base = base;
-  Type t = (Type){ .kind = TYPE_ARRAY, .array.base = base, .array.length = length };
+  Type t = (Type){ .kind = TypeKind_Array, .array.base = base, .array.length = length };
   t.size = length * type_size_of(base);
   t.align = type_align_of(base);
 
   Cached_Array_Type *cached = push_struct(resolve_arena, Cached_Array_Type);
   cached->v = t;
 
-  sll_queue_push(cached_array_types.first, cached_array_types.last, cached);
+  queue_push(cached_array_types.first, cached_array_types.last, cached);
 
   return &cached->v;
 }
 
-STRUCT(Cached_Proc_Type)
+typedef struct Cached_Proc_Type Cached_Proc_Type;
+struct Cached_Proc_Type
 {
   Cached_Proc_Type *next;
   Type v;
 };
 
-STRUCT(Cached_Proc_Type_List)
+typedef struct Cached_Proc_Type_List Cached_Proc_Type_List;
+struct Cached_Proc_Type_List
 {
   Cached_Proc_Type *first;
   Cached_Proc_Type *last;
@@ -372,7 +382,7 @@ type_proc(Type_Param_Array params, Type *ret)
   }
 
   // TODO: do we need to copy?
-  Type t = (Type){ .kind = TYPE_PROC };
+  Type t = (Type){ .kind = TypeKind_Proc };
   t.size  = PTR_SIZE;
   t.align = PTR_ALIGN;
   t.proc.params.v = push_array_nz(resolve_arena, Type_Param, params.count);
@@ -383,7 +393,7 @@ type_proc(Type_Param_Array params, Type *ret)
   Cached_Proc_Type *cached = push_struct(resolve_arena, Cached_Proc_Type);
   cached->v = t;
 
-  sll_queue_push(cached_proc_types.first, cached_proc_types.last, cached);
+  queue_push(cached_proc_types.first, cached_proc_types.last, cached);
 
   return &cached->v;
 }
@@ -391,8 +401,8 @@ type_proc(Type_Param_Array params, Type *ret)
 internal void
 type_complete_struct(Type *type, Type_Field_Array fields)
 {
-  assert(type->kind == TYPE_COMPLETING);
-  type->kind  = TYPE_STRUCT;
+  assert(type->kind == TypeKind_Completing);
+  type->kind  = TypeKind_Struct;
   type->size  = 0;
   type->align = 0;
   // for (Type_Field *it = fields.v; it != fields.v + fields.count; it += 1)
@@ -420,13 +430,13 @@ type_complete_struct(Type *type, Type_Field_Array fields)
 internal void
 type_complete_union(Type *type, Type_Field_Array fields)
 {
-  assert(type->kind == TYPE_COMPLETING);
-  type->kind  = TYPE_UNION;
+  assert(type->kind == TypeKind_Completing);
+  type->kind  = TypeKind_Union;
   type->size  = 0;
   type->align = 0;
   for (Type_Field *it = fields.v; it != fields.v + fields.count; it += 1)
   {
-    assert(it->type->kind > TYPE_COMPLETING);
+    assert(it->type->kind > TypeKind_Completing);
     type->size  = MAX(type->size, type_size_of(it->type));
     type->align = MAX(type->align, type_align_of(it->type));
   }
@@ -447,12 +457,13 @@ type_complete_union(Type *type, Type_Field_Array fields)
 internal Type *
 type_incomplete(Sym *sym)
 {
-  Type *type = type_alloc(TYPE_INCOMPLETE);
+  Type *type = type_alloc(TypeKind_Incomplete);
   type->sym = sym;
   return type;
 }
 
-ENUM(Sym_Kind)// 176
+typedef enum Sym_Kind Sym_Kind;
+enum Sym_Kind
 {
   SymKind_Null,
   SymKind_Var,
@@ -462,30 +473,34 @@ ENUM(Sym_Kind)// 176
   SymKind_EnumConst,
 };
 
-ENUM(Sym_State)
+typedef enum Sym_State Sym_State;
+enum Sym_State
 {
   SymState_Unresolved,
   SymState_Resolving,
   SymState_Resolved,
 };
 
-STRUCT(Sym)
+typedef struct Sym Sym;
+struct Sym
 {
-  String8       name;
+  String8    name;
   Sym_Kind   kind;
   Sym_State  state;
-  Decl         *decl;
-  Type         *type;
-  s64           const_value;
+  Decl       *decl;
+  Type       *type;
+  s64        const_value;
 };
 
-STRUCT(Sym_Node)
+typedef struct Sym_Node Sym_Node;
+struct Sym_Node
 {
   Sym_Node *next;
   Sym *v;
 };
 
-STRUCT(Sym_List)
+typedef struct Sym_List Sym_List;
+struct Sym_List
 {
   Sym_Node *first;
   Sym_Node *last;
@@ -503,7 +518,7 @@ sym_list_push(Sym_List *list, Sym *sym)
 {
   Sym_Node *node = push_struct(resolve_arena, Sym_Node);
   node->v = sym;
-  sll_queue_push(list->first, list->last, node);
+  queue_push(list->first, list->last, node);
   list->count += 1;
 }
 
@@ -526,7 +541,7 @@ sym_alloc(Sym_Kind kind, String8 name, Decl *decl)
 }
 
 internal Sym *
-SymKind_Var(String8 name, Type *type)
+sym_var(String8 name, Type *type)
 {
   Sym *sym = sym_alloc(SymKind_Var, name, NULL);
   sym->state = SymState_Resolved;
@@ -540,14 +555,14 @@ sym_decl(Decl *decl)
   Sym_Kind kind = SymKind_Null;
   switch (decl->kind)
   {
-  case DECL_VAR:
+  case DeclKind_Var:
     kind = SymKind_Var;
     break;
-  case DECL_CONST:
+  case DeclKind_Const:
     // Type declarations: Matrix :: [4][4]int, Color :: enum {...}, etc.
     if (decl->init_type)
     {
-      if (decl->init_type->kind == TYPE_SPEC_PROC)
+      if (decl->init_type->kind == TypeSpecKind_Proc)
       {
         kind = SymKind_Proc;
       }
@@ -573,7 +588,7 @@ sym_decl(Decl *decl)
   }
 
   Sym *sym = sym_alloc(kind, decl->name, decl);
-  if (decl->init_type && (decl->init_type->kind == TYPE_SPEC_STRUCT || decl->init_type->kind == TYPE_SPEC_UNION))
+  if (decl->init_type && (decl->init_type->kind == TypeSpecKind_Struct || decl->init_type->kind == TypeSpecKind_Union))
   {
     sym->state = SymState_Resolved;
     sym->type  = type_incomplete(sym);
@@ -582,7 +597,7 @@ sym_decl(Decl *decl)
 }
 
 internal Sym *
-SymKind_EnumConst(String8 name, Decl *decl)
+sym_enum_const(String8 name, Decl *decl)
 {
   return sym_alloc(SymKind_EnumConst, name, decl);
 }
@@ -639,12 +654,12 @@ sym_global_decl(Decl *decl)
   sym_list_push(&global_syms, sym);
   // if (decl->kind == DECL_ENUM)
   decl->sym = sym;
-  if (decl->init_type && decl->init_type->kind == TYPE_SPEC_ENUM)
+  if (decl->init_type && decl->init_type->kind == TypeSpecKind_Enum)
   {
     for each_index(i, decl->init_type->enum_members.count)
     {
       Enum_Member it = decl->init_type->enum_members.v[i];
-      sym_list_push(&global_syms, SymKind_EnumConst(it.name, decl));
+      sym_list_push(&global_syms, sym_enum_const(it.name, decl));
     }
   }
   return sym;
@@ -660,7 +675,8 @@ sym_global_type(String8 name, Type *type)
   return sym;
 }
 
-STRUCT(Operand)
+typedef struct Operand Operand;
+struct Operand
 {
   Type *type;
   b32 is_lvalue;
@@ -708,9 +724,9 @@ resolve_typespec(Type_Spec *typespec)
 
   switch (typespec->kind)
   {
-  case TYPE_SPEC_NULL:
+  case TypeSpecKind_Null:
     break;
-  case TYPE_SPEC_NAME:
+  case TypeSpecKind_Name:
   {
     Sym *sym = resolve_name(typespec->pos, typespec->name);
     if (sym->kind != SymKind_Type)
@@ -720,7 +736,7 @@ resolve_typespec(Type_Spec *typespec)
     }
     return sym->type;
   }
-  case TYPE_SPEC_PROC:
+  case TypeSpecKind_Proc:
   {
     Type_Param_Array params = {0};
     if (typespec->proc.params.count > 0)
@@ -741,23 +757,23 @@ resolve_typespec(Type_Spec *typespec)
     }
     return type_proc(params, ret);
   }
-  case TYPE_SPEC_ENUM:
+  case TypeSpecKind_Enum:
   {
     // For inline enum types, we need to create a type
     // This is handled similar to struct/union
-    Type *type = type_alloc(TYPE_ENUM);
+    Type *type = type_alloc(TypeKind_Enum);
     type->size = 4;  // enums are int-sized
     type->align = 4;
     // TODO: process enum members if needed
     return type;
   }
-  case TYPE_SPEC_STRUCT:
-  case TYPE_SPEC_UNION:
-  case TYPE_SPEC_ARRAY:
+  case TypeSpecKind_Struct:
+  case TypeSpecKind_Union:
+  case TypeSpecKind_Array:
     return type_array(resolve_typespec(typespec->array.elem), resolve_const_expr(typespec->array.count));
-  // case TYPE_SPEC_SLICE:
+  // case TypeSpecKind_Slice:
     // break;
-  case TYPE_SPEC_PTR:
+  case TypeSpecKind_Ptr:
     return type_ptr(resolve_typespec(typespec->ptr.pointee));
   default:
     assert(0);
@@ -773,19 +789,19 @@ Sym_List ordered_global_syms;
 internal void
 complete_type(Type *type)
 {
-  if (type->kind == TYPE_COMPLETING)
+  if (type->kind == TypeKind_Completing)
   {
     fatal(type->sym->decl->pos, "type completion cycle");
     return;
   }
-  else if (type->kind != TYPE_INCOMPLETE)
+  else if (type->kind != TypeKind_Incomplete)
   {
     return;
   }
-  type->kind = TYPE_COMPLETING;
+  type->kind = TypeKind_Completing;
   Decl *decl = type->sym->decl;
 
-  assert(decl->init_type && (decl->init_type->kind == TYPE_SPEC_STRUCT || decl->init_type->kind == TYPE_SPEC_UNION));
+  assert(decl->init_type && (decl->init_type->kind == TypeSpecKind_Struct || decl->init_type->kind == TypeSpecKind_Union));
 
   u32 total_field_count = 0;
   for each_index(i, decl->init_type->aggr_fields.count)
@@ -819,13 +835,13 @@ complete_type(Type *type)
     }
   }
 
-  if (decl->init_type->kind == TYPE_SPEC_STRUCT)
+  if (decl->init_type->kind == TypeSpecKind_Struct)
   {
     type_complete_struct(type, fields);
   }
   else
   {
-    assert(decl->init_type->kind == TYPE_SPEC_UNION);
+    assert(decl->init_type->kind == TypeSpecKind_Union);
     type_complete_union(type, fields);
   }
 
@@ -846,34 +862,34 @@ string_from_type(Arena *arena, Type *type)
   //                           `Person` instead of `struct`
   switch (type->kind)
   {
-  case TYPE_NONE:       return str8_lit("<NONE>");
-  case TYPE_INCOMPLETE: return str8_lit("<INCOMPLETE>");
-  case TYPE_COMPLETING: return str8_lit("<COMPLETING>");
-  case TYPE_VOID:       return str8_lit("void");
-  case TYPE_CHAR:       return str8_lit("char");
-  case TYPE_S8:         return str8_lit("s8");
-  case TYPE_S16:        return str8_lit("s16");
-  case TYPE_S32:        return str8_lit("s32");
-  case TYPE_S64:        return str8_lit("s64");
-  case TYPE_U8:         return str8_lit("u8");
-  case TYPE_U16:        return str8_lit("u16");
-  case TYPE_U32:        return str8_lit("u32");
-  case TYPE_U64:        return str8_lit("u64");
-  case TYPE_INT:        return str8_lit("int");
-  case TYPE_UINT:       return str8_lit("uint");
-  case TYPE_F32:        return str8_lit("f32");
-  case TYPE_F64:        return str8_lit("f64");
-  case TYPE_STRING:     return str8_lit("string");
-  case TYPE_PTR:
+  case TypeKind_None:       return str8_lit("<NONE>");
+  case TypeKind_Incomplete: return str8_lit("<INCOMPLETE>");
+  case TypeKind_Completing: return str8_lit("<COMPLETING>");
+  case TypeKind_Void:       return str8_lit("void");
+  case TypeKind_Char:       return str8_lit("char");
+  case TypeKind_S8:         return str8_lit("s8");
+  case TypeKind_S16:        return str8_lit("s16");
+  case TypeKind_S32:        return str8_lit("s32");
+  case TypeKind_S64:        return str8_lit("s64");
+  case TypeKind_U8:         return str8_lit("u8");
+  case TypeKind_U16:        return str8_lit("u16");
+  case TypeKind_U32:        return str8_lit("u32");
+  case TypeKind_U64:        return str8_lit("u64");
+  case TypeKind_Int:        return str8_lit("int");
+  case TypeKind_Uint:       return str8_lit("uint");
+  case TypeKind_F32:        return str8_lit("f32");
+  case TypeKind_F64:        return str8_lit("f64");
+  case TypeKind_String:     return str8_lit("string");
+  case TypeKind_Ptr:
   {
     return str8f(arena, "*%.*s", str8_varg(string_from_type(arena, type->ptr.base)));
   }
-  case TYPE_ARRAY:
+  case TypeKind_Array:
   {
     return str8f(arena, "[%llu]%.*s", type->array.length, str8_varg(string_from_type(arena, type->array.base)));
   }
-  case TYPE_STRUCT:
-  case TYPE_UNION:
+  case TypeKind_Struct:
+  case TypeKind_Union:
   {
     return str8f(arena, "%.*s", str8_varg(type->sym->decl->name));
   }
@@ -887,7 +903,7 @@ string_from_type(Arena *arena, Type *type)
 internal Type *
 resolve_decl_var(Decl *decl)
 {
-  assert(decl->kind == DECL_VAR);
+  assert(decl->kind == DeclKind_Var);
 
   Arena_Temp scratch = arena_scratch_get(0, 0);
 
@@ -928,7 +944,7 @@ resolve_decl_var(Decl *decl)
 internal Type *
 resolve_decl_const(Decl *decl, s64 *const_value)
 {
-  assert(decl->kind == DECL_CONST);
+  assert(decl->kind == DeclKind_Const);
   assert(decl->init_expr);
   Operand result = resolve_expr(decl->init_expr);
   if (!result.is_const)
@@ -942,8 +958,8 @@ resolve_decl_const(Decl *decl, s64 *const_value)
 internal Type *
 resolve_decl_proc(Decl *decl)
 {
-  assert(decl->kind == DECL_CONST);
-  assert(decl->init_type && decl->init_type->kind == TYPE_SPEC_PROC);
+  assert(decl->kind == DeclKind_Const);
+  assert(decl->init_type && decl->init_type->kind == TypeSpecKind_Proc);
 
   Type_Spec *proc_spec = decl->init_type;
   Decl_Array params = proc_spec->proc.params;
@@ -979,33 +995,33 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
 {
   switch (stmt->kind)
   {
-  case STMT_BLOCK: resolve_stmt_block(stmt->block, ret_type); break;
-  case STMT_IF:
+  case StmtKind_Block: resolve_stmt_block(stmt->block, ret_type); break;
+  case StmtKind_If:
   {
     resolve_cond_expr(stmt->if0.cond);
     resolve_stmt_block(stmt->if0.then_block->block, ret_type);
     if (stmt->if0.else_stmt != NULL)
     {
-      if (stmt->if0.else_stmt->kind == STMT_BLOCK)
+      if (stmt->if0.else_stmt->kind == StmtKind_Block)
       {
         resolve_stmt_block(stmt->if0.else_stmt->block, ret_type);
       }
       else
       {
-        assert(stmt->if0.else_stmt->kind == STMT_IF);
+        assert(stmt->if0.else_stmt->kind == StmtKind_If);
         resolve_stmt(stmt->if0.else_stmt, ret_type);
       }
     }
     break;
   }
-  case STMT_DO_WHILE:
-  case STMT_WHILE:
+  case StmtKind_DoWhile:
+  case StmtKind_While:
   {
     resolve_cond_expr(stmt->while0.cond);
     resolve_stmt_block(stmt->while0.body->block, ret_type);
     break;
   }
-  case STMT_FOR:
+  case StmtKind_For:
   {
     Sym **syms = sym_enter();
     resolve_stmt(stmt->for0.init, ret_type);
@@ -1015,7 +1031,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
     sym_leave(syms);
     break;
   }
-  case STMT_FOR_IN:
+  case StmtKind_ForIn:
   {
     // TODO: is this right?
     Sym **syms = sym_enter();
@@ -1025,7 +1041,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
     sym_leave(syms);
     break;
   }
-  case STMT_SWITCH:
+  case StmtKind_Switch:
   {
     Operand result = resolve_expr(stmt->switch0.expr);
     for each_index(i, stmt->switch0.cases.count)
@@ -1044,7 +1060,7 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
     }
     break;
   }
-  case STMT_RETURN:
+  case StmtKind_Return:
   {
     // TODO(#15): support multiple returns
     if (stmt->return_expr)
@@ -1065,16 +1081,16 @@ resolve_stmt(Stmt *stmt, Type *ret_type)
     }
     break;
   }
-  case STMT_BREAK:
-  case STMT_CONTINUE:
+  case StmtKind_Break:
+  case StmtKind_Continue:
     // Do nothing
     break;
-  case STMT_EXPR:
+  case StmtKind_Expr:
   {
     resolve_expr(stmt->expr);
     break;
   }
-  case STMT_DECL:
+  case StmtKind_Decl:
   {
     Decl *decl = stmt->decl;
     Sym *sym = sym_decl(decl);
@@ -1105,8 +1121,8 @@ internal void
 resolve_proc(Sym *sym)
 {
   Decl *decl = sym->decl;
-  assert(decl->kind == DECL_CONST);
-  assert(decl->init_type && decl->init_type->kind == TYPE_SPEC_PROC);
+  assert(decl->kind == DeclKind_Const);
+  assert(decl->init_type && decl->init_type->kind == TypeSpecKind_Proc);
   assert(sym->state == SymState_Resolved);
 
   if (decl->is_foreign)
@@ -1122,7 +1138,7 @@ resolve_proc(Sym *sym)
   for each_index(i, params.count)
   {
     Decl *param = params.v[i];
-    sym_push(SymKind_Var(param->name, resolve_typespec(param->type_hint)));
+    sym_push(sym_var(param->name, resolve_typespec(param->type_hint)));
     // resolve_decl_var(param);
   }
   if (proc_spec->proc.body)
@@ -1187,7 +1203,7 @@ resolve_sym(Sym *sym)
     // Check if this is actually a type alias (e.g., My_Int :: int)
     Decl *decl = sym->decl;
     // TODO i dont think we need this?
-    // if (decl->init_expr && decl->init_expr->kind == EXPR_IDENT)
+    // if (decl->init_expr && decl->init_expr->kind == ExprKind_Ident)
     // {
     //   Sym *ref_sym = sym_get(decl->init_expr->ident);
     //   if (ref_sym && ref_sym->kind == SymKind_Type)
@@ -1265,12 +1281,12 @@ resolve_name(Source_Pos pos, String8 name)
 internal Operand
 resolve_expr_field(Expr *expr)
 {
-  assert(expr->kind == EXPR_FIELD);
+  assert(expr->kind == ExprKind_Field);
   Operand left = resolve_expr(expr->field.expr);
   Type *type = left.type;
   complete_type(type);
   // TODO: for now we can do s.data, s.len on strings
-  if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION && type->kind != TYPE_STRING)
+  if (type->kind != TypeKind_Struct && type->kind != TypeKind_Union && type->kind != TypeKind_String)
   {
     fatal(expr->pos, "cannot access field on non struct/union/string type");
     return nil_operand;
@@ -1294,7 +1310,7 @@ resolve_expr_field(Expr *expr)
 internal Operand
 resolve_expr_name(Expr *expr)
 {
-  assert(expr->kind == EXPR_IDENT);
+  assert(expr->kind == ExprKind_Ident);
   Sym *sym = resolve_name(expr->pos, expr->ident);
 
   switch (sym->kind)
@@ -1334,7 +1350,7 @@ eval_int_unary(Token_Kind op, s64 value)
 internal Operand
 resolve_expr_unary(Expr *expr)
 {
-  assert(expr->kind == EXPR_UNARY);
+  assert(expr->kind == ExprKind_Unary);
 
   Arena_Temp scratch = arena_scratch_get(0, 0);
 
@@ -1344,7 +1360,7 @@ resolve_expr_unary(Expr *expr)
   {
   case TOKEN_DEREF:
   {
-    if (type->kind != TYPE_PTR)
+    if (type->kind != TypeKind_Ptr)
     {
       // TODO: say which type
       fatal(expr->pos, "cannot dereference non-pointer type");
@@ -1365,7 +1381,7 @@ resolve_expr_unary(Expr *expr)
   case '!':
   case '~':
   {
-    if (type->kind != TYPE_INT)
+    if (type->kind != TypeKind_Int)
     {
       fatal(expr->pos, "can use unary `%.*s` with ints only", str8_varg(str_from_token_kind(scratch.arena, expr->unary.op.kind)));
     }
@@ -1438,7 +1454,7 @@ eval_int_binary(Token_Kind op, s64 left, s64 right)
 internal Operand
 resolve_expr_binary(Expr *expr)
 {
-  assert(expr->kind == EXPR_BINARY);
+  assert(expr->kind == ExprKind_Binary);
 
   Operand left  = resolve_expr(expr->binary.left);
   Operand right = resolve_expected_expr(expr->binary.right, left.type);
@@ -1483,7 +1499,7 @@ resolve_expr_binary(Expr *expr)
 internal usize
 aggregate_field_index(Type *type, String8 name)
 {
-  assert(type->kind == TYPE_STRUCT || type->kind == TYPE_UNION);
+  assert(type->kind == TypeKind_Struct || type->kind == TypeKind_Union);
   for each_index(i, type->aggregate.fields.count)
   {
     // TODO: string interning
@@ -1501,7 +1517,7 @@ aggregate_field_index(Type *type, String8 name)
 internal Operand
 resolve_expr_compound(Expr *expr, Type *expected_type)
 {
-  assert(expr->kind == EXPR_COMPOUND);
+  assert(expr->kind == ExprKind_Compound);
 
   if (!expected_type && !expr->compound.type)
   {
@@ -1525,13 +1541,13 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
 
   assert(expr->compound.args.count > 0);
 
-  if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION && type->kind != TYPE_ARRAY)
+  if (type->kind != TypeKind_Struct && type->kind != TypeKind_Union && type->kind != TypeKind_Array)
   {
     // TODO(#21): slices
     fatal(expr->pos, "compound literals can only be used with struct, union and array types");
   }
 
-  if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION)
+  if (type->kind == TypeKind_Struct || type->kind == TypeKind_Union)
   {
     assert(type->aggregate.fields.count > 0);
     // if (expr->compound.args.count > type->aggregate.fields.count)
@@ -1543,11 +1559,11 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
     for each_index(i, expr->compound.args.count)
     {
       Compound_Field *field = expr->compound.args.v[i];
-      if (field->kind == COMPOUND_FIELD_INDEX)
+      if (field->kind == CompoundFieldKind_Index)
       {
         fatal(field->pos, "index field initializer not allowed for struct/union compound literal");
       }
-      else if (field->kind == COMPOUND_FIELD_NAME)
+      else if (field->kind == CompoundFieldKind_Name)
       {
         index = aggregate_field_index(type, field->name);
       }
@@ -1572,7 +1588,7 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
   else
   {
     // assert(0);
-    assert(type->kind == TYPE_ARRAY);
+    assert(type->kind == TypeKind_Array);
     // if (expr->compound.args.count > type->array.length)
     // {
     //   fatal("Compound literal has too many elements");
@@ -1581,11 +1597,11 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
     for each_index(i, expr->compound.args.count)
     {
       Compound_Field *field = expr->compound.args.v[i];
-      if (field->kind == COMPOUND_FIELD_NAME)
+      if (field->kind == CompoundFieldKind_Name)
       {
         fatal(field->pos, "named field initializer not allowed in array compound literal");
       }
-      else if (field->kind == COMPOUND_FIELD_INDEX)
+      else if (field->kind == CompoundFieldKind_Index)
       {
         s64 result = resolve_const_expr(field->index);
         if (result < 0)
@@ -1613,12 +1629,12 @@ resolve_expr_compound(Expr *expr, Type *expected_type)
 internal Operand
 resolve_expr_call(Expr *expr)
 {
-  assert(expr->kind == EXPR_CALL);
+  assert(expr->kind == ExprKind_Call);
 
   Operand proc = resolve_expr(expr->call.expr);
   complete_type(proc.type);
 
-  if (proc.type->kind != TYPE_PROC)
+  if (proc.type->kind != TypeKind_Proc)
   {
     fatal(expr->pos, "trying to call non-procedure value");
   }
@@ -1650,9 +1666,9 @@ internal Operand
 resolve_expr_ternary(Expr *expr, Type *expected_type)
 {
   // TODO(#22): have actual bool types
-  assert(expr->kind == EXPR_TERNARY);
+  assert(expr->kind == ExprKind_Ternary);
   Operand cond = resolve_expr(expr->ternary.cond);
-  if (cond.type->kind != TYPE_INT && cond.type->kind != TYPE_PTR)
+  if (cond.type->kind != TypeKind_Int && cond.type->kind != TypeKind_Ptr)
   {
     fatal(expr->pos, "ternary condition expression must have type int or ptr");
   }
@@ -1672,46 +1688,46 @@ resolve_expr_ternary(Expr *expr, Type *expected_type)
 internal Operand
 resolve_expr_index(Expr *expr)
 {
-  assert(expr->kind == EXPR_INDEX);
+  assert(expr->kind == ExprKind_Index);
 
   Operand operand = resolve_expr(expr->index.expr);
-  if (operand.type->kind != TYPE_PTR && operand.type->kind != TYPE_ARRAY)
+  if (operand.type->kind != TypeKind_Ptr && operand.type->kind != TypeKind_Array)
   {
     // IMPORTANT TODO(#23): make it so u can only index arrays and add multipointer like in odin [^] == [*]
     fatal(expr->pos, "can only index arrays or pointers");
   }
   Operand index   = resolve_expr(expr->index.index);
-  if (index.type->kind != TYPE_INT)
+  if (index.type->kind != TypeKind_Int)
   {
     fatal(expr->pos, "index expression must be of type int");
   }
-  if (operand.type->kind == TYPE_PTR)
+  if (operand.type->kind == TypeKind_Ptr)
   {
     return resolved_lvalue(operand.type->ptr.base);
   }
-  assert(operand.type->kind == TYPE_ARRAY);
+  assert(operand.type->kind == TypeKind_Array);
   return resolved_lvalue(operand.type->array.base);
 }
 
 internal Operand
 resolve_expr_cast(Expr *expr)
 {
-  assert(expr->kind == EXPR_CAST);
+  assert(expr->kind == ExprKind_Cast);
 
   Type *type = resolve_typespec(expr->cast.type);
   Operand result = resolve_expr(expr->cast.expr);
 
   // ptr -> ptr, ptr -> int, int -> ptr
-  if (type->kind == TYPE_PTR)
+  if (type->kind == TypeKind_Ptr)
   {
-    if (result.type->kind != TYPE_PTR && !is_integer_type(result.type))
+    if (result.type->kind != TypeKind_Ptr && !is_integer_type(result.type))
     {
       fatal(expr->pos, "invalid cast to pointer type");
     }
   }
   else if (is_integer_type(type))
   {
-    if (result.type->kind != TYPE_PTR && !is_integer_type(result.type))
+    if (result.type->kind != TypeKind_Ptr && !is_integer_type(result.type))
     {
       fatal(expr->pos, "invalid cast to int type");
     }
@@ -1729,10 +1745,10 @@ is_untyped(Type *type)
 {
   switch (type->kind)
   {
-  case TYPE_UNTYPED_INT:
-  case TYPE_UNTYPED_FLOAT:
-  case TYPE_UNTYPED_BOOL:
-  case TYPE_UNTYPED_STRING:
+  case TypeKind_UntypedInt:
+  case TypeKind_UntypedFloat:
+  case TypeKind_UntypedBool:
+  case TypeKind_UntypedString:
     return true;
   }
   return false;
@@ -1743,16 +1759,16 @@ is_integer_type(Type *type)
 {
   switch (type->kind)
   {
-  case TYPE_U8:
-  case TYPE_U16:
-  case TYPE_U32:
-  case TYPE_U64:
-  case TYPE_S8:
-  case TYPE_S16:
-  case TYPE_S32:
-  case TYPE_S64:
-  case TYPE_INT:
-  case TYPE_UINT:
+  case TypeKind_U8:
+  case TypeKind_U16:
+  case TypeKind_U32:
+  case TypeKind_U64:
+  case TypeKind_S8:
+  case TypeKind_S16:
+  case TypeKind_S32:
+  case TypeKind_S64:
+  case TypeKind_Int:
+  case TypeKind_Uint:
     return true;
   }
   return false;
@@ -1763,8 +1779,8 @@ is_float_type(Type *type)
 {
   switch (type->kind)
   {
-  case TYPE_F32:
-  case TYPE_F64:
+  case TypeKind_F32:
+  case TypeKind_F64:
     return true;
   }
   return false;
@@ -1773,17 +1789,17 @@ is_float_type(Type *type)
 internal b32
 can_convert_untyped(Type *from, Type *to)
 {
-  if (from->kind == TYPE_UNTYPED_INT)
+  if (from->kind == TypeKind_UntypedInt)
   {
     return is_integer_type(to) || is_float_type(to);
   }
-  if (from->kind == TYPE_UNTYPED_FLOAT)
+  if (from->kind == TypeKind_UntypedFloat)
   {
     return is_float_type(to);
   }
-  if (from->kind == TYPE_UNTYPED_BOOL)
+  if (from->kind == TypeKind_UntypedBool)
   {
-    return to->kind == TYPE_INT; // TODO; dedicated bool type
+    return to->kind == TypeKind_Int; // TODO; dedicated bool type
   }
   return false;
 }
@@ -1804,9 +1820,9 @@ convert_untyped(Operand operand, Type *target)
   // default conversions when no target type
   switch (operand.type->kind)
   {
-  case TYPE_UNTYPED_INT:   operand.type = type_int; break;
-  case TYPE_UNTYPED_FLOAT: operand.type = type_f64; break;
-  case TYPE_UNTYPED_BOOL:  operand.type = type_int; break; // TODO: actual bool type
+  case TypeKind_UntypedInt:   operand.type = type_int; break;
+  case TypeKind_UntypedFloat: operand.type = type_f64; break;
+  case TypeKind_UntypedBool:  operand.type = type_int; break; // TODO: actual bool type
   default: assert(0);
   }
 
@@ -1821,62 +1837,62 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
   // TODO(#24): address constants
   switch (expr->kind)
   {
-  case EXPR_INTEGER_LITERAL:
+  case ExprKind_IntegerLiteral:
     // result = resolved_const(expr->literal.integer);
     result.type = type_untyped_int;
     result.is_const = true;
     result.const_value = expr->literal.integer;
     break;
-  case EXPR_FLOAT_LITERAL:
+  case ExprKind_FloatLiteral:
     // result = resolved_rvalue(type_f32);
     result.type = type_untyped_float;
     result.is_const = true;
     // result.const_value_f32 = expr->literal.floating; // TODO
     printf("TODO: Expr float literal value.\n");
     break;
-  case EXPR_STRING_LITERAL:
+  case ExprKind_StringLiteral:
     result = resolved_rvalue(type_string);
     break;
-  case EXPR_CHAR_LITERAL: // TODO: rename to rune
+  case ExprKind_CharLiteral: // TODO: rename to rune
     // result = resolved_rvalue(type_char);
     // TODO(#26): for now this will just be converted to int const
     result = resolved_const(expr->literal.character);
     break;
-  case EXPR_BOOL_LITERAL:
+  case ExprKind_BoolLiteral:
     // TODO: for now this will just be converted to int const
     // result = resolved_const(expr->literal.boolean);
     result.type = type_untyped_bool;
     result.is_const = true;
     result.const_value = expr->literal.boolean;
     break;
-  case EXPR_IDENT:
+  case ExprKind_Ident:
     result = resolve_expr_name(expr);
     break;
-  case EXPR_COMPOUND:
+  case ExprKind_Compound:
     result = resolve_expr_compound(expr, expected_type);
     break;
-  case EXPR_FIELD:
+  case ExprKind_Field:
     result = resolve_expr_field(expr);
     break;
-  case EXPR_INDEX:
+  case ExprKind_Index:
     result = resolve_expr_index(expr);
     break;
-  case EXPR_UNARY:
+  case ExprKind_Unary:
     result = resolve_expr_unary(expr);
     break;
-  case EXPR_BINARY:
+  case ExprKind_Binary:
     result = resolve_expr_binary(expr);
     break;
-  case EXPR_TERNARY:
+  case ExprKind_Ternary:
     result = resolve_expr_ternary(expr, expected_type);
     break;
-  case EXPR_CALL:
+  case ExprKind_Call:
     result = resolve_expr_call(expr);
     break;
-  case EXPR_CAST:
+  case ExprKind_Cast:
     result = resolve_expr_cast(expr);
     break;
-  case EXPR_SIZE_OF:
+  case ExprKind_SizeOf:
   {
     Type *type = NULL;
     if (expr->size_of.is_expr)
@@ -1891,7 +1907,7 @@ resolve_expected_expr(Expr *expr, Type *expected_type)
     result = resolved_const(type_size_of(type));
     break;
   }
-  case EXPR_GROUP:
+  case ExprKind_Group:
   {
     result = resolve_expr(expr->group.expr);
     break;

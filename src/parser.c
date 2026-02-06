@@ -64,7 +64,7 @@ parser_init(Lexer *l)
 internal void
 push_compound_field(Parser *p, Compound_Field_List *list, Compound_Field *field)
 {
-  sll_queue_push(list->first, list->last, field);
+  queue_push(list->first, list->last, field);
   list->count += 1;
 }
 
@@ -243,7 +243,7 @@ parse_compound_field(Parser *p)
   // [index] = value
   if (match(p, '['))
   {
-    field->kind = COMPOUND_FIELD_INDEX;
+    field->kind = CompoundFieldKind_Index;
     field->index = parse_expr(p);
     expect(p, ']');
     expect(p, '=');
@@ -252,7 +252,7 @@ parse_compound_field(Parser *p)
   // name = value
   else if (check(p, TOKEN_IDENT) && peek(p, '='))
   {
-    field->kind = COMPOUND_FIELD_NAME;
+    field->kind = CompoundFieldKind_Name;
     field->name = parse_ident(p);
     advance(p); // Consume '='
     field->init = parse_expr(p); // parse_compound_or_expr
@@ -260,7 +260,7 @@ parse_compound_field(Parser *p)
   // value
   else
   {
-    field->kind = COMPOUND_FIELD_NONE;
+    field->kind = CompoundFieldKind_None;
     field->init = parse_expr(p); // parse_compound_or_expr
   }
 
@@ -404,7 +404,7 @@ parse_expr_postfix(Parser *p)
         do
         {
           Expr *arg = parse_expr(p);
-          sll_queue_push(args.first, args.last, arg);
+          queue_push(args.first, args.last, arg);
           count += 1;
         } while (match(p, ','));
         expect(p, ')');
@@ -788,9 +788,9 @@ parse_stmt_block(Parser *p)
   while (!check(p, '}'))
   {
     Stmt *stmt = parse_stmt(p);
-    if (stmt->kind != STMT_NULL)
+    if (stmt->kind != StmtKind_Null)
     {
-      sll_queue_push(list.first, list.last, stmt);
+      queue_push(list.first, list.last, stmt);
       list.count += 1;
     }
   }
@@ -876,7 +876,7 @@ parse_stmt_return(Parser *p)
 internal Stmt *
 parse_stmt_continue(Parser *p)
 {
-  Stmt *s = stmt_alloc(p, STMT_CONTINUE);
+  Stmt *s = stmt_alloc(p, StmtKind_Continue);
   expect(p, ';');
   return s;
 }
@@ -884,7 +884,7 @@ parse_stmt_continue(Parser *p)
 internal Stmt *
 parse_stmt_break(Parser *p)
 {
-  Stmt *s = stmt_alloc(p, STMT_BREAK);
+  Stmt *s = stmt_alloc(p, StmtKind_Break);
   expect(p, ';');
   return s;
 }
@@ -895,10 +895,10 @@ parse_stmt_defer(Parser *p)
   Stmt *stmt = parse_stmt(p);
   switch (stmt->kind)
   {
-  case STMT_RETURN:
+  case StmtKind_Return:
     report_error(p, "Cannot defer a return statement");
     break;
-  case STMT_DEFER:
+  case StmtKind_Defer:
     report_error(p, "Cannot defer a defer statement");
     break;
   default:
@@ -976,7 +976,7 @@ parse_switch_case(Parser *p)
     do
     {
       Expr *label = parse_expr(p);
-      sll_queue_push(list.first, list.last, label);
+      queue_push(list.first, list.last, label);
       list.count += 1;
     } while (match(p, ','));
 
@@ -1006,7 +1006,7 @@ parse_switch_case(Parser *p)
     }
 
     Stmt *stmt = parse_stmt(p);
-    sll_queue_push(list.first, list.last, stmt);
+    queue_push(list.first, list.last, stmt);
     list.count += 1;
   }
 
@@ -1041,7 +1041,7 @@ parse_stmt_switch(Parser *p)
   {
     Switch_Case_Node *node = push_struct(scratch.arena, Switch_Case_Node);
     node->v = parse_switch_case(p);
-    sll_queue_push(list.first, list.last, node);
+    queue_push(list.first, list.last, node);
     list.count += 1;
   }
 
@@ -1070,7 +1070,7 @@ parse_stmt(Parser *p)
   if (match(p, ';'))
   {
     // "eats" leading semicolons
-    return stmt_alloc(p, STMT_NULL);
+    return stmt_alloc(p, StmtKind_Null);
   }
   if (check(p, '{'))            return parse_stmt_block(p);
   if (match(p, TOKEN_IF))       return parse_stmt_if(p);
@@ -1095,9 +1095,9 @@ parse_statements(Parser *p)
   while (lexer_can_peek(p->lexer))
   {
     Stmt *stmt = parse_stmt(p);
-    if (stmt->kind != STMT_NULL)
+    if (stmt->kind != StmtKind_Null)
     {
-      sll_queue_push(list.first, list.last, stmt);
+      queue_push(list.first, list.last, stmt);
     }
   }
 
@@ -1145,7 +1145,7 @@ parse_type_prefix(Parser *p)
 {
   if (match(p, '*'))
   {
-    Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_PTR);
+    Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Ptr);
     t->ptr.pointee = parse_type_prefix(p);
     return t;
   }
@@ -1153,7 +1153,7 @@ parse_type_prefix(Parser *p)
   {
     if (!match(p, ']'))
     {
-      Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_ARRAY);
+      Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Array);
       t->array.count = parse_expr(p);
       expect(p, ']');
       t->array.elem  = parse_type_prefix(p);
@@ -1161,14 +1161,14 @@ parse_type_prefix(Parser *p)
     }
     else
     {
-      Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_SLICE);
+      Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Slice);
       t->slice.elem = parse_type_prefix(p);
       return t;
     }
   }
 
   // named type
-  Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_NAME);
+  Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Name);
   t->name = parse_type_name(p);
   return t;
 }
@@ -1190,7 +1190,7 @@ parse_type_proc(Parser *p)
     // a: int
     // Type_Spec *param = parse_type(p);
     Decl *param = parse_decl_nosemi(p);
-    sll_queue_push(list.first, list.last, param);
+    queue_push(list.first, list.last, param);
     param_count += 1;
     match(p, ',');
   }
@@ -1226,7 +1226,7 @@ parse_type_proc(Parser *p)
 internal Type_Spec *
 parse_type_aggr(Parser *p, Type_Spec_Kind kind)
 {
-  assert(kind == TYPE_SPEC_STRUCT || kind == TYPE_SPEC_UNION);
+  assert(kind == TypeSpecKind_Struct || kind == TypeSpecKind_Union);
   expect(p, '{');
 
   Aggr_Field_List list = {0};
@@ -1251,7 +1251,7 @@ parse_type_aggr(Parser *p, Type_Spec_Kind kind)
     }
 
     node->v.type = parse_type(p);
-    sll_queue_push(list.first, list.last, node);
+    queue_push(list.first, list.last, node);
     list.count += 1;
     count += 1;
 
@@ -1297,7 +1297,7 @@ parse_type_enum(Parser *p)
       node->v.value = parse_expr(p);
     }
 
-    sll_queue_push(list.first, list.last, node);
+    queue_push(list.first, list.last, node);
     count += 1;
 
     if (!match(p, ','))
@@ -1340,12 +1340,12 @@ parse_type_base(Parser *p)
   // 3. struct { ... }
   else if (match(p, TOKEN_STRUCT))
   {
-    return parse_type_aggr(p, TYPE_SPEC_STRUCT);
+    return parse_type_aggr(p, TypeSpecKind_Struct);
   }
   // 4. union { ... }
   else if (match(p, TOKEN_UNION))
   {
-    return parse_type_aggr(p, TYPE_SPEC_UNION);
+    return parse_type_aggr(p, TypeSpecKind_Union);
   }
   // 5. enum { ... }
   else if (match(p, TOKEN_ENUM))
@@ -1370,7 +1370,7 @@ parse_type(Parser *p)
 {
   if (match(p, '*'))
   {
-    Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_PTR);
+    Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Ptr);
     t->ptr.pointee = parse_type(p); // Recursive call to handle **int
     return t;
   }
@@ -1380,13 +1380,13 @@ parse_type(Parser *p)
     // Check if it's a slice []int or array [N]int
     if (match(p, ']'))
     {
-      Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_SLICE);
+      Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Slice);
       t->slice.elem = parse_type(p);
       return t;
     }
     else
     {
-      Type_Spec *t = type_spec_alloc(p, TYPE_SPEC_ARRAY);
+      Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Array);
       t->array.count = parse_expr(p); // Parse the '2' in [2]
       expect(p, ']');
       t->array.elem = parse_type(p);
@@ -1481,7 +1481,7 @@ parse_declarations(Parser *p)
   while (lexer_can_peek(p->lexer))
   {
     Decl *decl = parse_decl(p);
-    sll_queue_push(list.first, list.last, decl);
+    queue_push(list.first, list.last, decl);
 
     // // eat extra semicolons
     // while (match(p, ';')) {}

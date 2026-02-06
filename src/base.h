@@ -136,45 +136,45 @@ typedef double f64;
 
 ////////////////////////////
 // LINKED LIST MACROS
-#define dll_push_back_np(f,l,n,next,prev) ((f)==0?\
+#define list_push_back_np(f,l,n,next,prev) ((f)==0?\
                                            ((f)=(l)=(n),(n)->next=(n)->prev=0):\
                                            ((n)->prev=(l),(l)->next=(n),(l)=(n),(n)->next=0))
-#define dll_push_back(f,l,n) dll_push_back_np(f,l,n,next,prev)
+#define list_push_back(f,l,n) list_push_back_np(f,l,n,next,prev)
 
-#define dll_push_front(f,l,n) dll_push_back_np(f,l,n,prev,next)
+#define list_push_front(f,l,n) list_push_back_np(f,l,n,prev,next)
 
-#define dll_remove_np(f,l,n,next,prev) (((f)==(n)?\
+#define list_remove_np(f,l,n,next,prev) (((f)==(n)?\
                                          ((f)=(f)->next,(f)->prev=0):\
                                          (l)==(n)?\
                                          ((l)=(l)->prev,(l)->next=0):\
                                          ((n)->next->prev=(n)->prev,\
                                          (n)->prev->next=(n)->next)))
-#define dll_remove(f,l,n) dll_remove_np(f,l,n,next,prev)
+#define list_remove(f,l,n) list_remove_np(f,l,n,next,prev)
 
 // singly-linked, doubly-headed lists
-#define sll_queue_push_n(f,l,n,next) ((f)==0?\
-                                      (f)=(l)=(n):\
-                                      ((l)->next=(n),(l)=(n)),\
-                                      (n)->next=0)
-#define sll_queue_push(f,l,n) sll_queue_push_n(f,l,n,next)
+#define queue_push_n(f,l,n,next) ((f)==0?\
+                                  (f)=(l)=(n):\
+                                  ((l)->next=(n),(l)=(n)),\
+                                  (n)->next=0)
+#define queue_push(f,l,n) queue_push_n(f,l,n,next)
 
-#define sll_queue_push_front_n(f,l,n,next) ((f)==0?\
-                                            ((f)=(l)=(n),(n)->next=0):\
-                                            ((n)->next=(f),(f)=(n)))
-#define sll_queue_push_front(f,l,n) sll_queue_push_front_n(f,l,n,next)
+#define queue_push_front_n(f,l,n,next) ((f)==0?\
+                                       ((f)=(l)=(n),(n)->next=0):\
+                                       ((n)->next=(f),(f)=(n)))
+#define queue_push_front(f,l,n) queue_push_front_n(f,l,n,next)
 
-#define sll_queue_pop_n(f,l,next) ((f)==(l)?\
-                                   (f)=(l)=0:\
-                                   (f)=(f)->next)
-#define sll_queue_pop(f,l) sll_queue_pop(f,l,next)
+#define queue_pop_n(f,l,next) ((f)==(l)?\
+                              (f)=(l)=0:\
+                              (f)=(f)->next)
+#define queue_pop(f,l) queue_pop(f,l,next)
 
 // singly-linked, singly-headed lists
-#define sll_stack_push_n(f,l,next) ((n)->next=(f),(f)=(n))
-#define sll_stack_push(f,l) sll_stack_push_n(f,l,next)
+#define stack_push_n(f,l,next) ((n)->next=(f),(f)=(n))
+#define stack_push(f,l) stack_push_n(f,l,next)
 
-#define sll_stack_pop_n(f,next) ((f)==0?0:\
-                                ((f)=(f)->next))
-#define sll_stack_pop(f) sll_stack_pop(f,next)
+#define stack_pop_n(f,next) ((f)==0?0:\
+                            ((f)=(f)->next))
+#define stack_pop(f) stack_pop_n(f,next)
 
 ////////////////////////////
 // :keywords
@@ -216,18 +216,18 @@ typedef double f64;
 # error no_inline not defined for this compiler.
 #endif
 
-#define STRUCT(name) \
-typedef struct name name; \
-struct name
+// #define STRUCT(name) \
+// typedef struct name name; \
+// struct name
 
-#define ENUM(name) \
-typedef enum name name; \
-enum name
+// #define ENUM(name) \
+// typedef enum name name; \
+// enum name
 
-#define UNION(name) \
-typedef union name name; \
-union name
+// #define UNION(name) \
+// typedef union name name; \
+// union name
 
-#define ENUM_SIZE(name, backing) \
-typedef backing name; \
-enum
+// #define ENUM_SIZE(name, backing) \
+// typedef backing name; \
+// enum

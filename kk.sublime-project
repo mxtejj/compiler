@@ -1,0 +1,37 @@
+{
+  "folders":
+  [
+    {
+      "path": ".",
+    }
+  ],
+
+  "build_systems":
+  [
+    {
+      "name": "Build Debug",
+      "cmd": "build.bat debug",
+      "working_dir": "$project_path",
+      "file_regex": "^(.+?)\\((\\d+)(?:,(\\d+))?\\):\\s*(error|warning)",
+      "quiet": true
+    },
+    {
+      "name": "Build Release",
+      "cmd": "build.bat release",
+      "working_dir": "$project_path",
+      "file_regex": "^(.+?)\\((\\d+)(?:,(\\d+))?\\):\\s*(error|warning)",
+      "quiet": true
+    }
+  ],
+  "settings":
+  {
+    "auto_complete": true,
+    "LSP":
+    {
+      "clangd":
+      {
+        "enabled": true,
+      },
+    },
+  },
+}

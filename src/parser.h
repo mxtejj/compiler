@@ -43,20 +43,20 @@ struct Type;
 typedef enum Stmt_Kind Stmt_Kind;
 enum Stmt_Kind
 {
-  STMT_NULL,
-  STMT_BLOCK,
-  STMT_IF,
-  STMT_DO_WHILE,
-  STMT_WHILE,
-  STMT_FOR,
-  STMT_FOR_IN,
-  STMT_SWITCH,
-  STMT_RETURN,
-  STMT_DEFER,
-  STMT_BREAK,
-  STMT_CONTINUE,
-  STMT_EXPR,
-  STMT_DECL,
+  StmtKind_Null,
+  StmtKind_Block,
+  StmtKind_If,
+  StmtKind_DoWhile,
+  StmtKind_While,
+  StmtKind_For,
+  StmtKind_ForIn,
+  StmtKind_Switch,
+  StmtKind_Return,
+  StmtKind_Defer,
+  StmtKind_Break,
+  StmtKind_Continue,
+  StmtKind_Expr,
+  StmtKind_Decl,
 };
 
 typedef struct Stmt Stmt;
@@ -71,19 +71,22 @@ struct Stmt_List
   u64 count;
 };
 
-STRUCT(Stmt_Array)
+typedef struct Stmt_Array Stmt_Array;
+struct Stmt_Array
 {
   Stmt **v;
   u64 count;
 };
 
-STRUCT(Expr_Array)
+typedef struct Expr_Array Expr_Array;
+struct Expr_Array
 {
   Expr **v;
   u64 count;
 };
 
-STRUCT(Switch_Case)
+typedef struct Switch_Case Switch_Case;
+struct Switch_Case
 {
   Expr_Array labels;
   Stmt *block; // NOTE: because we have print_stmt which takes a Stmt * we "cant" make this Stmt_Array
@@ -91,20 +94,23 @@ STRUCT(Switch_Case)
   b8 is_default; // => (labels.count == 0)
 };
 
-STRUCT(Switch_Case_Node)
+typedef struct Switch_Case_Node Switch_Case_Node;
+struct Switch_Case_Node
 {
   Switch_Case_Node *next;
   Switch_Case v;
 };
 
-STRUCT(Switch_Case_List)
+typedef struct Switch_Case_List Switch_Case_List;
+struct Switch_Case_List
 {
   Switch_Case_Node *first;
   Switch_Case_Node *last;
   u64 count;
 };
 
-STRUCT(Switch_Case_Array)
+typedef struct Switch_Case_Array Switch_Case_Array;
+struct Switch_Case_Array
 {
   Switch_Case *v;
   u64 count;
@@ -196,15 +202,15 @@ internal Stmt *stmt_switch(Parser *p, Expr *expr, Switch_Case_Array cases);
 typedef enum Type_Spec_Kind Type_Spec_Kind;
 enum Type_Spec_Kind
 {
-  TYPE_SPEC_NULL,
-  TYPE_SPEC_NAME,   // Entity
-  TYPE_SPEC_PROC,   // proc(...) -> ret
-  TYPE_SPEC_ENUM,   // enum { ... }
-  TYPE_SPEC_STRUCT, // struct { ... }
-  TYPE_SPEC_UNION,  // union { ... }
-  TYPE_SPEC_ARRAY,  // [2]Entity
-  TYPE_SPEC_SLICE,  // []Entity
-  TYPE_SPEC_PTR,    // *Entity
+  TypeSpecKind_Null,
+  TypeSpecKind_Name,   // Entity
+  TypeSpecKind_Proc,   // proc(...) -> ret
+  TypeSpecKind_Enum,   // enum { ... }
+  TypeSpecKind_Struct, // struct { ... }
+  TypeSpecKind_Union,  // union { ... }
+  TypeSpecKind_Array,  // [2]Entity
+  TypeSpecKind_Slice,  // []Entity
+  TypeSpecKind_Ptr,    // *Entity
 };
 
 typedef struct Type_Spec Type_Spec;
@@ -216,32 +222,37 @@ struct Type_Spec_List
   Type_Spec *last;
 };
 
-STRUCT(Type_Spec_Array)
+typedef struct Type_Spec_Array Type_Spec_Array;
+struct Type_Spec_Array
 {
   Type_Spec **v;
   u64 count;
 };
 
-STRUCT(Enum_Member)
+typedef struct Enum_Member Enum_Member;
+struct Enum_Member
 {
   String8  name;
   Expr    *value;
 };
 
-STRUCT(Enum_Member_Array)
+typedef struct Enum_Member_Array Enum_Member_Array;
+struct Enum_Member_Array
 {
   Enum_Member *v;
   u64 count;
 };
 
-STRUCT(Aggr_Field);
-STRUCT(Aggr_Field_Array)
+typedef struct Aggr_Field Aggr_Field;
+typedef struct Aggr_Field_Array Aggr_Field_Array;
+struct Aggr_Field_Array
 {
   Aggr_Field *v;
   u64 count;
 };
 
-STRUCT(Decl_Array)
+typedef struct Decl_Array Decl_Array;
+struct Decl_Array
 {
   Decl **v;
   u64 count;
@@ -304,18 +315,20 @@ internal Type_Spec *type_spec_ptr(Parser *p, Type_Spec *pointee);
 typedef enum Decl_Kind Decl_Kind;
 enum Decl_Kind
 {
-  DECL_NULL,
-  DECL_VAR,
-  DECL_CONST,
+  DeclKind_Null,
+  DeclKind_Var,
+  DeclKind_Const,
 };
 
-STRUCT(Proc_Param)
+typedef struct Proc_Param Proc_Param;
+struct Proc_Param
 {
   String8    name;
   Type_Spec *type;
 };
 
-STRUCT(Proc_Param_Node)
+typedef struct Proc_Param_Node Proc_Param_Node;
+struct Proc_Param_Node
 {
   Proc_Param_Node *next;
   Proc_Param v;
@@ -343,19 +356,22 @@ struct Decl_Proc
   Stmt       *body;
 };
 
-STRUCT(Aggr_Field)
+typedef struct Aggr_Field Aggr_Field;
+struct Aggr_Field
 {
   String8List names;
   Type_Spec  *type;
 };
 
-STRUCT(Aggr_Field_Node)
+typedef struct Aggr_Field_Node Aggr_Field_Node;
+struct Aggr_Field_Node
 {
   Aggr_Field_Node *next;
   Aggr_Field v;
 };
 
-STRUCT(Aggr_Field_List)
+typedef struct Aggr_Field_List Aggr_Field_List;
+struct Aggr_Field_List
 {
   Aggr_Field_Node *first;
   Aggr_Field_Node *last;
@@ -368,7 +384,8 @@ struct Decl_Aggr
   Aggr_Field_Array fields;
 };
 
-STRUCT(Enum_Member_Node)
+typedef struct Enum_Member_Node Enum_Member_Node;
+struct Enum_Member_Node
 {
   Enum_Member_Node *next;
   Enum_Member v;
@@ -401,7 +418,8 @@ struct Decl_Const
   Expr *expr;
 };
 
-STRUCT(Decl_Typedef)
+typedef struct Decl_Typedef Decl_Typedef;
+struct Decl_Typedef
 {
   Type_Spec *type;
 };
@@ -464,35 +482,37 @@ internal Decl_List parse_declarations(Parser *p);
 typedef enum Expr_Kind Expr_Kind;
 enum Expr_Kind
 {
-  EXPR_NULL,
-  EXPR_IDENT,
-  EXPR_UNARY,
-  EXPR_BINARY,
-  EXPR_TERNARY,
-  EXPR_NIL_LITERAL,
-  EXPR_STRING_LITERAL,
-  EXPR_INTEGER_LITERAL,
-  EXPR_FLOAT_LITERAL,
-  EXPR_BOOL_LITERAL,
-  EXPR_CHAR_LITERAL,
-  EXPR_GROUP,
-  EXPR_CAST,         // unary
-  EXPR_CALL,         // postfix
-  EXPR_INDEX,        // postfix
-  EXPR_FIELD,        // postfix
-  EXPR_COMPOUND,     // primary/postfix hybrid | Type{}, [5]Type{...}, proc(a: int) -> float {}, &something
-  EXPR_SIZE_OF,      // unary
+  ExprKind_Null,
+  ExprKind_Ident,
+  ExprKind_Unary,
+  ExprKind_Binary,
+  ExprKind_Ternary,
+  ExprKind_NilLiteral,
+  ExprKind_StringLiteral,
+  ExprKind_IntegerLiteral,
+  ExprKind_FloatLiteral,
+  ExprKind_BoolLiteral,
+  ExprKind_CharLiteral,
+  ExprKind_Group,
+  ExprKind_Cast,         // unary
+  ExprKind_Call,         // postfix
+  ExprKind_Index,        // postfix
+  ExprKind_Field,        // postfix
+  ExprKind_Compound,     // primary/postfix hybrid | Type{}, [5]Type{...}, proc(a: int) -> float {}, &something
+  ExprKind_SizeOf,       // unary
 };
 
 // TODO: rename to compound_field, add compound_field_node for linked list
-ENUM(Compound_Field_Kind)
+typedef enum Compound_Field_Kind Compound_Field_Kind;
+enum Compound_Field_Kind
 {
-  COMPOUND_FIELD_NONE,
-  COMPOUND_FIELD_NAME,
-  COMPOUND_FIELD_INDEX,
+  CompoundFieldKind_None,
+  CompoundFieldKind_Name,
+  CompoundFieldKind_Index,
 };
 
-STRUCT(Compound_Field)
+typedef struct Compound_Field Compound_Field;
+struct Compound_Field
 {
   Compound_Field *next;
   Source_Pos pos;
@@ -507,14 +527,16 @@ STRUCT(Compound_Field)
   };
 };
 
-STRUCT(Compound_Field_List)
+typedef struct Compound_Field_List Compound_Field_List;
+struct Compound_Field_List
 {
   Compound_Field *first;
   Compound_Field *last;
   u64 count;
 };
 
-STRUCT(Compound_Field_Array)
+typedef struct Compound_Field_Array Compound_Field_Array;
+struct Compound_Field_Array
 {
   Compound_Field **v;
   u64 count;
@@ -522,7 +544,8 @@ STRUCT(Compound_Field_Array)
 
 internal void push_compound_field(Parser *p, Compound_Field_List *list, Compound_Field *field);
 
-STRUCT(Expr_List)
+typedef struct Expr_List Expr_List;
+struct Expr_List
 {
   Expr *first;
   Expr *last;

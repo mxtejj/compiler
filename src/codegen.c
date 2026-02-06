@@ -13,14 +13,16 @@
 //- C Declaration Builder (from old codegen)
 //=============================================================================
 
-STRUCT(CDecl_Builder)
+typedef struct CDecl_Builder CDecl_Builder;
+struct CDecl_Builder
 {
   String8List type;   // "int ", "float ", ...
   String8List prefix; // "*", "("
   String8List suffix; // ")", "[3]"
 };
 
-STRUCT(Codegen)
+typedef struct Codegen Codegen;
+struct Codegen
 {
   Arena *arena;
   String8List list;
@@ -74,28 +76,28 @@ cdecl_name(Arena *arena, Type *type)
 {
   switch (type->kind)
   {
-  case TYPE_VOID:   return str8_lit("void");
-  case TYPE_S8:     return str8_lit("s8");
-  case TYPE_S16:    return str8_lit("s16");
-  case TYPE_S32:    return str8_lit("s32");
-  case TYPE_S64:    return str8_lit("s64");
-  case TYPE_U8:     return str8_lit("u8");
-  case TYPE_U16:    return str8_lit("u16");
-  case TYPE_U32:    return str8_lit("u32");
-  case TYPE_U64:    return str8_lit("u64");
-  case TYPE_INT:    return str8_lit("s64"); // TODO: use isize (platform-sized   signed integer)
-  case TYPE_UINT:   return str8_lit("u64"); // TODO: use usize (platform-sized unsigned integer)
-  case TYPE_F32:    return str8_lit("f32");
-  case TYPE_F64:    return str8_lit("f64");
-  case TYPE_STRING: return str8_lit("string");
+  case TypeKind_Void:   return str8_lit("void");
+  case TypeKind_S8:     return str8_lit("s8");
+  case TypeKind_S16:    return str8_lit("s16");
+  case TypeKind_S32:    return str8_lit("s32");
+  case TypeKind_S64:    return str8_lit("s64");
+  case TypeKind_U8:     return str8_lit("u8");
+  case TypeKind_U16:    return str8_lit("u16");
+  case TypeKind_U32:    return str8_lit("u32");
+  case TypeKind_U64:    return str8_lit("u64");
+  case TypeKind_Int:    return str8_lit("s64"); // TODO: use isize (platform-sized   signed integer)
+  case TypeKind_Uint:   return str8_lit("u64"); // TODO: use usize (platform-sized unsigned integer)
+  case TypeKind_F32:    return str8_lit("f32");
+  case TypeKind_F64:    return str8_lit("f64");
+  case TypeKind_String: return str8_lit("string");
 
-  case TYPE_ARRAY: return gen_array_type_name(arena, type->array.base, type->array.length);
+  case TypeKind_Array: return gen_array_type_name(arena, type->array.base, type->array.length);
 
-  case TYPE_STRUCT:
-  case TYPE_UNION:
+  case TypeKind_Struct:
+  case TypeKind_Union:
     return type->sym->name;
 
-  case TYPE_PTR:
+  case TypeKind_Ptr:
   {
     String8 base = cdecl_name(arena, type->ptr.base);
     return str8f(arena, "%.*s*", str8_varg(base));
@@ -115,28 +117,28 @@ cdecl_from_type(Arena *arena, CDecl_Builder *b, Type *type)
 
   switch (type->kind)
   {
-  case TYPE_VOID:
-  case TYPE_S8:
-  case TYPE_S16:
-  case TYPE_S32:
-  case TYPE_S64:
-  case TYPE_U8:
-  case TYPE_U16:
-  case TYPE_U32:
-  case TYPE_U64:
-  case TYPE_INT:
-  case TYPE_UINT:
-  case TYPE_F32:
-  case TYPE_F64:
-  case TYPE_STRING:
-  case TYPE_STRUCT:
-  case TYPE_UNION:
+  case TypeKind_Void:
+  case TypeKind_S8:
+  case TypeKind_S16:
+  case TypeKind_S32:
+  case TypeKind_S64:
+  case TypeKind_U8:
+  case TypeKind_U16:
+  case TypeKind_U32:
+  case TypeKind_U64:
+  case TypeKind_Int:
+  case TypeKind_Uint:
+  case TypeKind_F32:
+  case TypeKind_F64:
+  case TypeKind_String:
+  case TypeKind_Struct:
+  case TypeKind_Union:
     str8_list_push_frontf(arena, &b->type, "%.*s ", str8_varg(cdecl_name(scratch.arena, type)));
     break;
-  case TYPE_PTR:
+  case TypeKind_Ptr:
     cdecl_from_type(arena, b, type->ptr.base);
 
-    if (type->ptr.base->kind == TYPE_ARRAY || type->ptr.base->kind == TYPE_PROC)
+    if (type->ptr.base->kind == TypeKind_Array || type->ptr.base->kind == TypeKind_Proc)
     {
       str8_list_push_frontf(arena, &b->prefix, "*(");
       str8_list_pushf(arena, &b->suffix, ")");
@@ -146,14 +148,14 @@ cdecl_from_type(Arena *arena, CDecl_Builder *b, Type *type)
       str8_list_push_frontf(arena, &b->prefix, "*");
     }
     break;
-  case TYPE_ARRAY:
+  case TypeKind_Array:
   {
     // Use struct wrapper to prevent array decay
     String8 struct_name = gen_array_type_name(arena, type->array.base, type->array.length);
     str8_list_push_frontf(arena, &b->type, "%.*s ", str8_varg(struct_name));
     break;
   }
-  case TYPE_PROC:
+  case TypeKind_Proc:
     // return type
     cdecl_from_type(arena, b, type->proc.ret);
 
@@ -222,7 +224,7 @@ gen_array_type_name(Arena *arena, Type *base, u64 length)
   Arena_Temp scratch = arena_scratch_get(&arena, 1);
 
   String8 base_name;
-  if (base->kind == TYPE_ARRAY)
+  if (base->kind == TypeKind_Array)
   {
     base_name = gen_array_type_name(arena, base->array.base, base->array.length);
   }
@@ -254,7 +256,7 @@ gen_array_typedefs(Codegen *g)
     String8 elem_type_name;
     
     // Get element type name (might also be an array struct)
-    if (array_type->array.base->kind == TYPE_ARRAY)
+    if (array_type->array.base->kind == TypeKind_Array)
     {
       elem_type_name = gen_array_type_name(g->arena, 
                                            array_type->array.base->array.base, 
@@ -291,22 +293,22 @@ gen_forward_decls(Codegen *g)
     Sym *sym = it->v;
     Decl *decl = sym->decl;
     if (!decl) continue;
-    if (decl->kind != DECL_CONST) continue;
+    if (decl->kind != DeclKind_Const) continue;
     if (!decl->init_type) continue;
     if (decl->is_foreign) continue;
 
     switch (decl->init_type->kind)
     {
-    case TYPE_SPEC_STRUCT:
+    case TypeSpecKind_Struct:
       gen_pushlnf(g, "typedef struct %.*s %.*s;", str8_varg(sym->name), str8_varg(sym->name));
       break;
-    case TYPE_SPEC_UNION:
+    case TypeSpecKind_Union:
       gen_pushlnf(g, "typedef union %.*s %.*s;", str8_varg(sym->name), str8_varg(sym->name));
       break;
-    case TYPE_SPEC_ENUM:
+    case TypeSpecKind_Enum:
       gen_pushlnf(g, "typedef enum %.*s %.*s;", str8_varg(sym->name), str8_varg(sym->name));
       break;
-    case TYPE_SPEC_PROC:
+    case TypeSpecKind_Proc:
       gen_pushlnf(g, "%.*s;", str8_varg(cdecl_make(scratch.arena, sym->type, sym->name)));
       break;
     }
@@ -319,7 +321,7 @@ gen_forward_decls(Codegen *g)
 internal void
 gen_aggregate(Codegen *g, Sym *sym)
 {
-  assert(sym->type->kind == TYPE_STRUCT || sym->type->kind == TYPE_UNION);
+  assert(sym->type->kind == TypeKind_Struct || sym->type->kind == TypeKind_Union);
   Decl *decl = sym->decl;
   Type *type = sym->type;
 
@@ -329,7 +331,7 @@ gen_aggregate(Codegen *g, Sym *sym)
   }
 
   gen_pushf(g, "%s %.*s {", 
-    (sym->type->kind == TYPE_STRUCT ? "struct" : "union"), 
+    (sym->type->kind == TypeKind_Struct ? "struct" : "union"), 
     str8_varg(decl->name));
 
   g->indent++;
@@ -347,7 +349,7 @@ gen_aggregate(Codegen *g, Sym *sym)
 internal void
 gen_proc(Codegen *g, Sym *sym)
 {
-  assert(sym->type->kind == TYPE_PROC);
+  assert(sym->type->kind == TypeKind_Proc);
   Decl *decl = sym->decl;
   Type *type = sym->type;
 
@@ -425,13 +427,13 @@ gen_sym(Codegen *g, Sym *sym)
 
   switch (decl->kind)
   {
-  case DECL_VAR:
+  case DeclKind_Var:
   {
     String8 result = cdecl_make(g->arena, sym->type, sym->name);
     gen_pushf(g, "%.*s = {0};\n", str8_varg(result));
     break;
   }
-  case DECL_CONST:
+  case DeclKind_Const:
   {
     // TODO: dont generate !!!:
     // N :: 40            -> int N = {0};
@@ -440,11 +442,11 @@ gen_sym(Codegen *g, Sym *sym)
     {
       switch (decl->init_type->kind)
       {
-      case TYPE_SPEC_STRUCT:
-      case TYPE_SPEC_UNION:
+      case TypeSpecKind_Struct:
+      case TypeSpecKind_Union:
         gen_aggregate(g, sym);
         break;
-      case TYPE_SPEC_PROC:
+      case TypeSpecKind_Proc:
         gen_proc(g, sym);
         break;
       default:
@@ -532,20 +534,20 @@ gen_binary_op_name(Codegen *g, Token_Kind op, Type *type)
   char *type_suffix = NULL; // use cdecl name function here TODO
   switch (type->kind)
   {
-  case TYPE_VOID:   type_suffix = "void";   break;
-  case TYPE_S8:     type_suffix = "s8";     break;
-  case TYPE_S16:    type_suffix = "s16";    break;
-  case TYPE_S32:    type_suffix = "s32";    break;
-  case TYPE_S64:    type_suffix = "s64";    break;
-  case TYPE_U8:     type_suffix = "u8";     break;
-  case TYPE_U16:    type_suffix = "u16";    break;
-  case TYPE_U32:    type_suffix = "u32";    break;
-  case TYPE_U64:    type_suffix = "u64";    break;
-  case TYPE_INT:    type_suffix = "s64";    break; // TODO: use isize (platform-sized   signed integer)
-  case TYPE_UINT:   type_suffix = "u64";    break; // TODO: use usize (platform-sized unsigned integer)
-  case TYPE_F32:    type_suffix = "f32";    break;
-  case TYPE_F64:    type_suffix = "f64";    break;
-  case TYPE_STRING: type_suffix = "string"; break;
+  case TypeKind_Void:   type_suffix = "void";   break;
+  case TypeKind_S8:     type_suffix = "s8";     break;
+  case TypeKind_S16:    type_suffix = "s16";    break;
+  case TypeKind_S32:    type_suffix = "s32";    break;
+  case TypeKind_S64:    type_suffix = "s64";    break;
+  case TypeKind_U8:     type_suffix = "u8";     break;
+  case TypeKind_U16:    type_suffix = "u16";    break;
+  case TypeKind_U32:    type_suffix = "u32";    break;
+  case TypeKind_U64:    type_suffix = "u64";    break;
+  case TypeKind_Int:    type_suffix = "s64";    break; // TODO: use isize (platform-sized   signed integer)
+  case TypeKind_Uint:   type_suffix = "u64";    break; // TODO: use usize (platform-sized unsigned integer)
+  case TypeKind_F32:    type_suffix = "f32";    break;
+  case TypeKind_F64:    type_suffix = "f64";    break;
+  case TypeKind_String: type_suffix = "string"; break;
   default: assert(0); break;
   }
   
@@ -558,16 +560,16 @@ gen_expr(Codegen *g, Expr *expr)
 {
   switch (expr->kind)
   {
-  case EXPR_INTEGER_LITERAL:
+  case ExprKind_IntegerLiteral:
     return str8f(g->arena, "%lld", expr->literal.integer);
     
-  case EXPR_FLOAT_LITERAL:
+  case ExprKind_FloatLiteral:
     return str8f(g->arena, "%f", expr->literal.floating);
     
-  case EXPR_STRING_LITERAL:
+  case ExprKind_StringLiteral:
     return str8f(g->arena, "STR(\"%.*s\")", str8_varg(expr->literal.string));
     
-  case EXPR_IDENT:
+  case ExprKind_Ident:
   {
     // Check if this identifier is a parameter - if so, use the temp
     for each_index(i, g->param_count)
@@ -581,7 +583,7 @@ gen_expr(Codegen *g, Expr *expr)
     return expr->ident;
   }
   
-  case EXPR_UNARY:
+  case ExprKind_Unary:
   {
     String8 operand = gen_expr(g, expr->unary.right);
     
@@ -589,16 +591,15 @@ gen_expr(Codegen *g, Expr *expr)
     {
     case '-':
     {
-      String8 op_func = str8f(g->arena, "neg_%s", 
-        expr->type->kind == TYPE_INT ? "s32" : "f32");
+      // !TODO: handle all types
+      String8 op_func = str8f(g->arena, "neg_%s", expr->type->kind == TypeKind_S32 ? "s32" : "f32");
       return str8f(g->arena, "%.*s(%.*s)", str8_varg(op_func), str8_varg(operand));
     }
     case '!':
       return str8f(g->arena, "!%.*s", str8_varg(operand));
     case '~':
     {
-      String8 op_func = str8f(g->arena, "not_%s", 
-        expr->type->kind == TYPE_INT ? "s32" : "s32");
+      String8 op_func = str8f(g->arena, "not_%s", expr->type->kind == TypeKind_S32 ? "s32" : "s32");
       return str8f(g->arena, "%.*s(%.*s)", str8_varg(op_func), str8_varg(operand));
     }
     case '+':
@@ -613,7 +614,7 @@ gen_expr(Codegen *g, Expr *expr)
     }
   }
     
-  case EXPR_BINARY:
+  case ExprKind_Binary:
   {
     if (expr->binary.op.kind == '=')
     {
@@ -654,7 +655,7 @@ gen_expr(Codegen *g, Expr *expr)
     }
   }
   
-  case EXPR_CALL:
+  case ExprKind_Call:
   {
     // Just generate the call directly - temporaries handled in function body
     String8 callee_name = expr->call.expr->ident;
@@ -673,7 +674,7 @@ gen_expr(Codegen *g, Expr *expr)
     return str8_list_join(g->arena, &call_parts, NULL);
   }
   
-  case EXPR_INDEX:
+  case ExprKind_Index:
   {
     // Array indexing: a[i] becomes a.data[i]
     String8 array = gen_expr(g, expr->index.expr);
@@ -681,21 +682,21 @@ gen_expr(Codegen *g, Expr *expr)
     return str8f(g->arena, "%.*s.data[%.*s]", str8_varg(array), str8_varg(index));
   }
   
-  case EXPR_FIELD:
+  case ExprKind_Field:
   {
     // Struct field access: v.x
     String8 operand = gen_expr(g, expr->field.expr);
     return str8f(g->arena, "%.*s.%.*s", str8_varg(operand), str8_varg(expr->field.name));
   }
   
-  case EXPR_CAST:
+  case ExprKind_Cast:
   {
     String8 operand = gen_expr(g, expr->cast.expr);
     String8 target_type = cdecl_name(g->arena, expr->type);
     return str8f(g->arena, "(%.*s)%.*s", str8_varg(target_type), str8_varg(operand));
   }
   
-  case EXPR_TERNARY:
+  case ExprKind_Ternary:
   {
     String8 cond = gen_expr(g, expr->ternary.cond);
     String8 then = gen_expr(g, expr->ternary.then);
@@ -704,7 +705,7 @@ gen_expr(Codegen *g, Expr *expr)
       str8_varg(cond), str8_varg(then), str8_varg(else_));
   }
 
-  case EXPR_COMPOUND:
+  case ExprKind_Compound:
   {
     // Compound literals need to be assigned field-by-field
     // Create a temp, assign fields, return temp name
@@ -720,12 +721,12 @@ gen_expr(Codegen *g, Expr *expr)
       
       switch (field->kind)
       {
-      case COMPOUND_FIELD_NAME:
+      case CompoundFieldKind_Name:
         gen_pushlnf(g, "%.*s.%.*s = %.*s;", 
           str8_varg(temp), str8_varg(field->name), str8_varg(value));
         break;
         
-      case COMPOUND_FIELD_INDEX:
+      case CompoundFieldKind_Index:
       {
         String8 index = gen_expr(g, field->index);
         gen_pushlnf(g, "%.*s.data[%.*s] = %.*s;", 
@@ -733,8 +734,8 @@ gen_expr(Codegen *g, Expr *expr)
         break;
       }
         
-      case COMPOUND_FIELD_NONE:
-        if (expr->type->kind == TYPE_ARRAY)
+      case CompoundFieldKind_None:
+        if (expr->type->kind == TypeKind_Array)
         {
           gen_pushlnf(g, "%.*s.data[%llu] = %.*s;", 
             str8_varg(temp), i, str8_varg(value));
@@ -752,7 +753,7 @@ gen_expr(Codegen *g, Expr *expr)
     return temp;
   }
 
-  case EXPR_SIZE_OF:
+  case ExprKind_SizeOf:
   {
     Type *target_type = expr->size_of.is_expr ? expr->size_of.expr->type : expr->type;
     return str8f(g->arena, "/*size_of*/%d", target_type->size);
@@ -760,13 +761,13 @@ gen_expr(Codegen *g, Expr *expr)
     // return str8f(g->arena, "sizeof(%.*s)", str8_varg(type_name));
   }
 
-  case EXPR_GROUP:
+  case ExprKind_Group:
   {
     String8 e = gen_expr(g, expr->group.expr);
     return str8f(g->arena, "(%.*s)", str8_varg(e));
   }
 
-  case EXPR_CHAR_LITERAL:
+  case ExprKind_CharLiteral:
   {
     return str8f(g->arena, "/*char*/%d", expr->literal.character);
   }
@@ -781,7 +782,7 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
 {
   switch (stmt->kind)
   {
-  case STMT_DECL:
+  case StmtKind_Decl:
   {
     Decl *decl = stmt->decl;
     Type *type = decl->sym->type;
@@ -802,13 +803,13 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     break;
   }
 
-  case STMT_EXPR:
+  case StmtKind_Expr:
   {
     // Just evaluate the expression (might have side effects like assignments or calls)
     String8 expr_val = gen_expr(g, stmt->expr);
     // For pure expression statements (not assignments which gen_expr handles),
     // we would emit it, but assignments already emit themselves
-    if (stmt->expr->kind != EXPR_BINARY || stmt->expr->binary.op.kind != '=')
+    if (stmt->expr->kind != ExprKind_Binary || stmt->expr->binary.op.kind != '=')
     {
       // For non-assignment expressions (like function calls), emit as statement
       gen_pushlnf(g, "%.*s;", str8_varg(expr_val));
@@ -816,7 +817,7 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     break;
   }
   
-  case STMT_RETURN:
+  case StmtKind_Return:
   {
     if (stmt->return_expr)
     {
@@ -830,7 +831,7 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     break;
   }
   
-  case STMT_IF:
+  case StmtKind_If:
   {
     String8 cond = gen_expr(g, stmt->if0.cond);
     gen_pushlnf(g, "if (%.*s) {", str8_varg(cond));
@@ -841,7 +842,7 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     Stmt *else_part = stmt->if0.else_stmt;
     while (else_part != NULL)
     {
-      if (else_part->kind == STMT_IF)
+      if (else_part->kind == StmtKind_If)
       {
         // else if - generate on same line as closing brace
         String8 else_cond = gen_expr(g, else_part->if0.cond);
@@ -854,7 +855,7 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
       else
       {
         // final else block
-        assert(else_part->kind == STMT_BLOCK);
+        assert(else_part->kind == StmtKind_Block);
         gen_pushlnf(g, "} else {");
         g->indent++;
         gen_stmt_block(g, else_part->block, ret_type);
@@ -867,7 +868,7 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     break;
   }
   
-  case STMT_WHILE:
+  case StmtKind_While:
   {
     String8 cond = gen_expr(g, stmt->while0.cond);
     gen_pushlnf(g, "while (%.*s) {", str8_varg(cond));
@@ -879,7 +880,7 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     break;
   }
   
-  case STMT_DO_WHILE:
+  case StmtKind_DoWhile:
   {
     gen_pushlnf(g, "do {");
     g->indent++;
@@ -891,7 +892,7 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     break;
   }
   
-  case STMT_FOR:
+  case StmtKind_For:
   {
     gen_pushlnf(g, "// TODO: for loop");
     // TODO: need to make gen_stmt return a string8 like gen_expr with an option to disable semicolon
@@ -909,19 +910,19 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     break;
   }
 
-  case STMT_FOR_IN:
+  case StmtKind_ForIn:
   {
     gen_pushlnf(g, "// TODO: for in loop");
     break;
   }
   
-  case STMT_SWITCH:
+  case StmtKind_Switch:
   {
     gen_pushlnf(g, "// TODO: switch statement");
     break;
   }
   
-  case STMT_BLOCK:
+  case StmtKind_Block:
   {
     gen_pushlnf(g, "{");
     g->indent++;
@@ -931,11 +932,11 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     break;
   }
   
-  case STMT_BREAK:
+  case StmtKind_Break:
     gen_pushlnf(g, "break;");
     break;
     
-  case STMT_CONTINUE:
+  case StmtKind_Continue:
     gen_pushlnf(g, "continue;");
     break;
   

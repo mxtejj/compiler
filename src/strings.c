@@ -120,7 +120,7 @@ internal void
 str8_list_push_explicit(String8List *list, String8 string, String8Node *node_memory)
 {
   node_memory->string = string;
-  sll_queue_push(list->first, list->last, node_memory);
+  queue_push(list->first, list->last, node_memory);
   list->node_count  += 1;
   list->strings_count += string.count;
 }
@@ -146,7 +146,7 @@ internal void
 str8_list_push_front_explicit(String8List *list, String8 string, String8Node *node_memory)
 {
   node_memory->string = string;
-  sll_queue_push_front(list->first, list->last, node_memory);
+  queue_push_front(list->first, list->last, node_memory);
   list->node_count  += 1;
   list->strings_count += string.count;
 }
