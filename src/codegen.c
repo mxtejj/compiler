@@ -1,5 +1,6 @@
 #include "base.h"
 #include "arena.h"
+#include "lexer.h"
 #include "strings.h"
 #include "parser.h"
 #include <stdarg.h>
@@ -512,22 +513,22 @@ gen_binary_op_name(Codegen *g, Token_Kind op, Type *type)
   char *base_name = NULL;
   switch (op)
   {
-  case '+':           base_name = "add"; break;
-  case '-':           base_name = "sub"; break;
-  case '*':           base_name = "mul"; break;
-  case '/':           base_name = "div"; break;
-  case '%':           base_name = "mod"; break;
-  case TOKEN_LSHIFT:  base_name = "shl"; break;
-  case TOKEN_RSHIFT:  base_name = "shr"; break;
-  case '&':           base_name = "and"; break;
-  case '|':           base_name = "or";  break;
-  case '^':           base_name = "xor"; break;
-  case TOKEN_EQ:      base_name = "eq";  break;
-  case TOKEN_NEQ:     base_name = "neq"; break;
-  case '<':           base_name = "lt";  break;
-  case '>':           base_name = "gt";  break;
-  case TOKEN_LTEQ:    base_name = "lte"; break;
-  case TOKEN_GTEQ:    base_name = "gte"; break;
+  case TokenKind_Plus:      base_name = "add"; break;
+  case TokenKind_Minus:     base_name = "sub"; break;
+  case TokenKind_Star:      base_name = "mul"; break;
+  case TokenKind_Slash:     base_name = "div"; break;
+  case TokenKind_Percent:   base_name = "mod"; break;
+  case TokenKind_LShift:    base_name = "shl"; break;
+  case TokenKind_RShift:    base_name = "shr"; break;
+  case TokenKind_Ampersand: base_name = "and"; break;
+  case TokenKind_Pipe:      base_name = "or";  break;
+  case TokenKind_Caret:     base_name = "xor"; break;
+  case TokenKind_CmpEq:     base_name = "eq";  break;
+  case TokenKind_CmpNeq:    base_name = "neq"; break;
+  case TokenKind_CmpLt:     base_name = "lt";  break;
+  case TokenKind_CmpGt:     base_name = "gt";  break;
+  case TokenKind_CmpLtEq:   base_name = "lte"; break;
+  case TokenKind_CmpGtEq:   base_name = "gte"; break;
   default: assert(0); return (String8){0};
   }
   
@@ -589,24 +590,24 @@ gen_expr(Codegen *g, Expr *expr)
     
     switch (expr->unary.op.kind)
     {
-    case '-':
+    case TokenKind_Minus:
     {
       // !TODO: handle all types
       String8 op_func = str8f(g->arena, "neg_%s", expr->type->kind == TypeKind_S32 ? "s32" : "f32");
       return str8f(g->arena, "%.*s(%.*s)", str8_varg(op_func), str8_varg(operand));
     }
-    case '!':
+    case TokenKind_Exclamation:
       return str8f(g->arena, "!%.*s", str8_varg(operand));
-    case '~':
+    case TokenKind_Tilde:
     {
       String8 op_func = str8f(g->arena, "not_%s", expr->type->kind == TypeKind_S32 ? "s32" : "s32");
       return str8f(g->arena, "%.*s(%.*s)", str8_varg(op_func), str8_varg(operand));
     }
-    case '+':
+    case TokenKind_Plus:
       return operand;
-    case TOKEN_DEREF:
+    case TokenKind_Deref:
       return str8f(g->arena, "*%.*s", str8_varg(operand));
-    case '&':
+    case TokenKind_Ampersand:
       return str8f(g->arena, "&%.*s", str8_varg(operand));
     default:
       assert(0);
@@ -616,7 +617,7 @@ gen_expr(Codegen *g, Expr *expr)
     
   case ExprKind_Binary:
   {
-    if (expr->binary.op.kind == '=')
+    if (expr->binary.op.kind == TokenKind_Equal)
     {
       // Assignment - emit the assignment statement and return lhs
       String8 lhs = gen_expr(g, expr->binary.left);
@@ -633,17 +634,17 @@ gen_expr(Codegen *g, Expr *expr)
       bool is_compound_assign = false;
       switch (expr->binary.op.kind)
       {
-      case TOKEN_LOGICAL_AND: return str8f(g->arena, "%.*s && %.*s", str8_varg(left), str8_varg(right)); break;
-      case TOKEN_LOGICAL_OR:  return str8f(g->arena, "%.*s || %.*s", str8_varg(left), str8_varg(right)); break;
-      case TOKEN_LSHIFT_ASSIGN: op_func = gen_binary_op_name(g, TOKEN_LSHIFT, expr->type); is_compound_assign = true; break;
-      case TOKEN_RSHIFT_ASSIGN: op_func = gen_binary_op_name(g, TOKEN_RSHIFT, expr->type); is_compound_assign = true; break;
-      case TOKEN_ADD_ASSIGN:    op_func = gen_binary_op_name(g, '+', expr->type);          is_compound_assign = true; break;
-      case TOKEN_SUB_ASSIGN:    op_func = gen_binary_op_name(g, '-', expr->type);          is_compound_assign = true; break;
-      case TOKEN_DIV_ASSIGN:    op_func = gen_binary_op_name(g, '/', expr->type);          is_compound_assign = true; break;
-      case TOKEN_MUL_ASSIGN:    op_func = gen_binary_op_name(g, '*', expr->type);          is_compound_assign = true; break;
-      case TOKEN_AND_ASSIGN:    op_func = gen_binary_op_name(g, '&', expr->type);          is_compound_assign = true; break;
-      case TOKEN_OR_ASSIGN:     op_func = gen_binary_op_name(g, '|', expr->type);          is_compound_assign = true; break;
-      case TOKEN_XOR_ASSIGN:    op_func = gen_binary_op_name(g, '^', expr->type);          is_compound_assign = true; break;
+      case TokenKind_LogicalAnd: return str8f(g->arena, "%.*s && %.*s", str8_varg(left), str8_varg(right)); break;
+      case TokenKind_LogicalOr:  return str8f(g->arena, "%.*s || %.*s", str8_varg(left), str8_varg(right)); break;
+      case TokenKind_LShiftAssign: op_func = gen_binary_op_name(g, TokenKind_LShift, expr->type);    is_compound_assign = true; break;
+      case TokenKind_RShiftAssign: op_func = gen_binary_op_name(g, TokenKind_RShift, expr->type);    is_compound_assign = true; break;
+      case TokenKind_AddAssign:    op_func = gen_binary_op_name(g, TokenKind_Plus, expr->type);      is_compound_assign = true; break;
+      case TokenKind_SubAssign:    op_func = gen_binary_op_name(g, TokenKind_Minus, expr->type);     is_compound_assign = true; break;
+      case TokenKind_DivAssign:    op_func = gen_binary_op_name(g, TokenKind_Slash, expr->type);     is_compound_assign = true; break;
+      case TokenKind_MulAssign:    op_func = gen_binary_op_name(g, TokenKind_Star, expr->type);      is_compound_assign = true; break;
+      case TokenKind_AndAssign:    op_func = gen_binary_op_name(g, TokenKind_Ampersand, expr->type); is_compound_assign = true; break;
+      case TokenKind_OrAssign:     op_func = gen_binary_op_name(g, TokenKind_Pipe, expr->type);      is_compound_assign = true; break;
+      case TokenKind_XorAssign:    op_func = gen_binary_op_name(g, TokenKind_Caret, expr->type);     is_compound_assign = true; break;
       default: op_func = gen_binary_op_name(g, expr->binary.op.kind, expr->type); break;
       }
 
@@ -809,7 +810,7 @@ gen_stmt(Codegen *g, Stmt *stmt, Type *ret_type)
     String8 expr_val = gen_expr(g, stmt->expr);
     // For pure expression statements (not assignments which gen_expr handles),
     // we would emit it, but assignments already emit themselves
-    if (stmt->expr->kind != ExprKind_Binary || stmt->expr->binary.op.kind != '=')
+    if (stmt->expr->kind != ExprKind_Binary || stmt->expr->binary.op.kind != TokenKind_Equal)
     {
       // For non-assignment expressions (like function calls), emit as statement
       gen_pushlnf(g, "%.*s;", str8_varg(expr_val));

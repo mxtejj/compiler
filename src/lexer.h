@@ -4,93 +4,110 @@
 #include "strings.h"
 #include "arena.h"
 
-#define X_ENUM(name) name,
-#define X_STRING(name) #name,
-
-#define TOKEN_LIST(X) \
-  X(IDENT)            \
-  X(ARROW)            \
-  X(DEREF)            \
-  X(EQ)               \
-  X(NEQ)              \
-  X(GTEQ)             \
-  X(LTEQ)             \
-  X(LOGICAL_OR)       \
-  X(LOGICAL_AND)      \
-  X(LSHIFT)           \
-  X(RSHIFT)           \
-  X(LSHIFT_ASSIGN)    \
-  X(RSHIFT_ASSIGN)    \
-  X(ADD_ASSIGN)       \
-  X(SUB_ASSIGN)       \
-  X(DIV_ASSIGN)       \
-  X(MUL_ASSIGN)       \
-  X(AND_ASSIGN)       \
-  X(OR_ASSIGN)        \
-  X(XOR_ASSIGN)       \
-  X(INCREMENT)        \
-  X(DECREMENT)        \
-  X(RANGE_INCL)       \
-  X(RANGE_EXCL)       \
-  X(STRING_LITERAL)   \
-  X(INTEGER_LITERAL)  \
-  X(FLOAT_LITERAL)    \
-  X(CHAR_LITERAL)     \
-  X(KEYWORD_BEGIN)    \
-  X(NIL)              \
-  X(S8)               \
-  X(S16)              \
-  X(S32)              \
-  X(S64)              \
-  X(U8)               \
-  X(U16)              \
-  X(U32)              \
-  X(U64)              \
-  X(UINTPTR)          \
-  X(INT)              \
-  X(UINT)             \
-  X(F32)              \
-  X(F64)              \
-  X(BOOL)             \
-  X(STRING)           \
-  X(TRUE)             \
-  X(FALSE)            \
-  X(IF)               \
-  X(ELSE)             \
-  X(FOR)              \
-  X(DO)               \
-  X(WHILE)            \
-  X(SWITCH)           \
-  X(CASE)             \
-  X(DEFER)            \
-  X(BREAK)            \
-  X(FALLTHROUGH)      \
-  X(CONTINUE)         \
-  X(RETURN)           \
-  X(STRUCT)           \
-  X(UNION)            \
-  X(ENUM)             \
-  X(PROC)             \
-  X(VAR)              \
-  X(CONST)            \
-  X(TYPEDEF)          \
-  X(SIZE_OF)          \
-  X(CAST)             \
-  X(TRANSMUTE)        \
-  X(IN)               \
-  X(THEN)             \
-  X(FOREIGN)          \
-  X(KEYWORD_END)      \
-
 typedef enum Token_Kind Token_Kind;
 enum Token_Kind
 {
-  TOKEN_EOF        = 0,
-  TOKEN_LAST_ASCII = 127,
+  TokenKind_EOF = 0,
+  TokenKind_LParen,      // (
+  TokenKind_SymbolBegin = TokenKind_LParen,
+  TokenKind_RParen,      // )
+  TokenKind_LBracket,    // [
+  TokenKind_RBracket,    // ]
+  TokenKind_LBrace,      // {
+  TokenKind_RBrace,      // }
+  TokenKind_Plus,        // +
+  TokenKind_Minus,       // -
+  TokenKind_Caret,       // ^
+  TokenKind_Ampersand,   // &
+  TokenKind_Pipe,        // |
+  TokenKind_Star,        // *
+  TokenKind_Slash,       // /
+  TokenKind_Percent,     // %
+  TokenKind_Exclamation, // !
+  TokenKind_Question,    // ?
+  TokenKind_Equal,       // =
+  TokenKind_Dot,         // .
+  TokenKind_Comma,       // ,
+  TokenKind_Semicolon,   // ;
+  TokenKind_Colon,       // :
+  TokenKind_Tilde,       // ~
+  TokenKind_SymbolEnd,
 
-#define X(name) TOKEN_##name,
-  TOKEN_LIST(X)
-#undef X
+  TokenKind_Ident,
+  TokenKind_Arrow,
+  TokenKind_Deref,
+  TokenKind_CmpGt,
+  TokenKind_CmpLt,
+  TokenKind_CmpEq,
+  TokenKind_CmpNeq,
+  TokenKind_CmpGtEq,
+  TokenKind_CmpLtEq,
+  TokenKind_LogicalOr,
+  TokenKind_LogicalAnd,
+  TokenKind_LShift,
+  TokenKind_RShift,
+  TokenKind_LShiftAssign,
+  TokenKind_RShiftAssign,
+  TokenKind_AddAssign,
+  TokenKind_SubAssign,
+  TokenKind_DivAssign,
+  TokenKind_MulAssign,
+  TokenKind_AndAssign,
+  TokenKind_OrAssign,
+  TokenKind_XorAssign,
+  TokenKind_Increment,
+  TokenKind_Decrement,
+  TokenKind_RangeIncl,
+  TokenKind_RangeExcl,
+  TokenKind_StringLiteral,
+  TokenKind_IntegerLiteral,
+  TokenKind_FloatLiteral,
+  TokenKind_CharLiteral,
+
+  TokenKind_Nil,
+  TokenKind_KeywordBegin = TokenKind_Nil,
+  TokenKind_S8,
+  TokenKind_S16,
+  TokenKind_S32,
+  TokenKind_S64,
+  TokenKind_U8,
+  TokenKind_U16,
+  TokenKind_U32,
+  TokenKind_U64,
+  TokenKind_Uintptr,
+  TokenKind_Int,
+  TokenKind_Uint,
+  TokenKind_F32,
+  TokenKind_F64,
+  TokenKind_Bool,
+  TokenKind_String,
+  TokenKind_True,
+  TokenKind_False,
+  TokenKind_If,
+  TokenKind_Else,
+  TokenKind_For,
+  TokenKind_Do,
+  TokenKind_While,
+  TokenKind_Switch,
+  TokenKind_Case,
+  TokenKind_Defer,
+  TokenKind_Break,
+  TokenKind_Fallthrough,
+  TokenKind_Continue,
+  TokenKind_Return,
+  TokenKind_Struct,
+  TokenKind_Union,
+  TokenKind_Enum,
+  TokenKind_Proc,
+  TokenKind_SizeOf,
+  TokenKind_Cast,
+  TokenKind_Transmute,
+  TokenKind_In,
+  TokenKind_Then,
+  TokenKind_Foreign,
+  TokenKind_Keyword_End,
+
+  TokenKind_COUNT,
 };
 
 internal String8 str_from_token_kind(Arena *arena, Token_Kind kind);

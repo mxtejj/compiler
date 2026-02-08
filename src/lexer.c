@@ -19,28 +19,103 @@ str_from_token_kind(Arena *arena, Token_Kind kind)
 {
   switch (kind)
   {
-  case TOKEN_EOF: return str8_lit("TOKEN_EOF");
-
-  #define X(name) case TOKEN_##name: return str8_lit(stringify(glue(TOKEN_, name)));
-    TOKEN_LIST(X)
-  #undef X
+  case TokenKind_EOF:            return str8_lit("end of file");
+  case TokenKind_LParen:         return str8_lit("(");
+  case TokenKind_RParen:         return str8_lit(")");
+  case TokenKind_LBracket:       return str8_lit("[");
+  case TokenKind_RBracket:       return str8_lit("]");
+  case TokenKind_LBrace:         return str8_lit("{");
+  case TokenKind_RBrace:         return str8_lit("}");
+  case TokenKind_Plus:           return str8_lit("+");
+  case TokenKind_Minus:          return str8_lit("-");
+  case TokenKind_Caret:          return str8_lit("^");
+  case TokenKind_Ampersand:      return str8_lit("&");
+  case TokenKind_Pipe:           return str8_lit("|");
+  case TokenKind_Star:           return str8_lit("*");
+  case TokenKind_Slash:          return str8_lit("/");
+  case TokenKind_Percent:        return str8_lit("%");
+  case TokenKind_Exclamation:    return str8_lit("!");
+  case TokenKind_Question:       return str8_lit("?");
+  case TokenKind_Equal:          return str8_lit("=");
+  case TokenKind_Dot:            return str8_lit(".");
+  case TokenKind_Comma:          return str8_lit(",");
+  case TokenKind_Semicolon:      return str8_lit(";");
+  case TokenKind_Colon:          return str8_lit(":");
+  case TokenKind_Tilde:          return str8_lit("~");
+  case TokenKind_Ident:          return str8_lit("identifier");
+  case TokenKind_Arrow:          return str8_lit("->");
+  case TokenKind_Deref:          return str8_lit(".*");
+  case TokenKind_CmpGt:          return str8_lit(">");
+  case TokenKind_CmpLt:          return str8_lit("<");
+  case TokenKind_CmpEq:          return str8_lit("==");
+  case TokenKind_CmpNeq:         return str8_lit("!=");
+  case TokenKind_CmpGtEq:        return str8_lit(">=");
+  case TokenKind_CmpLtEq:        return str8_lit("<=");
+  case TokenKind_LogicalOr:      return str8_lit("||");
+  case TokenKind_LogicalAnd:     return str8_lit("&&");
+  case TokenKind_LShift:         return str8_lit("<<");
+  case TokenKind_RShift:         return str8_lit(">>");
+  case TokenKind_LShiftAssign:   return str8_lit("<<=");
+  case TokenKind_RShiftAssign:   return str8_lit(">>=");
+  case TokenKind_AddAssign:      return str8_lit("+=");
+  case TokenKind_SubAssign:      return str8_lit("-=");
+  case TokenKind_DivAssign:      return str8_lit("/=");
+  case TokenKind_MulAssign:      return str8_lit("*=");
+  case TokenKind_AndAssign:      return str8_lit("&=");
+  case TokenKind_OrAssign:       return str8_lit("|=");
+  case TokenKind_XorAssign:      return str8_lit("^=");
+  case TokenKind_Increment:      return str8_lit("++");
+  case TokenKind_Decrement:      return str8_lit("--");
+  case TokenKind_RangeIncl:      return str8_lit("..=");
+  case TokenKind_RangeExcl:      return str8_lit("..<");
+  case TokenKind_StringLiteral:  return str8_lit("string literal");
+  case TokenKind_IntegerLiteral: return str8_lit("integer literal");
+  case TokenKind_FloatLiteral:   return str8_lit("float literal");
+  case TokenKind_CharLiteral:    return str8_lit("char literal");
+  case TokenKind_Nil:            return str8_lit("nil");
+  case TokenKind_S8:             return str8_lit("s8");
+  case TokenKind_S16:            return str8_lit("s16");
+  case TokenKind_S32:            return str8_lit("s32");
+  case TokenKind_S64:            return str8_lit("s64");
+  case TokenKind_U8:             return str8_lit("u8");
+  case TokenKind_U16:            return str8_lit("u16");
+  case TokenKind_U32:            return str8_lit("u32");
+  case TokenKind_U64:            return str8_lit("u64");
+  case TokenKind_Uintptr:        return str8_lit("uintptr");
+  case TokenKind_Int:            return str8_lit("int");
+  case TokenKind_Uint:           return str8_lit("uint");
+  case TokenKind_F32:            return str8_lit("f32");
+  case TokenKind_F64:            return str8_lit("f64");
+  case TokenKind_Bool:           return str8_lit("bool");
+  case TokenKind_String:         return str8_lit("string");
+  case TokenKind_True:           return str8_lit("true");
+  case TokenKind_False:          return str8_lit("false");
+  case TokenKind_If:             return str8_lit("if");
+  case TokenKind_Else:           return str8_lit("else");
+  case TokenKind_For:            return str8_lit("for");
+  case TokenKind_Do:             return str8_lit("do");
+  case TokenKind_While:          return str8_lit("while");
+  case TokenKind_Switch:         return str8_lit("switch");
+  case TokenKind_Case:           return str8_lit("case");
+  case TokenKind_Defer:          return str8_lit("defer");
+  case TokenKind_Break:          return str8_lit("break");
+  case TokenKind_Fallthrough:    return str8_lit("fallthrough");
+  case TokenKind_Continue:       return str8_lit("continue");
+  case TokenKind_Return:         return str8_lit("return");
+  case TokenKind_Struct:         return str8_lit("struct");
+  case TokenKind_Union:          return str8_lit("union");
+  case TokenKind_Enum:           return str8_lit("enum");
+  case TokenKind_Proc:           return str8_lit("proc");
+  case TokenKind_SizeOf:         return str8_lit("size_of");
+  case TokenKind_Cast:           return str8_lit("cast");
+  case TokenKind_Transmute:      return str8_lit("transmute");
+  case TokenKind_In:             return str8_lit("in");
+  case TokenKind_Then:           return str8_lit("then");
+  case TokenKind_Foreign:        return str8_lit("foreign");
 
   default:
-  {
-    u8 *buf = push_array(arena, u8, 16);
-    u64 n = 0;
-
-    if (kind < 128 && isprint(kind))
-    {
-      n = snprintf((char *)buf, 16, "%c", kind);
-    }
-    else
-    {
-      n = snprintf((char *)buf, 16, "<ASCII %c>", kind);
-    }
-
-    return str8(buf, n);
-  }
+    assert(!"Invalid token kind");
+    break;
   }
 
   assert(!"Unreachable");
@@ -232,7 +307,7 @@ lexer_parse_string(Lexer *l)
     lexer_syntax_error(l, "Unexpected end of file within string literal");
   }
 
-  Token t = lexer_make_token(l, TOKEN_STRING_LITERAL);
+  Token t = lexer_make_token(l, TokenKind_StringLiteral);
   // t.value.string = str8_copy(g_arena, str8(string_buf, string_len));
 
   // @HACK since we cant emit escape codes in C codegen,
@@ -294,7 +369,7 @@ lexer_parse_float(Lexer *l)
     }
   }
 
-  Token t = lexer_make_token(l, TOKEN_FLOAT_LITERAL);
+  Token t = lexer_make_token(l, TokenKind_FloatLiteral);
 
   Arena_Temp scratch = arena_scratch_get(0, 0);
 
@@ -394,7 +469,7 @@ lexer_parse_integer(Lexer *l)
     }
   }
 
-  Token t = lexer_make_token(l, TOKEN_INTEGER_LITERAL);
+  Token t = lexer_make_token(l, TokenKind_IntegerLiteral);
   t.value.integer = value;
 
   return t;
@@ -412,70 +487,67 @@ lexer_parse_ident_or_keyword(Lexer *l)
 
   local_persist Keyword keywords[] =
   {
-    { .kind = TOKEN_NIL,       .value = S("nil") },
+    { .kind = TokenKind_Nil,       .value = S("nil") },
 
     // integer types
-    { .kind = TOKEN_S8,        .value = S("s8") },
-    { .kind = TOKEN_S16,       .value = S("s16") },
-    { .kind = TOKEN_S32,       .value = S("s32") },
-    { .kind = TOKEN_S64,       .value = S("s64") },
-    { .kind = TOKEN_U8,        .value = S("u8") },
-    { .kind = TOKEN_U16,       .value = S("u16") },
-    { .kind = TOKEN_U32,       .value = S("u32") },
-    { .kind = TOKEN_U64,       .value = S("u64") },
-    { .kind = TOKEN_UINTPTR,   .value = S("uintptr") },
-    { .kind = TOKEN_INT,       .value = S("int") },
-    { .kind = TOKEN_UINT,      .value = S("uint") },
+    { .kind = TokenKind_S8,        .value = S("s8") },
+    { .kind = TokenKind_S16,       .value = S("s16") },
+    { .kind = TokenKind_S32,       .value = S("s32") },
+    { .kind = TokenKind_S64,       .value = S("s64") },
+    { .kind = TokenKind_U8,        .value = S("u8") },
+    { .kind = TokenKind_U16,       .value = S("u16") },
+    { .kind = TokenKind_U32,       .value = S("u32") },
+    { .kind = TokenKind_U64,       .value = S("u64") },
+    { .kind = TokenKind_Uintptr,   .value = S("uintptr") },
+    { .kind = TokenKind_Int,       .value = S("int") },
+    { .kind = TokenKind_Uint,      .value = S("uint") },
 
     // floating-point types
-    { .kind = TOKEN_F32,       .value = S("f32") },
-    { .kind = TOKEN_F64,       .value = S("f64") },
+    { .kind = TokenKind_F32,       .value = S("f32") },
+    { .kind = TokenKind_F64,       .value = S("f64") },
 
     // boolean
-    { .kind = TOKEN_BOOL,      .value = S("bool") },
-    { .kind = TOKEN_TRUE,      .value = S("true") },
-    { .kind = TOKEN_FALSE,     .value = S("false") },
+    { .kind = TokenKind_Bool,      .value = S("bool") },
+    { .kind = TokenKind_True,      .value = S("true") },
+    { .kind = TokenKind_False,     .value = S("false") },
 
     // control flow statements
-    { .kind = TOKEN_IF,          .value = S("if") },
-    { .kind = TOKEN_ELSE,        .value = S("else") },
-    { .kind = TOKEN_FOR,         .value = S("for") },
-    { .kind = TOKEN_DO,          .value = S("do") },
-    { .kind = TOKEN_WHILE,       .value = S("while") },
-    { .kind = TOKEN_SWITCH,      .value = S("switch") },
-    { .kind = TOKEN_CASE,        .value = S("case") },
-    { .kind = TOKEN_DEFER,       .value = S("defer") },
-    { .kind = TOKEN_BREAK,       .value = S("break") },
-    { .kind = TOKEN_FALLTHROUGH, .value = S("fallthrough") },
-    { .kind = TOKEN_CONTINUE,    .value = S("continue") },
-    { .kind = TOKEN_RETURN,      .value = S("return") },
+    { .kind = TokenKind_If,          .value = S("if") },
+    { .kind = TokenKind_Else,        .value = S("else") },
+    { .kind = TokenKind_For,         .value = S("for") },
+    { .kind = TokenKind_Do,          .value = S("do") },
+    { .kind = TokenKind_While,       .value = S("while") },
+    { .kind = TokenKind_Switch,      .value = S("switch") },
+    { .kind = TokenKind_Case,        .value = S("case") },
+    { .kind = TokenKind_Defer,       .value = S("defer") },
+    { .kind = TokenKind_Break,       .value = S("break") },
+    { .kind = TokenKind_Fallthrough, .value = S("fallthrough") },
+    { .kind = TokenKind_Continue,    .value = S("continue") },
+    { .kind = TokenKind_Return,      .value = S("return") },
 
-    { .kind = TOKEN_STRUCT,    .value = S("struct") },
-    { .kind = TOKEN_UNION,     .value = S("union") },
-    { .kind = TOKEN_ENUM,      .value = S("enum") },
-    { .kind = TOKEN_STRING,    .value = S("string") },
+    { .kind = TokenKind_Struct,    .value = S("struct") },
+    { .kind = TokenKind_Union,     .value = S("union") },
+    { .kind = TokenKind_Enum,      .value = S("enum") },
+    { .kind = TokenKind_String,    .value = S("string") },
 
     // declarations
-    { .kind = TOKEN_PROC,      .value = S("proc") },
-    { .kind = TOKEN_VAR,       .value = S("var") },
-    { .kind = TOKEN_CONST,     .value = S("const") },
-    { .kind = TOKEN_TYPEDEF,   .value = S("typedef") },
+    { .kind = TokenKind_Proc,      .value = S("proc") },
 
-    { .kind = TOKEN_SIZE_OF,   .value = S("size_of") },
-    { .kind = TOKEN_CAST,      .value = S("cast") },
-    { .kind = TOKEN_TRANSMUTE, .value = S("transmute") },
-    { .kind = TOKEN_IN,        .value = S("in") },
-    { .kind = TOKEN_THEN,      .value = S("then") },
-    { .kind = TOKEN_FOREIGN,   .value = S("foreign") },
+    { .kind = TokenKind_SizeOf,    .value = S("size_of") },
+    { .kind = TokenKind_Cast,      .value = S("cast") },
+    { .kind = TokenKind_Transmute, .value = S("transmute") },
+    { .kind = TokenKind_In,        .value = S("in") },
+    { .kind = TokenKind_Then,      .value = S("then") },
+    { .kind = TokenKind_Foreign,   .value = S("foreign") },
   };
-  static_assert(array_count(keywords) == (TOKEN_KEYWORD_END - TOKEN_KEYWORD_BEGIN - 1));
+  static_assert(array_count(keywords) == (TokenKind_Keyword_End - TokenKind_KeywordBegin));
 
   while (lexer_can_peek(l) && is_symbol(l))
   {
     lexer_eat(l);
   }
 
-  Token t = lexer_make_token(l, TOKEN_IDENT);
+  Token t = lexer_make_token(l, TokenKind_Ident);
 
   // TODO(#5): String interning for faster string checks
   for (u32 i = 0; i < array_count(keywords); i++)
@@ -544,7 +616,7 @@ lexer_next(Lexer *l)
         t.pos.row = lexer_row(l) + 1;
         t.pos.col = l->cursor - l->bol + 1;
         t.pos.length = 1;
-        t.kind = ';';
+        t.kind = TokenKind_Semicolon;
         t.lexeme = str8_lit(";");
         return t;
       }
@@ -565,13 +637,13 @@ lexer_next(Lexer *l)
       t.pos.row = lexer_row(l) + 1;
       t.pos.col = l->start - l->bol + 1;
       t.pos.length = 1;
-      t.kind = ';';
+      t.kind = TokenKind_Semicolon;
       t.lexeme = str8_lit(";");
 
       l->insert_semicolon = false;
       return t;
     }
-    return lexer_make_token(l, TOKEN_EOF);
+    return lexer_make_token(l, TokenKind_EOF);
   }
 
   // TODO: make lexer_row, lexer_col return with +1
@@ -629,12 +701,179 @@ lexer_next(Lexer *l)
     }
     break;
 
+  case '(':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_LParen);
+    break;
+  case ')':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_RParen);
+    break;
+  case '[':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_LBracket);
+    break;
+  case ']':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_RBracket);
+    break;
+  case '{':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_LBrace);
+    break;
+  case '}':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_RBrace);
+    break;
+  case '+':
+    lexer_eat(l);
+    // if (lexer_can_peek(l) && lexer_peek(l) == '+')
+    // {
+    //   lexer_eat(l);
+    //   t = lexer_make_token(l, TOKEN_INCREMENT);
+    // }
+    // else
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_AddAssign);
+    }
+    else
+    {
+      t = lexer_make_token(l, TokenKind_Plus);
+    }
+    break;
+  case '-':
+    lexer_eat(l);
+    // if (lexer_can_peek(l) && lexer_peek(l) == '-')
+    // {
+    //   lexer_eat(l);
+    //   t = lexer_make_token(l, TOKEN_DECREMENT);
+    // }
+    // else
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_SubAssign);
+    }
+    else if (lexer_can_peek(l) && lexer_peek(l) == '>')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_Arrow);
+    }
+    else
+    {
+      t = lexer_make_token(l, TokenKind_Minus);
+    }
+    break;
+  case '^':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_XorAssign);
+    }
+    else
+    {
+      t = lexer_make_token(l, TokenKind_Caret);
+    }
+    break;
+  case '&':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '&')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_LogicalAnd);
+    }
+    else if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_AndAssign);
+    }
+    else
+    {
+      t = lexer_make_token(l, TokenKind_Ampersand);
+    }
+    break;
+  case '|':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '|')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_LogicalOr);
+    }
+    else if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_OrAssign);
+    }
+    else
+    {
+      t = lexer_make_token(l, TokenKind_Pipe);
+    }
+    break;
+  case '*':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_MulAssign);
+    }
+    else
+    {
+      t = lexer_make_token(l, TokenKind_Star);
+    }
+    break;
+  case '/':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_DivAssign);
+    }
+    else
+    {
+      t = lexer_make_token(l, TokenKind_Slash);
+    }
+    break;
+  case '%':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_Percent);
+    break;
+  case '!':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_CmpNeq);
+    }
+    else
+    {
+      t = lexer_make_token(l, TokenKind_Exclamation);
+    }
+    break;
+  case '?':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_Question);
+    break;
+  case '=':
+    lexer_eat(l);
+    if (lexer_can_peek(l) && lexer_peek(l) == '=')
+    {
+      lexer_eat(l);
+      t = lexer_make_token(l, TokenKind_CmpEq);
+    }
+    else
+    {
+      t = lexer_make_token(l, TokenKind_Equal);
+    }
+    break;
   case '.':
     lexer_eat(l);
     if (lexer_can_peek(l) && lexer_peek(l) == '*')
     {
       lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_DEREF);
+      t = lexer_make_token(l, TokenKind_Deref);
     }
     else if (lexer_can_peek(l) && lexer_peek(l) == '.')
     {
@@ -642,12 +881,12 @@ lexer_next(Lexer *l)
       if (lexer_can_peek(l) && lexer_peek(l) == '<')
       {
         lexer_eat(l);
-        t = lexer_make_token(l, TOKEN_RANGE_EXCL);
+        t = lexer_make_token(l, TokenKind_RangeExcl);
       }
       else if (lexer_can_peek(l) && lexer_peek(l) == '=')
       {
         lexer_eat(l);
-        t = lexer_make_token(l, TOKEN_RANGE_INCL);
+        t = lexer_make_token(l, TokenKind_RangeIncl);
       }
       else
       {
@@ -656,8 +895,24 @@ lexer_next(Lexer *l)
     }
     else
     {
-      t = lexer_make_token(l, '.');
+      t = lexer_make_token(l, TokenKind_Dot);
     }
+    break;
+  case ',':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_Comma);
+    break;
+  case ';':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_Semicolon);
+    break;
+  case ':':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_Colon);
+    break;
+  case '~':
+    lexer_eat(l);
+    t = lexer_make_token(l, TokenKind_Tilde);
     break;
 
   case '"':
@@ -707,161 +962,17 @@ lexer_next(Lexer *l)
         lexer_eat(l);
       }
     }
-    t = lexer_make_token(l, TOKEN_CHAR_LITERAL);
+    t = lexer_make_token(l, TokenKind_CharLiteral);
     t.value.character = val;
     break;
   }
-
-  case '*':
-    lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_MUL_ASSIGN);
-    }
-    else
-    {
-      t = lexer_make_token(l, '*');
-    }
-    break;
-
-  case '/':
-    lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_DIV_ASSIGN);
-    }
-    else
-    {
-      t = lexer_make_token(l, '/');
-    }
-    break;
-
-  case '-':
-    lexer_eat(l);
-    // if (lexer_can_peek(l) && lexer_peek(l) == '-')
-    // {
-    //   lexer_eat(l);
-    //   t = lexer_make_token(l, TOKEN_DECREMENT);
-    // }
-    // else
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_SUB_ASSIGN);
-    }
-    else if (lexer_can_peek(l) && lexer_peek(l) == '>')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_ARROW);
-    }
-    else
-    {
-      t = lexer_make_token(l, '-');
-    }
-    break;
-
-  case '+':
-    lexer_eat(l);
-    // if (lexer_can_peek(l) && lexer_peek(l) == '+')
-    // {
-    //   lexer_eat(l);
-    //   t = lexer_make_token(l, TOKEN_INCREMENT);
-    // }
-    // else
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_ADD_ASSIGN);
-    }
-    else
-    {
-      t = lexer_make_token(l, '+');
-    }
-    break;
-
-  case '&':
-    lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '&')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_LOGICAL_AND);
-    }
-    else if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_AND_ASSIGN);
-    }
-    else
-    {
-      t = lexer_make_token(l, '&');
-    }
-    break;
-
-  case '|':
-    lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '|')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_LOGICAL_OR);
-    }
-    else if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_OR_ASSIGN);
-    }
-    else
-    {
-      t = lexer_make_token(l, '|');
-    }
-    break;
-
-  case '^':
-    lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_XOR_ASSIGN);
-    }
-    else
-    {
-      t = lexer_make_token(l, '^');
-    }
-    break;
-
-  case '=':
-    lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_EQ);
-    }
-    else
-    {
-      t = lexer_make_token(l, '=');
-    }
-    break;
-
-  case '!':
-    lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
-      lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_NEQ);
-    }
-    else
-    {
-      t = lexer_make_token(l, '!');
-    }
-    break;
 
   case '>':
     lexer_eat(l);
     if (lexer_can_peek(l) && lexer_peek(l) == '=')
     {
       lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_GTEQ);
+      t = lexer_make_token(l, TokenKind_CmpGtEq);
     }
     else if (lexer_can_peek(l) && lexer_peek(l) == '>')
     {
@@ -869,16 +980,16 @@ lexer_next(Lexer *l)
       if (lexer_can_peek(l) && lexer_peek(l) == '=')
       {
         lexer_eat(l);
-        t = lexer_make_token(l, TOKEN_RSHIFT_ASSIGN);
+        t = lexer_make_token(l, TokenKind_RShiftAssign);
       }
       else
       {
-        t = lexer_make_token(l, TOKEN_RSHIFT);
+        t = lexer_make_token(l, TokenKind_RShift);
       }
     }
     else
     {
-      t = lexer_make_token(l, '>');
+      t = lexer_make_token(l, TokenKind_CmpGt);
     }
     break;
 
@@ -887,7 +998,7 @@ lexer_next(Lexer *l)
     if (lexer_can_peek(l) && lexer_peek(l) == '=')
     {
       lexer_eat(l);
-      t = lexer_make_token(l, TOKEN_LTEQ);
+      t = lexer_make_token(l, TokenKind_CmpLtEq);
     }
     else if (lexer_can_peek(l) && lexer_peek(l) == '<')
     {
@@ -895,24 +1006,21 @@ lexer_next(Lexer *l)
       if (lexer_can_peek(l) && lexer_peek(l) == '=')
       {
         lexer_eat(l);
-        t = lexer_make_token(l, TOKEN_LSHIFT_ASSIGN);
+        t = lexer_make_token(l, TokenKind_LShiftAssign);
       }
       else
       {
-        t = lexer_make_token(l, TOKEN_LSHIFT);
+        t = lexer_make_token(l, TokenKind_LShift);
       }
     }
     else
     {
-      t = lexer_make_token(l, '<');
+      t = lexer_make_token(l, TokenKind_CmpLt);
     }
     break;
   default:
-    // ASCII Code token
-    char c = lexer_peek(l);
-    lexer_eat(l);
-    // t = lexer_make_token(l, lexer_peek(l));
-    t = lexer_make_token(l, c);
+    fprintf(stderr, "Unexpected token '%c'", lexer_peek(l));
+    trap();
     break;
   }
 
@@ -921,37 +1029,37 @@ lexer_next(Lexer *l)
 
   switch (t.kind)
   {
-  case TOKEN_IDENT:
-  case TOKEN_NIL:
-  case TOKEN_S8:
-  case TOKEN_S16:
-  case TOKEN_S32:
-  case TOKEN_S64:
-  case TOKEN_U8:
-  case TOKEN_U16:
-  case TOKEN_U32:
-  case TOKEN_U64:
-  case TOKEN_UINTPTR:
-  case TOKEN_INT:
-  case TOKEN_UINT:
-  case TOKEN_F32:
-  case TOKEN_F64:
-  case TOKEN_BOOL:
-  case TOKEN_STRING:
-  case TOKEN_TRUE:
-  case TOKEN_FALSE:
-  case TOKEN_INTEGER_LITERAL:
-  case TOKEN_FLOAT_LITERAL:
-  case TOKEN_STRING_LITERAL:
-  case TOKEN_CHAR_LITERAL:
-  case ')':
-  case ']':
-  case '}':
-  // case TOKEN_RETURN:
-  case TOKEN_BREAK:
-  case TOKEN_CONTINUE:
-  case TOKEN_DEREF:
-  case TOKEN_FALLTHROUGH:
+  case TokenKind_Ident:
+  case TokenKind_Nil:
+  case TokenKind_S8:
+  case TokenKind_S16:
+  case TokenKind_S32:
+  case TokenKind_S64:
+  case TokenKind_U8:
+  case TokenKind_U16:
+  case TokenKind_U32:
+  case TokenKind_U64:
+  case TokenKind_Uintptr:
+  case TokenKind_Int:
+  case TokenKind_Uint:
+  case TokenKind_F32:
+  case TokenKind_F64:
+  case TokenKind_Bool:
+  case TokenKind_String:
+  case TokenKind_True:
+  case TokenKind_False:
+  case TokenKind_IntegerLiteral:
+  case TokenKind_FloatLiteral:
+  case TokenKind_StringLiteral:
+  case TokenKind_CharLiteral:
+  case TokenKind_RParen:
+  case TokenKind_RBracket:
+  case TokenKind_RBrace:
+  // case TokenKind_Return:
+  case TokenKind_Break:
+  case TokenKind_Continue:
+  case TokenKind_Deref:
+  case TokenKind_Fallthrough:
     l->insert_semicolon = true;
     break;
   default:

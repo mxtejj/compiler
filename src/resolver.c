@@ -1,3 +1,4 @@
+#include "lexer.h"
 #include "string.h"
 #include "arena.h"
 #include "parser.h"
@@ -1336,10 +1337,10 @@ eval_int_unary(Token_Kind op, s64 value)
 {
   switch (op)
   {
-  case '+': return +value;
-  case '-': return -value;
-  case '!': return !value;
-  case '~': return ~value;
+  case TokenKind_Plus:        return +value;
+  case TokenKind_Minus:       return -value;
+  case TokenKind_Exclamation: return !value;
+  case TokenKind_Tilde:       return ~value;
   default:
     assert(0);
     break;
@@ -1358,7 +1359,7 @@ resolve_expr_unary(Expr *expr)
   Type *type = operand.type;
   switch (expr->unary.op.kind)
   {
-  case TOKEN_DEREF:
+  case TokenKind_Deref:
   {
     if (type->kind != TypeKind_Ptr)
     {
@@ -1367,7 +1368,7 @@ resolve_expr_unary(Expr *expr)
     }
     return resolved_lvalue(type->ptr.base);
   }
-  case '&':
+  case TokenKind_Ampersand:
   {
     if (!operand.is_lvalue)
     {
@@ -1376,10 +1377,10 @@ resolve_expr_unary(Expr *expr)
     }
     return resolved_rvalue(type_ptr(type));
   }
-  case '+':
-  case '-':
-  case '!':
-  case '~':
+  case TokenKind_Plus:
+  case TokenKind_Minus:
+  case TokenKind_Exclamation:
+  case TokenKind_Tilde:
   {
     if (type->kind != TypeKind_Int)
     {
@@ -1407,8 +1408,8 @@ eval_int_binary(Token_Kind op, s64 left, s64 right)
 {
   switch (op)
   {
-  case '*': return left * right;
-  case '/':
+  case TokenKind_Star: return left * right;
+  case TokenKind_Slash:
   {
     if (right == 0)
     {
@@ -1417,7 +1418,7 @@ eval_int_binary(Token_Kind op, s64 left, s64 right)
     }
     return left / right;
   }
-  case '%':
+  case TokenKind_Percent:
   {
     if (right == 0)
     {
@@ -1427,23 +1428,23 @@ eval_int_binary(Token_Kind op, s64 left, s64 right)
     return left % right;
   }
   // TODO(#18): Handle UB in shifts etc.
-  case TOKEN_LSHIFT: return left << right; // TODO(#19): handle signed vs unsigned
-  case TOKEN_RSHIFT: return left >> right;
-  case '+':          return left + right;
-  case '-':          return left - right;
+  case TokenKind_LShift:     return left << right; // TODO(#19): handle signed vs unsigned
+  case TokenKind_RShift:     return left >> right;
+  case TokenKind_Plus:       return left + right;
+  case TokenKind_Minus:      return left - right;
   // TODO: %%
-  case '^':          return left ^ right;
-  case '&':          return left & right;
-  case '|':          return left | right;
+  case TokenKind_Caret:      return left ^ right;
+  case TokenKind_Ampersand:  return left & right;
+  case TokenKind_Pipe:       return left | right;
   // TODO: comparison operators
-  case TOKEN_EQ:          return left == right;
-  case TOKEN_NEQ:         return left != right;
-  case TOKEN_GTEQ:        return left >= right;
-  case TOKEN_LTEQ:        return left <= right;
-  case '>':               return left > right;
-  case '<':               return left < right;
-  case TOKEN_LOGICAL_OR:  return (left != 0) || (right != 0); // TODO(#20): handle separately = short circuiting
-  case TOKEN_LOGICAL_AND: return (left != 0) && (right != 0);
+  case TokenKind_CmpEq:      return left == right;
+  case TokenKind_CmpNeq:     return left != right;
+  case TokenKind_CmpGtEq:    return left >= right;
+  case TokenKind_CmpLtEq:    return left <= right;
+  case TokenKind_CmpGt:      return left > right;
+  case TokenKind_CmpLt:      return left < right;
+  case TokenKind_LogicalOr:  return (left != 0) || (right != 0); // TODO(#20): handle separately = short circuiting
+  case TokenKind_LogicalAnd: return (left != 0) && (right != 0);
   default:
     assert(0);
     break;

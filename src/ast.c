@@ -1,3 +1,4 @@
+#include "lexer.h"
 #include "parser.h"
 #include "print.h"
 
@@ -564,6 +565,11 @@ print_decl(Arena *arena, String8List *list, int *indent, Decl *d)
   arena_scratch_release(scratch);
 }
 
+internal bool
+print_is_symbol(Token_Kind kind) {
+  return TokenKind_SymbolBegin <= kind && kind < TokenKind_SymbolEnd;
+}
+
 internal void
 print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
 {
@@ -581,9 +587,9 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
     str8_list_pushf(arena, list, "%.*s", str8_varg(e->ident));
     break;
   case ExprKind_Unary:
-    if (e->unary.op.kind < 128)
+    if (print_is_symbol(e->unary.op.kind))
     {
-      str8_list_pushf(arena, list, "(%c ", e->unary.op.kind);
+      str8_list_pushf(arena, list, "(%.*s ", str8_varg(str_from_token_kind(arena, e->unary.op.kind)));
     }
     else
     {
@@ -593,9 +599,9 @@ print_expr(Arena *arena, String8List *list, int *indent, Expr *e)
     str8_list_pushf(arena, list, ")");
     break;
   case ExprKind_Binary:
-    if (e->binary.op.kind < 128)
+    if (print_is_symbol(e->unary.op.kind))
     {
-      str8_list_pushf(arena, list, "(%c ", e->binary.op.kind);
+      str8_list_pushf(arena, list, "(%.*s ", str8_varg(str_from_token_kind(arena, e->unary.op.kind)));
     }
     else
     {

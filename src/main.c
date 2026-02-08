@@ -104,24 +104,24 @@ main(int argc, char **argv)
 
   // printf("%.*s", str8_varg(source));
 
-  #if 0
+  #if 1
   {
     // READ SOURCE FILE
     Lexer l = lexer_init(source);
 
     Token t;
-    while ((t = lexer_next(&l)).kind != TOKEN_EOF)
+    while ((t = lexer_next(&l)).kind != TokenKind_EOF)
     {
       printf("%.*s %.*s", str8_varg(str_from_token_kind(scratch.arena, t.kind)), str8_varg(t.lexeme));
       switch (t.kind)
       {
-      case TOKEN_INTEGER_LITERAL:
+      case TokenKind_IntegerLiteral:
         printf(" (value=%llu)", t.value.integer);
         break;
-      case TOKEN_FLOAT_LITERAL:
+      case TokenKind_FloatLiteral:
         printf(" (value=%f)", t.value.floating);
         break;
-      case TOKEN_STRING_LITERAL:
+      case TokenKind_String:
         printf(" (value=%.*s)", str8_varg(t.value.string));
         break;
       }
@@ -131,6 +131,7 @@ main(int argc, char **argv)
 
   printf("\n");
 
+  /*
   if (0)
   {
     // LEXER TEST
@@ -144,27 +145,27 @@ main(int argc, char **argv)
         assert(t.kind == (x)); \
       } while (0); \
 
-    expect_token(TOKEN_STRUCT);
-    expect_token(TOKEN_IDENT);
+    expect_token(TokenKind_Struct);
+    expect_token(TokenKind_Ident);
     expect_token('{');
 
     // name: string
-    expect_token(TOKEN_IDENT);
+    expect_token(TokenKind_Ident);
     expect_token(':');
-    expect_token(TOKEN_STRING);
+    expect_token(TokenKind_String);
     expect_token(';');
 
     // age:  int;
-    expect_token(TOKEN_IDENT);
+    expect_token(TokenKind_Ident);
     expect_token(':');
-    expect_token(TOKEN_INT);
+    expect_token(TokenKind_Int);
     expect_token(';');
 
     expect_token('}');
 
     // proc main()
-    expect_token(TOKEN_PROC);
-    expect_token(TOKEN_IDENT);
+    expect_token(TokenKind_Proc);
+    expect_token(TokenKind_Ident);
     expect_token('(');
     expect_token(')');
     expect_token('{');
@@ -213,6 +214,8 @@ main(int argc, char **argv)
   }
 
   printf("\n");
+
+  */
 
   {
     typedef struct Expr_Test_Case Expr_Test_Case;
@@ -421,9 +424,10 @@ main(int argc, char **argv)
   printf("\n");
   parser_test();
   // resolve_test();
-  codegen_test();
+  // codegen_test();
   #endif
 
+  // if (0)
   {
     init_global_syms();
 
