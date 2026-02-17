@@ -24,14 +24,14 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-typedef int8_t  s8;
-typedef int16_t s16;
-typedef int32_t s32;
-typedef int64_t s64;
+typedef int8_t  i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
 
-typedef s8  b8;
-typedef s32 b32;
-typedef s32 bool;
+typedef i8  bool;
+typedef i8  b8;
+typedef i32 b32;
 
 typedef size_t    usize;
 typedef uintptr_t uintptr;
@@ -181,6 +181,7 @@ typedef double f64;
 
 #define local_persist static
 #define internal      static
+#define function      static
 #define global        static
 
 #if COMPILER_MSVC || (COMPILER_CLANG && OS_WINDOWS)
@@ -215,19 +216,3 @@ typedef double f64;
 #else
 # error no_inline not defined for this compiler.
 #endif
-
-// #define STRUCT(name) \
-// typedef struct name name; \
-// struct name
-
-// #define ENUM(name) \
-// typedef enum name name; \
-// enum name
-
-// #define UNION(name) \
-// typedef union name name; \
-// union name
-
-// #define ENUM_SIZE(name, backing) \
-// typedef backing name; \
-// enum

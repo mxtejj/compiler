@@ -1,13 +1,11 @@
 {
-  "folders":
-  [
+  "folders": [
     {
       "path": ".",
     }
   ],
 
-  "build_systems":
-  [
+  "build_systems": [
     {
       "name": "Build Debug",
       "cmd": "build.bat debug",
@@ -23,13 +21,10 @@
       "quiet": true
     }
   ],
-  "settings":
-  {
+  "settings": {
     "auto_complete": true,
-    "LSP":
-    {
-      "clangd":
-      {
+    "LSP": {
+      "clangd": {
         "enabled": true,
       },
     },

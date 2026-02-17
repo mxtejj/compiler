@@ -1,6 +1,26 @@
-main :: proc() -> s32
-{
-  print_int(432186)
+main :: proc() -> i32 {
+  x := a() + b() * c()
+
+  print_int(x)
+  print("\n")
+
+  numbers := [6]int.{1, 2, 3, 4, 5, 6}
+  for n in numbers {
+    print_int(n)
+    print("\n")
+  }
+}
+
+a :: proc() -> int {
+  return 100
+}
+
+b :: proc() -> int {
+  return 24
+}
+
+c :: proc() -> int {
+  return 2
 }
 
 foreign FILE :: struct {}
@@ -22,38 +42,32 @@ print :: proc(text: string) {
   fwrite(text.data, 1, text.len, _stdout())
 }
 
-print_int :: proc(n: int)
-{
+print_int :: proc(n: int) {
   buf: [16]u8
   i := 0
   neg := n < 0
 
-  if neg
-  {
+  if neg {
     n = -n
   }
 
-  if n == 0
-  {
+  if n == 0 {
     buf[i] = cast(u8)'0'
     i += 1
   }
 
-  while n > 0
-  {
+  while n > 0 {
     buf[i] = cast(u8)'0' + cast(u8)(n % 10)
     i += 1
     n /= 10
   }
 
-  if neg
-  {
+  if neg {
     buf[i] = cast(u8)'-'
     i += 1
   }
 
-  while i > 0
-  {
+  while i > 0 {
     i -= 1
     fwrite(&buf[i], 1, 1, _stdout())
   }
@@ -63,3 +77,20 @@ println :: proc(text: string) {
   print(text)
   print("\n")
 }
+
+test_enum :: proc() {
+
+
+
+  my_arr := [-3]int.{1,2,3}
+
+
+
+}
+
+
+
+
+
+
+

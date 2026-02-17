@@ -4,9 +4,12 @@
 #include "strings.h"
 #include "arena.h"
 
-typedef enum Token_Kind Token_Kind;
-enum Token_Kind
-{
+typedef union  LiteralValue LiteralValue;
+typedef struct SourcePos    SourcePos;
+typedef struct Token        Token;
+typedef struct Lexer        Lexer;
+
+typedef enum TokenKind {
   TokenKind_EOF = 0,
   TokenKind_LParen,      // (
   TokenKind_SymbolBegin = TokenKind_LParen,
@@ -66,10 +69,10 @@ enum Token_Kind
 
   TokenKind_Nil,
   TokenKind_KeywordBegin = TokenKind_Nil,
-  TokenKind_S8,
-  TokenKind_S16,
-  TokenKind_S32,
-  TokenKind_S64,
+  TokenKind_I8,
+  TokenKind_I16,
+  TokenKind_I32,
+  TokenKind_I64,
   TokenKind_U8,
   TokenKind_U16,
   TokenKind_U32,
@@ -108,13 +111,9 @@ enum Token_Kind
   TokenKind_Keyword_End,
 
   TokenKind_COUNT,
-};
+} TokenKind;
 
-internal String8 str_from_token_kind(Arena *arena, Token_Kind kind);
-
-typedef union Literal_Value Literal_Value;
-union Literal_Value
-{
+union LiteralValue {
   String8 string;
   u64     integer;
   f64     floating;
@@ -122,26 +121,20 @@ union Literal_Value
   char    character;
 };
 
-typedef struct Source_Pos Source_Pos;
-struct Source_Pos
-{
+struct SourcePos {
   u64 row; // x
   u64 col; // y
   u64 length; // token length for error highlighting
 };
 
-typedef struct Token Token;
-struct Token
-{
-  Token_Kind    kind;
-  Source_Pos    pos;
-  String8       lexeme;
-  Literal_Value value;
+struct Token {
+  TokenKind    kind;
+  SourcePos    pos;
+  String8      lexeme;
+  LiteralValue value;
 };
 
-typedef struct Lexer Lexer;
-struct Lexer
-{
+struct Lexer {
   Arena *arena;
   String8 source;
   u64 start;
@@ -151,6 +144,8 @@ struct Lexer
   b32 insert_semicolon;
 };
 
-internal Lexer lexer_init(String8 source);
-internal void  lexer_fini(Lexer *l);
-internal Token lexer_next(Lexer *l);
+function Lexer lexer_init(String8 source);
+function void  lexer_fini(Lexer *l);
+function Token lexer_next(Lexer *l);
+
+function String8 str_from_TokenKind(Arena *arena, TokenKind kind);

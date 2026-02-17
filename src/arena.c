@@ -1,9 +1,8 @@
 #include "arena.h"
 #include "os.h"
 
-Arena *
-arena_alloc(u64 reserve_size, u64 commit_size, Arena_Flags flags)
-{
+function Arena *
+arena_alloc(u64 reserve_size, u64 commit_size, Arena_Flags flags) {
   u32 page_size = os_page_size();
 
   reserve_size = align_up_pow2(reserve_size, page_size);
@@ -11,8 +10,7 @@ arena_alloc(u64 reserve_size, u64 commit_size, Arena_Flags flags)
 
   Arena *arena = os_reserve(reserve_size);
 
-  if (!os_commit(arena, commit_size))
-  {
+  if (!os_commit(arena, commit_size)) {
     arena = NULL;
   }
 
@@ -41,13 +39,11 @@ arena_alloc(u64 reserve_size, u64 commit_size, Arena_Flags flags)
   return arena;
 }
 
-void
-arena_delete(Arena *arena)
-{
+function void
+arena_delete(Arena *arena) {
   Arena *curr = arena->curr;
 
-  while (curr != NULL)
-  {
+  while (curr != NULL) {
     Arena *prev = curr->prev;
     os_release(curr, curr->reserve_size);
 
@@ -55,18 +51,15 @@ arena_delete(Arena *arena)
   }
 }
 
-u64
-arena_pos(Arena *arena)
-{
+function u64
+arena_pos(Arena *arena) {
   return arena->curr->base_pos + arena->curr->pos;
 }
 
-void *
-arena_push_(Arena *arena, u64 size, b32 non_zero, u64 align)
-{
+function void *
+arena_push_(Arena *arena, u64 size, b32 non_zero, u64 align) {
   void *out = NULL;
-  if (align == 0)
-  {
+  if (align == 0) {
     align = ARENA_ALIGN;
   }
 
@@ -76,17 +69,14 @@ arena_push_(Arena *arena, u64 size, b32 non_zero, u64 align)
   out = (u8 *)curr + pos_aligned;
   u64 new_pos = pos_aligned + size;
 
-  if (new_pos > curr->reserve_size)
-  {
+  if (new_pos > curr->reserve_size) {
     out = NULL;
 
-    if (arena->flags & Arena_Flag_Growable)
-    {
+    if (arena->flags & Arena_Flag_Growable) {
       u64 reserve_size = arena->reserve_size;
       u64 commit_size = arena->commit_size;
 
-      if (size + ARENA_HEADER_SIZE > reserve_size)
-      {
+      if (size + ARENA_HEADER_SIZE > reserve_size) {
         reserve_size = align_up_pow2(size + ARENA_HEADER_SIZE, align);
       }
 
@@ -104,8 +94,7 @@ arena_push_(Arena *arena, u64 size, b32 non_zero, u64 align)
     }
   }
 
-  if (new_pos > curr->commit_pos)
-  {
+  if (new_pos > curr->commit_pos) {
     u64 new_commit_pos = new_pos;
     // new_commit_pos += curr->commit_size - 1;
     // new_commit_pos -= new_commit_pos % curr->commit_size;
@@ -116,12 +105,10 @@ arena_push_(Arena *arena, u64 size, b32 non_zero, u64 align)
     u64 commit_size = new_commit_pos - curr->commit_pos;
     u8 *commit_ptr  = (u8 *)curr + curr->commit_pos;
 
-    if (!os_commit(commit_ptr, commit_size))
-    {
+    if (!os_commit(commit_ptr, commit_size)) {
       out = NULL;
     }
-    else
-    {
+    else {
       curr->commit_pos = new_commit_pos;
     }
   }
@@ -129,22 +116,19 @@ arena_push_(Arena *arena, u64 size, b32 non_zero, u64 align)
   assert(out != NULL && "Failed to allocate memory on arena");
   curr->pos = new_pos;
 
-  if (!non_zero)
-  {
+  if (!non_zero) {
     mem_zero(out, size);
   }
 
   return out;
 }
 
-void
-arena_pop(Arena *arena, u64 size)
-{
+function void
+arena_pop(Arena *arena, u64 size) {
   size = MIN(size, arena_pos(arena));
 
   Arena *curr = arena->curr;
-  while (curr != NULL && size > curr->pos)
-  {
+  while (curr != NULL && size > curr->pos) {
     Arena *prev = curr->prev;
 
     size -= curr->pos;
@@ -158,17 +142,14 @@ arena_pop(Arena *arena, u64 size)
   size = MIN(curr->pos - ARENA_HEADER_SIZE, size);
   curr->pos -= size;
 
-  if (arena->flags & Arena_Flag_Decommit)
-  {
+  if (arena->flags & Arena_Flag_Decommit) {
     u64 required_commit_pos = curr->pos + curr->commit_size - 1;
     required_commit_pos -= required_commit_pos % curr->commit_size;
 
-    if (required_commit_pos < arena->commit_pos)
-    {
+    if (required_commit_pos < arena->commit_pos) {
       u8* commit_ptr = (u8*)curr + required_commit_pos;
 
-      if (!os_decommit(commit_ptr, arena->commit_pos - required_commit_pos))
-      {
+      if (!os_decommit(commit_ptr, arena->commit_pos - required_commit_pos)) {
         assert(!"Failed to decommit arena memory!");
       }
 
@@ -177,69 +158,58 @@ arena_pop(Arena *arena, u64 size)
   }
 }
 
-void
-arena_pop_to(Arena *arena, u64 pos)
-{
+function void
+arena_pop_to(Arena *arena, u64 pos) {
   u64 cur_pos = arena_pos(arena);
   pos = MIN(pos, cur_pos);
   arena_pop(arena, cur_pos - pos);
 }
 
-void
-arena_clear(Arena *arena)
-{
+function void
+arena_clear(Arena *arena) {
   arena_pop_to(arena, ARENA_HEADER_SIZE);
 }
 
-Arena_Temp
-arena_temp_begin(Arena *arena)
-{
-  Arena_Temp temp = {0};
+function Temp
+arena_temp_begin(Arena *arena) {
+  Temp temp = {0};
   temp.arena = arena;
   temp.pos   = arena_pos(arena);
   return temp;
 }
 
-void
-arena_temp_end(Arena_Temp temp)
-{
+function void
+arena_temp_end(Temp temp) {
   arena_pop_to(temp.arena, temp.pos);
 }
 
 global thread_local Arena *scratch_arenas[2];
 
-Arena_Temp
-arena_scratch_get(Arena **conflicts, u32 num_conflicts)
-{
-  s32 scratch_index = -1;
+function Temp
+arena_scratch_get(Arena **conflicts, u32 num_conflicts) {
+  i32 scratch_index = -1;
 
-  for (s32 i = 0; i < 2; i++)
-  {
+  for (i32 i = 0; i < 2; i++) {
     b32 conflict_found = false;
 
-    for (u32 j = 0; j < num_conflicts; j++)
-    {
-      if (scratch_arenas[i] == conflicts[j])
-      {
+    for (u32 j = 0; j < num_conflicts; j++) {
+      if (scratch_arenas[i] == conflicts[j]) {
         conflict_found = true;
         break;
       }
     }
 
-    if (!conflict_found)
-    {
+    if (!conflict_found) {
       scratch_index = i;
       break;
     }
   }
 
-  if (scratch_index == -1)
-  {
-    return (Arena_Temp){0};
+  if (scratch_index == -1) {
+    return (Temp){0};
   }
 
-  if (scratch_arenas[scratch_index] == NULL)
-  {
+  if (scratch_arenas[scratch_index] == NULL) {
     scratch_arenas[scratch_index] = arena_alloc(
       ARENA_SCRATCH_RESERVE,
       ARENA_SCRATCH_COMMIT,
@@ -250,8 +220,7 @@ arena_scratch_get(Arena **conflicts, u32 num_conflicts)
   return arena_temp_begin(scratch_arenas[scratch_index]);
 }
 
-void
-arena_scratch_release(Arena_Temp scratch)
-{
+function void
+arena_scratch_release(Temp scratch) {
   arena_temp_end(scratch);
 }

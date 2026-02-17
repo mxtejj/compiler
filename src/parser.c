@@ -45,12 +45,11 @@ assignment         = += -= *= ...
 internal Token
 advance(Parser *p);
 
-internal Type_Spec *
+internal TypeSpec *
 parse_type(Parser *p);
 
-internal Parser
-parser_init(Lexer *l)
-{
+function Parser
+parser_init(Lexer *l) {
   Parser p = {0};
   p.arena = arena_alloc(GB(1), MB(1), 0);
   p.lexer = l;
@@ -63,8 +62,7 @@ parser_init(Lexer *l)
 }
 
 internal void
-push_compound_field(Parser *p, Compound_Field_List *list, Compound_Field *field)
-{
+push_compound_field(Parser *p, CompoundFieldList *list, CompoundField *field) {
   queue_push(list->first, list->last, field);
   list->count += 1;
 }
@@ -75,8 +73,7 @@ internal Expr *
 parse_expr(Parser *p);
 
 internal void
-report_error(Parser *p, const char *fmt, ...)
-{
+report_error(Parser *p, const char *fmt, ...) {
   // TODO(#8): duplicate of lexer_syntax_error
   Lexer *l = p->lexer;
 
@@ -111,8 +108,7 @@ report_error(Parser *p, const char *fmt, ...)
 }
 
 internal Token
-advance(Parser *p)
-{
+advance(Parser *p) {
   p->prev = p->curr;
   p->curr = p->next;
   p->next = lexer_next(p->lexer);
@@ -125,22 +121,19 @@ advance(Parser *p)
 }
 
 internal bool
-check(Parser *p, Token_Kind kind)
-{
+check(Parser *p, TokenKind kind) {
   // lexer_can_peek(p->lexer) && 
   return p->curr.kind == kind;
 }
 
 internal bool
-expect(Parser *p, Token_Kind kind)
-{
-  if (p->curr.kind == kind)
-  {
+expect(Parser *p, TokenKind kind) {
+  if (p->curr.kind == kind) {
     advance(p);
     return true;
   }
 
-  Arena_Temp scratch = arena_scratch_get(0, 0);
+  Temp scratch = arena_scratch_get(0, 0);
 
   String8 expected = str_from_token_kind(scratch.arena, kind);
   String8 got      = str_from_token_kind(scratch.arena, p->curr.kind);
@@ -153,10 +146,8 @@ expect(Parser *p, Token_Kind kind)
 }
 
 internal bool
-match(Parser *p, Token_Kind kind)
-{
-  if (check(p, kind))
-  {
+match(Parser *p, TokenKind kind) {
+  if (check(p, kind)) {
     advance(p);
     return true;
   }
@@ -164,10 +155,8 @@ match(Parser *p, Token_Kind kind)
 }
 
 internal String8
-parse_ident(Parser *p)
-{
-  if (expect(p, TokenKind_Ident))
-  {
+parse_ident(Parser *p) {
+  if (expect(p, TokenKind_Ident)) {
     return str8_copy(p->arena, p->prev.lexeme);
   }
   assert(0);
@@ -175,22 +164,19 @@ parse_ident(Parser *p)
 }
 
 internal b32
-peek(Parser *p, Token_Kind kind)
-{
+peek(Parser *p, TokenKind kind) {
   return p->next.kind == kind;
 }
 
 internal bool
-is_type_start(Parser *p)
-{
-  switch (p->curr.kind)
-  {
+is_type_start(Parser *p) {
+  switch (p->curr.kind) {
   case TokenKind_Ident:
   case TokenKind_String:
-  case TokenKind_S8:
-  case TokenKind_S16:
-  case TokenKind_S32:
-  case TokenKind_S64:
+  case TokenKind_I8:
+  case TokenKind_I16:
+  case TokenKind_I32:
+  case TokenKind_I64:
   case TokenKind_U8:
   case TokenKind_U16:
   case TokenKind_U32:
@@ -205,19 +191,18 @@ is_type_start(Parser *p)
   case TokenKind_Star:
   case TokenKind_LBracket:
     return true;
+  default: break;
   }
   return false;
 }
 
 // NOTE(mxtej): doesn't contain identifiers
 internal bool
-is_explicit_type_start(Parser *p)
-{
-  switch (p->curr.kind)
-  {
+is_explicit_type_start(Parser *p) {
+  switch (p->curr.kind) {
   // built-in type keywords
   case TokenKind_String:
-  case TokenKind_S8:      case TokenKind_S16: case TokenKind_S32: case TokenKind_S64:
+  case TokenKind_I8:      case TokenKind_I16: case TokenKind_I32: case TokenKind_I64:
   case TokenKind_U8:      case TokenKind_U16: case TokenKind_U32: case TokenKind_U64:
   case TokenKind_Uintptr: case TokenKind_Int: case TokenKind_Uint:
   case TokenKind_F32:     case TokenKind_F64: case TokenKind_Bool:
@@ -229,38 +214,34 @@ is_explicit_type_start(Parser *p)
   case TokenKind_Star:
   case TokenKind_LBracket:
     return true;
+  default:
+    break;
   }
   return false;
 }
 
-internal Type_Spec *parse_type_base(Parser *p);
+internal TypeSpec *parse_type_base(Parser *p);
 internal Expr *parse_compound_or_expr(Parser *p);
 
-internal Compound_Field *
-parse_compound_field(Parser *p)
-{
-  Compound_Field *field = push_struct(p->arena, Compound_Field);
+internal CompoundField *
+parse_compound_field(Parser *p) {
+  CompoundField *field = push_struct(p->arena, CompoundField);
 
-  // [index] = value
-  if (match(p, TokenKind_LBracket))
-  {
+  if (match(p, TokenKind_LBracket)) {
+    // [index] = value
     field->kind = CompoundFieldKind_Index;
     field->index = parse_expr(p);
     expect(p, TokenKind_RBracket);
     expect(p, TokenKind_Equal);
     field->init = parse_expr(p); // parse_compound_or_expr
-  }
-  // name = value
-  else if (check(p, TokenKind_Ident) && peek(p, TokenKind_Equal))
-  {
+  } else if (check(p, TokenKind_Ident) && peek(p, TokenKind_Equal)) {
+    // name = value
     field->kind = CompoundFieldKind_Name;
     field->name = parse_ident(p);
     advance(p); // Consume TokenKind_Equal
     field->init = parse_expr(p); // parse_compound_or_expr
-  }
-  // value
-  else
-  {
+  } else {
+    // value
     field->kind = CompoundFieldKind_None;
     field->init = parse_expr(p); // parse_compound_or_expr
   }
@@ -269,19 +250,16 @@ parse_compound_field(Parser *p)
 }
 
 internal Expr *
-parse_compound_literal(Parser *p, Type_Spec *explicit_type)
-{
+parse_compound_literal(Parser *p, TypeSpec *explicit_type) {
   expect(p, TokenKind_LBrace);
 
   // TODO(#9): use Compound_Field_Node and arena scratch for list; also in other places
-  Compound_Field_List list = {0};
+  CompoundFieldList list = {0};
 
-  if (!match(p, TokenKind_RBrace))
-  {
-    do
-    {
-      Source_Pos pos = p->curr.pos;
-      Compound_Field *field = parse_compound_field(p);
+  if (!match(p, TokenKind_RBrace)) {
+    do {
+      SourcePos pos = p->curr.pos;
+      CompoundField *field = parse_compound_field(p);
       push_compound_field(p, &list, field);
       field->pos = pos;
     } while (match(p, TokenKind_Comma) && !check(p, TokenKind_RBrace));
@@ -289,15 +267,13 @@ parse_compound_literal(Parser *p, Type_Spec *explicit_type)
     expect(p, TokenKind_RBrace);
   }
 
-  Compound_Field_Array fields = {0};
-  if (list.count > 0)
-  {
+  CompoundFieldArray fields = {0};
+  if (list.count > 0) {
     fields.count = list.count;
-    fields.v = push_array_nz(p->arena, Compound_Field *, fields.count);
+    fields.v = push_array_nz(p->arena, CompoundField *, fields.count);
 
     u32 i = 0;
-    for each_node(it, Compound_Field, list.first)
-    {
+    for each_node(it, CompoundField, list.first) {
       fields.v[i++] = it;
     }
   }
@@ -306,9 +282,8 @@ parse_compound_literal(Parser *p, Type_Spec *explicit_type)
 }
 
 internal b32
-looks_like_dotted_compound(Parser *p)
-{
-  Arena_Temp scratch = arena_scratch_get(0, 0);
+looks_like_dotted_compound(Parser *p) {
+  Temp scratch = arena_scratch_get(0, 0);
 
   // Temporary clone of parser and lexer
   Parser tmp = *p;
@@ -316,7 +291,7 @@ looks_like_dotted_compound(Parser *p)
   tmp.arena = scratch.arena;
   tmp.lexer = &temp_lexer;
 
-  Type_Spec *type = parse_type(&tmp);
+  TypeSpec *type = parse_type(&tmp);
   b32 result = (type != NULL && check(&tmp, TokenKind_Dot) && peek(&tmp, TokenKind_LBrace));
 
   arena_scratch_release(scratch);
@@ -324,56 +299,44 @@ looks_like_dotted_compound(Parser *p)
 }
 
 internal Expr *
-parse_expr_primary(Parser *p)
-{
+parse_expr_primary(Parser *p) {
   // implicit compound literal
-  if (check(p, TokenKind_Dot) && peek(p, TokenKind_LBrace))
-  {
+  if (check(p, TokenKind_Dot) && peek(p, TokenKind_LBrace)) {
     advance(p); // eat dot
     return parse_compound_literal(p, NULL);
   }
   // explicit compound literal
-  if (is_type_start(p) && looks_like_dotted_compound(p))
-  {
-    Type_Spec *type = parse_type(p);
+  if (is_type_start(p) && looks_like_dotted_compound(p)) {
+    TypeSpec *type = parse_type(p);
     expect(p, TokenKind_Dot);
     return parse_compound_literal(p, type);
   }
 
-  if (match(p, TokenKind_True))
-  {
+  if (match(p, TokenKind_True)) {
     return expr_bool_lit(p, true);
   }
-  if (match(p, TokenKind_False))
-  {
+  if (match(p, TokenKind_False)) {
     return expr_bool_lit(p, false);
   }
-  if (match(p, TokenKind_Nil))
-  {
+  if (match(p, TokenKind_Nil)) {
     return expr_nil_lit(p);
   }
-  if (match(p, TokenKind_StringLiteral))
-  {
+  if (match(p, TokenKind_StringLiteral)) {
     return expr_string_lit(p, p->prev.value.string);
   }
-  if (match(p, TokenKind_IntegerLiteral))
-  {
+  if (match(p, TokenKind_IntegerLiteral)) {
     return expr_integer_lit(p, p->prev.value.integer);
   }
-  if (match(p, TokenKind_FloatLiteral))
-  {
+  if (match(p, TokenKind_FloatLiteral)) {
     return expr_float_lit(p, p->prev.value.floating);
   }
-  if (match(p, TokenKind_CharLiteral))
-  {
+  if (match(p, TokenKind_CharLiteral)) {
     return expr_char_lit(p, p->prev.value.character);
   }
-  if (match(p, TokenKind_Ident))
-  {
+  if (match(p, TokenKind_Ident)) {
     return expr_ident(p, p->prev);
   }
-  if (match(p, TokenKind_LParen))
-  {
+  if (match(p, TokenKind_LParen)) {
     Expr *expr = parse_expr(p);
     expect(p, TokenKind_RParen);
     return expr_group(p, expr);
@@ -388,38 +351,32 @@ error:
 
 // primary
 internal Expr *
-parse_expr_postfix(Parser *p)
-{
+parse_expr_postfix(Parser *p) {
   Expr *expr = parse_expr_primary(p);
 
-  while (true)
-  {
+  while (true) {
     // CALL: foo(...)
-    if (match(p, TokenKind_LParen))
-    {
-      Expr_List args = {0};
+    if (match(p, TokenKind_LParen)) {
+      ExprList args = {0};
       u64 count = 0;
 
-      if (!match(p, TokenKind_RParen))
-      {
-        do
-        {
+      if (!match(p, TokenKind_RParen)) {
+        do {
           Expr *arg = parse_expr(p);
           queue_push(args.first, args.last, arg);
           count += 1;
         } while (match(p, TokenKind_Comma));
+
         expect(p, TokenKind_RParen);
       }
 
-      Expr_Array arg_array = {0};
-      if (count > 0)
-      {
+      ExprArray arg_array = {0};
+      if (count > 0) {
         arg_array.count = count;
         arg_array.v = push_array(p->arena, Expr*, count);
 
         u32 i = 0;
-        for each_node(it, Expr, args.first)
-        {
+        for each_node(it, Expr, args.first) {
           arg_array.v[i++] = it;
         }
       }
@@ -429,8 +386,7 @@ parse_expr_postfix(Parser *p)
     }
 
     // INDEX: a[b]
-    if (match(p, TokenKind_LBracket))
-    {
+    if (match(p, TokenKind_LBracket)) {
       Expr *index = parse_expr(p);
       expect(p, TokenKind_RBracket);
       expr = expr_index(p, expr, index);
@@ -438,8 +394,7 @@ parse_expr_postfix(Parser *p)
     }
 
     // DEREF: ptr.*
-    if (match(p, TokenKind_Deref))
-    {
+    if (match(p, TokenKind_Deref)) {
       Token op = p->prev;
       expr = expr_unary(p, op, expr);
       continue;
@@ -448,8 +403,7 @@ parse_expr_postfix(Parser *p)
     // FIELD: person.name
     // TODO(#10): rename this to selector and also parse
     // .Enumerator
-    if (match(p, TokenKind_Dot))
-    {
+    if (match(p, TokenKind_Dot)) {
       String8 name = parse_ident(p);
       expr = expr_field(p, expr, name);
       continue;
@@ -470,20 +424,17 @@ parse_expr_postfix(Parser *p)
 }
 
 internal Expr *
-parse_expr_unary(Parser *p)
-{
-  if (match(p, TokenKind_Cast))
-  {
+parse_expr_unary(Parser *p) {
+  if (match(p, TokenKind_Cast)) {
     // cast(f32)a
     expect(p, TokenKind_LParen);
-    Type_Spec *type = parse_type(p);
+    TypeSpec *type = parse_type(p);
     expect(p, TokenKind_RParen);
     Expr *expr = parse_expr_unary(p);
     return expr_cast(p, type, expr);
   }
 
-  if (match(p, TokenKind_SizeOf))
-  {
+  if (match(p, TokenKind_SizeOf)) {
     Expr *expr = NULL;
 
     expect(p, TokenKind_LParen);
@@ -492,15 +443,12 @@ parse_expr_unary(Parser *p)
     // - Explicit types: int, *int, [3]int, struct{}, proc(), etc.
     // - Expressions: identifiers (could be vars or type names), literals, operators, etc.
     // We use is_explicit_type_start to avoid ambiguity with identifiers.
-    if (is_explicit_type_start(p))
-    {
+    if (is_explicit_type_start(p)) {
       // size_of(int), size_of(*int), size_of([3]int)
-      Type_Spec *type = parse_type(p);
+      TypeSpec *type = parse_type(p);
       expect(p, TokenKind_RParen);
       expr = expr_size_of_type(p, type);
-    }
-    else
-    {
+    } else {
       // size_of(x), size_of(Vector), size_of(1+2)
       // Identifiers are parsed as expressions - resolver handles type names
       Expr *e = parse_expr(p);
@@ -517,8 +465,8 @@ parse_expr_unary(Parser *p)
     match(p, TokenKind_Minus)       ||
     match(p, TokenKind_Plus)        ||
     match(p, TokenKind_Tilde)       ||
-    match(p, TokenKind_Ampersand))
-  {
+    match(p, TokenKind_Ampersand)
+  ) {
     Token op = p->prev;
     Expr *right = parse_expr_unary(p);
     return expr_unary(p, op, right);
@@ -528,14 +476,16 @@ parse_expr_unary(Parser *p)
 }
 
 internal Expr *
-parse_expr_factor(Parser *p)
-{
+parse_expr_factor(Parser *p) {
   Expr *expr = parse_expr_unary(p);
 
   // TODO(#11): %  - modulo (truncated)  - integers
   // TODO(#12): %% - remainder (floored) - integers
-  while (match(p, TokenKind_Slash) || match(p, TokenKind_Star) || match(p, TokenKind_Percent))
-  {
+  while (
+    match(p, TokenKind_Slash) ||
+    match(p, TokenKind_Star)  ||
+    match(p, TokenKind_Percent)
+  ) {
     Token op = p->prev;
     Expr *right = parse_expr_unary(p);
     expr = expr_binary(p, expr, op, right);
@@ -545,12 +495,13 @@ parse_expr_factor(Parser *p)
 }
 
 internal Expr *
-parse_expr_term(Parser *p)
-{
+parse_expr_term(Parser *p) {
   Expr *expr = parse_expr_factor(p);
 
-  while (match(p, TokenKind_Minus) || match(p, TokenKind_Plus))
-  {
+  while (
+    match(p, TokenKind_Minus) ||
+    match(p, TokenKind_Plus)
+  ) {
     Token op = p->prev;
     Expr *right = parse_expr_factor(p);
     expr = expr_binary(p, expr, op, right);
@@ -560,12 +511,13 @@ parse_expr_term(Parser *p)
 }
 
 internal Expr *
-parse_expr_shift(Parser *p)
-{
+parse_expr_shift(Parser *p) {
   Expr *expr = parse_expr_term(p);
 
-  while (match(p, TokenKind_LShift) || match(p, TokenKind_RShift))
-  {
+  while (
+    match(p, TokenKind_LShift) ||
+    match(p, TokenKind_RShift)
+  ) {
     Token op = p->prev;
     Expr *right = parse_expr_term(p);
     expr = expr_binary(p, expr, op, right);
@@ -575,12 +527,10 @@ parse_expr_shift(Parser *p)
 }
 
 internal Expr *
-parse_expr_bitwise_and(Parser *p)
-{
+parse_expr_bitwise_and(Parser *p) {
   Expr *expr = parse_expr_shift(p);
 
-  while (match(p, TokenKind_Ampersand))
-  {
+  while (match(p, TokenKind_Ampersand)) {
     Token op = p->prev;
     Expr *right = parse_expr_shift(p);
     expr = expr_binary(p, expr, op, right);
@@ -590,12 +540,10 @@ parse_expr_bitwise_and(Parser *p)
 }
 
 internal Expr *
-parse_expr_bitwise_xor(Parser *p)
-{
+parse_expr_bitwise_xor(Parser *p) {
   Expr *expr = parse_expr_bitwise_and(p);
 
-  while (match(p, TokenKind_Tilde))
-  {
+  while (match(p, TokenKind_Tilde)) {
     Token op = p->prev;
     Expr *right = parse_expr_bitwise_and(p);
     expr = expr_binary(p, expr, op, right);
@@ -605,12 +553,10 @@ parse_expr_bitwise_xor(Parser *p)
 }
 
 internal Expr *
-parse_expr_bitwise_or(Parser *p)
-{
+parse_expr_bitwise_or(Parser *p) {
   Expr *expr = parse_expr_bitwise_xor(p);
 
-  while (match(p, TokenKind_Pipe))
-  {
+  while (match(p, TokenKind_Pipe)) {
     Token op = p->prev;
     Expr *right = parse_expr_bitwise_xor(p);
     expr = expr_binary(p, expr, op, right);
@@ -620,16 +566,15 @@ parse_expr_bitwise_or(Parser *p)
 }
 
 internal Expr *
-parse_expr_comparison(Parser *p)
-{
+parse_expr_comparison(Parser *p) {
   Expr *expr = parse_expr_bitwise_or(p);
 
   while (
     match(p, TokenKind_CmpGt)    ||
     match(p, TokenKind_CmpGtEq)  ||
     match(p, TokenKind_CmpLt)    ||
-    match(p, TokenKind_CmpLtEq))
-  {
+    match(p, TokenKind_CmpLtEq)
+  ) {
     Token op = p->prev;
     Expr *right = parse_expr_bitwise_or(p);
     expr = expr_binary(p, expr, op, right);
@@ -639,12 +584,10 @@ parse_expr_comparison(Parser *p)
 }
 
 internal Expr *
-parse_expr_equality(Parser *p)
-{
+parse_expr_equality(Parser *p) {
   Expr *expr = parse_expr_comparison(p);
 
-  while (match(p, TokenKind_CmpNeq) || match(p, TokenKind_CmpEq))
-  {
+  while (match(p, TokenKind_CmpNeq) || match(p, TokenKind_CmpEq)) {
     Token op = p->prev;
     Expr *right = parse_expr_comparison(p);
     expr = expr_binary(p, expr, op, right);
@@ -654,12 +597,10 @@ parse_expr_equality(Parser *p)
 }
 
 internal Expr *
-parse_expr_range(Parser *p)
-{
+parse_expr_range(Parser *p) {
   Expr *expr = parse_expr_equality(p);
 
-  while (match(p, TokenKind_RangeExcl) || match(p, TokenKind_RangeIncl))
-  {
+  while (match(p, TokenKind_RangeExcl) || match(p, TokenKind_RangeIncl)) {
     Token op = p->prev;
     Expr *right = parse_expr_equality(p);
     expr = expr_binary(p, expr, op, right);
@@ -669,12 +610,10 @@ parse_expr_range(Parser *p)
 }
 
 internal Expr *
-parse_expr_logical_and(Parser *p)
-{
+parse_expr_logical_and(Parser *p) {
   Expr *expr = parse_expr_range(p);
 
-  while (match(p, TokenKind_LogicalAnd))
-  {
+  while (match(p, TokenKind_LogicalAnd)) {
     Token op = p->prev;
     Expr *right = parse_expr_range(p);
     expr = expr_binary(p, expr, op, right);
@@ -684,12 +623,10 @@ parse_expr_logical_and(Parser *p)
 }
 
 internal Expr *
-parse_expr_logical_or(Parser *p)
-{
+parse_expr_logical_or(Parser *p) {
   Expr *expr = parse_expr_logical_and(p);
 
-  while (match(p, TokenKind_LogicalOr))
-  {
+  while (match(p, TokenKind_LogicalOr)) {
     Token op = p->prev;
     Expr *right = parse_expr_logical_and(p);
     expr = expr_binary(p, expr, op, right);
@@ -699,12 +636,10 @@ parse_expr_logical_or(Parser *p)
 }
 
 internal Expr *
-parse_expr_ternary(Parser *p)
-{
+parse_expr_ternary(Parser *p) {
   Expr *expr = parse_expr_logical_or(p);
 
-  while (match(p, TokenKind_Question))
-  {
+  while (match(p, TokenKind_Question)) {
     Expr *then = parse_expr(p);
     expect(p, TokenKind_Colon);
     Expr *else0 = parse_expr_ternary(p); // RIGHT ASSOCIATIVE
@@ -715,10 +650,8 @@ parse_expr_ternary(Parser *p)
 }
 
 internal b32
-is_assign_op(Token_Kind kind)
-{
-  switch (kind)
-  {
+is_assign_op(TokenKind kind) {
+  switch (kind) {
   case TokenKind_Equal:
   case TokenKind_AddAssign:
   case TokenKind_SubAssign:
@@ -738,14 +671,12 @@ is_assign_op(Token_Kind kind)
 }
 
 internal Expr *
-parse_expr_assignment(Parser *p)
-{
+parse_expr_assignment(Parser *p) {
   Expr *expr = parse_expr_ternary(p);
 
   // use `if` if we want a = b = c (recursive)
   // use while if not
-  if (is_assign_op(p->curr.kind))
-  {
+  if (is_assign_op(p->curr.kind)) {
     advance(p);
 
     Token op = p->prev;
@@ -759,8 +690,7 @@ parse_expr_assignment(Parser *p)
 }
 
 internal Expr *
-parse_expr(Parser *p)
-{
+parse_expr(Parser *p) {
   //
   // TODO:
   // Add error productions to handle each binary operator appearing without a left-hand operand.
@@ -776,45 +706,38 @@ internal Stmt *
 parse_stmt(Parser *p);
 
 internal Stmt *
-parse_stmt_expr_nosemi(Parser *p)
-{
+parse_stmt_expr_nosemi(Parser *p) {
   Expr *expr = parse_expr(p);
   return stmt_expr(p, expr);
 }
 
 internal Stmt *
-parse_stmt_expr(Parser *p)
-{
+parse_stmt_expr(Parser *p) {
   Expr *expr = parse_expr(p);
   expect(p, TokenKind_Semicolon);
   return stmt_expr(p, expr);
 }
 
 internal Stmt *
-parse_stmt_block(Parser *p)
-{
+parse_stmt_block(Parser *p) {
   expect(p, TokenKind_LBrace);
-  Stmt_List list = {0};
-  while (!check(p, TokenKind_RBrace))
-  {
+  StmtList list = {0};
+  while (!check(p, TokenKind_RBrace)) {
     Stmt *stmt = parse_stmt(p);
-    if (stmt->kind != StmtKind_Null)
-    {
+    if (stmt->kind != StmtKind_Null) {
       queue_push(list.first, list.last, stmt);
       list.count += 1;
     }
   }
   expect(p, TokenKind_RBrace);
 
-  Stmt_Array stmts = {0};
-  if (list.count > 0)
-  {
+  StmtArray stmts = {0};
+  if (list.count > 0) {
     stmts.count = list.count;
     stmts.v = push_array_nz(p->arena, Stmt *, stmts.count);
 
     u32 i = 0;
-    for each_node(it, Stmt, list.first)
-    {
+    for each_node(it, Stmt, list.first) {
       stmts.v[i++] = it;
     }
   }
@@ -823,23 +746,18 @@ parse_stmt_block(Parser *p)
 }
 
 internal Stmt *
-parse_stmt_if(Parser *p)
-{
+parse_stmt_if(Parser *p) {
   Expr *cond       = parse_expr(p);
   // match(p, TokenKind_Colon); // allman indent hacky fix
 
   Stmt *then_block = parse_stmt_block(p);
   Stmt *else_stmt  = NULL;
 
-  if (match(p, TokenKind_Else))
-  {
-    if (match(p, TokenKind_If))
-    {
+  if (match(p, TokenKind_Else)) {
+    if (match(p, TokenKind_If)) {
       // else if -> recurse
       else_stmt = parse_stmt_if(p);
-    }
-    else
-    {
+    } else {
       // else -> block
       else_stmt = parse_stmt_block(p);
     }
@@ -849,16 +767,14 @@ parse_stmt_if(Parser *p)
 }
 
 internal Stmt *
-parse_stmt_while(Parser *p)
-{
+parse_stmt_while(Parser *p) {
   Expr *cond = parse_expr(p);
   Stmt *body = parse_stmt_block(p);
   return stmt_while(p, cond, body);
 }
 
 internal Stmt *
-parse_stmt_do_while(Parser *p)
-{
+parse_stmt_do_while(Parser *p) {
   Stmt *body = parse_stmt_block(p);
   expect(p, TokenKind_While);
   Expr *cond = parse_expr(p);
@@ -867,13 +783,11 @@ parse_stmt_do_while(Parser *p)
 }
 
 internal Stmt *
-parse_stmt_return(Parser *p)
-{
+parse_stmt_return(Parser *p) {
   Expr *expr = NULL;
 
   // Check if this is an empty return (return; or return at end of block)
-  if (!check(p, TokenKind_Semicolon) && !check(p, TokenKind_RBrace))
-  {
+  if (!check(p, TokenKind_Semicolon) && !check(p, TokenKind_RBrace)) {
     expr = parse_expr(p);
   }
 
@@ -884,27 +798,23 @@ parse_stmt_return(Parser *p)
 }
 
 internal Stmt *
-parse_stmt_continue(Parser *p)
-{
+parse_stmt_continue(Parser *p) {
   Stmt *s = stmt_alloc(p, StmtKind_Continue);
   expect(p, TokenKind_Semicolon);
   return s;
 }
 
 internal Stmt *
-parse_stmt_break(Parser *p)
-{
+parse_stmt_break(Parser *p) {
   Stmt *s = stmt_alloc(p, StmtKind_Break);
   expect(p, TokenKind_Semicolon);
   return s;
 }
 
 internal Stmt *
-parse_stmt_defer(Parser *p)
-{
+parse_stmt_defer(Parser *p) {
   Stmt *stmt = parse_stmt(p);
-  switch (stmt->kind)
-  {
+  switch (stmt->kind) {
   case StmtKind_Return:
     report_error(p, "Cannot defer a return statement");
     break;
@@ -919,12 +829,10 @@ parse_stmt_defer(Parser *p)
 }
 
 internal Stmt *
-parse_stmt_for(Parser *p)
-{
+parse_stmt_for(Parser *p) {
   Stmt *stmt = NULL;
 
-  if (check(p, TokenKind_Ident) && peek(p, TokenKind_In))
-  {
+  if (check(p, TokenKind_Ident) && peek(p, TokenKind_In)) {
     //- parse for-in loop
     // for p in particles {}
     // for i in 0 ..< 10 {}
@@ -934,9 +842,7 @@ parse_stmt_for(Parser *p)
     Expr *iter = parse_expr(p);
     Stmt *body = parse_stmt_block(p);
     stmt = stmt_for_in(p, item, iter, body);
-  }
-  else
-  {
+  } else {
     //- parse c-style for loop
     // for i := 0; i < 10; i += 1 {}
     // for ; i < 10; i += 1 {}
@@ -944,8 +850,7 @@ parse_stmt_for(Parser *p)
     Expr *cond = NULL;
     Stmt *loop = NULL;
 
-    if (!check(p, TokenKind_Semicolon))
-    {
+    if (!check(p, TokenKind_Semicolon)) {
       init = parse_stmt(p);
     }
     // @CLEANUP
@@ -953,8 +858,7 @@ parse_stmt_for(Parser *p)
     // expect(p, TokenKind_Semicolon);
     if (match(p, TokenKind_Semicolon)) {}
 
-    if (!check(p, TokenKind_Semicolon))
-    {
+    if (!check(p, TokenKind_Semicolon)) {
       cond = parse_expr(p);
     }
     expect(p, TokenKind_Semicolon);
@@ -969,22 +873,19 @@ parse_stmt_for(Parser *p)
   return stmt;
 }
 
-internal Switch_Case
-parse_switch_case(Parser *p)
-{
-  Switch_Case result = {0};
+internal SwitchCase
+parse_switch_case(Parser *p) {
+  SwitchCase result = {0};
   result.is_default = true;
 
   expect(p, TokenKind_Case);
 
   // parse optional labels
-  if (!check(p, TokenKind_Colon))
-  {
+  if (!check(p, TokenKind_Colon)) {
     result.is_default = false;
 
-    Expr_List list = {0};
-    do
-    {
+    ExprList list = {0};
+    do {
       Expr *label = parse_expr(p);
       queue_push(list.first, list.last, label);
       list.count += 1;
@@ -995,21 +896,18 @@ parse_switch_case(Parser *p)
     result.labels.v = push_array_nz(p->arena, Expr *, list.count);
 
     u32 i = 0;
-    for each_node(it, Expr, list.first)
-    {
+    for each_node(it, Expr, list.first) {
       result.labels.v[i++] = it;
     }
   }
 
   expect(p, TokenKind_Colon);
 
-  Stmt_List list = {0};
+  StmtList list = {0};
 
   //- parse statements until next case or TokenKind_RBrace
-  while (!check(p, TokenKind_Case) && !check(p, TokenKind_RBrace))
-  {
-    if (match(p, TokenKind_Fallthrough))
-    {
+  while (!check(p, TokenKind_Case) && !check(p, TokenKind_RBrace)) {
+    if (match(p, TokenKind_Fallthrough)) {
       expect(p, TokenKind_Semicolon);
       result.is_fallthrough = true;
       break; // must be last statement
@@ -1020,15 +918,13 @@ parse_switch_case(Parser *p)
     list.count += 1;
   }
 
-  Stmt_Array stmts = {0};
-  if (list.count > 0)
-  {
+  StmtArray stmts = {0};
+  if (list.count > 0) {
     stmts.count = list.count;
     stmts.v = push_array_nz(p->arena, Stmt *, list.count);
 
     u32 i = 0;
-    for each_node(it, Stmt, list.first)
-    {
+    for each_node(it, Stmt, list.first) {
       stmts.v[i++] = it;
     }
   }
@@ -1038,32 +934,28 @@ parse_switch_case(Parser *p)
 }
 
 internal Stmt *
-parse_stmt_switch(Parser *p)
-{
-  Arena_Temp scratch = arena_scratch_get(0, 0);
+parse_stmt_switch(Parser *p) {
+  Temp scratch = arena_scratch_get(0, 0);
 
   Expr *expr = parse_expr(p);
-  Switch_Case_List list = {0};
+  SwitchCaseList list = {0};
 
   expect(p, TokenKind_LBrace);
 
-  while (!check(p, TokenKind_RBrace) && !check(p, TokenKind_EOF))
-  {
-    Switch_Case_Node *node = push_struct(scratch.arena, Switch_Case_Node);
+  while (!check(p, TokenKind_RBrace) && !check(p, TokenKind_EOF)) {
+    SwitchCaseNode *node = push_struct(scratch.arena, SwitchCaseNode);
     node->v = parse_switch_case(p);
     queue_push(list.first, list.last, node);
     list.count += 1;
   }
 
-  Switch_Case_Array cases = {0};
-  if (list.count > 0)
-  {
+  SwitchCaseArray cases = {0};
+  if (list.count > 0) {
     cases.count = list.count;
-    cases.v = push_array_nz(p->arena, Switch_Case, cases.count);
+    cases.v = push_array_nz(p->arena, SwitchCase, cases.count);
 
     u32 i = 0;
-    for each_node(it, Switch_Case_Node, list.first)
-    {
+    for each_node(it, SwitchCaseNode, list.first) {
       cases.v[i++] = it->v;
     }
   }
@@ -1075,14 +967,13 @@ parse_stmt_switch(Parser *p)
 }
 
 internal Stmt *
-parse_stmt(Parser *p)
-{
-  if (match(p, TokenKind_Semicolon))
-  {
+parse_stmt(Parser *p) {
+  if (match(p, TokenKind_Semicolon)) {
     // "eats" leading semicolons
     return stmt_alloc(p, StmtKind_Null);
   }
-  if (check(p, TokenKind_LBrace))                return parse_stmt_block(p);
+
+  if (check(p, TokenKind_LBrace))   return parse_stmt_block(p);
   if (match(p, TokenKind_If))       return parse_stmt_if(p);
   if (match(p, TokenKind_Do))       return parse_stmt_do_while(p);
   if (match(p, TokenKind_While))    return parse_stmt_while(p);
@@ -1090,23 +981,23 @@ parse_stmt(Parser *p)
   if (match(p, TokenKind_Return))   return parse_stmt_return(p);
   if (match(p, TokenKind_Continue)) return parse_stmt_continue(p);
   if (match(p, TokenKind_Break))    return parse_stmt_break(p);
-  if (check(p, TokenKind_Ident) && peek(p, TokenKind_Colon)) return stmt_decl(p, parse_decl(p));
   if (match(p, TokenKind_For))      return parse_stmt_for(p);
   if (match(p, TokenKind_Switch))   return parse_stmt_switch(p);
+
+  if (check(p, TokenKind_Ident) && peek(p, TokenKind_Colon)) {
+    return stmt_decl(p, parse_decl(p));
+  }
 
   return parse_stmt_expr(p);
 }
 
-internal Stmt_List
-parse_statements(Parser *p)
-{
-  Stmt_List list = {0};
+internal StmtList
+parse_statements(Parser *p) {
+  StmtList list = {0};
 
-  while (lexer_can_peek(p->lexer))
-  {
+  while (lexer_can_peek(p->lexer)) {
     Stmt *stmt = parse_stmt(p);
-    if (stmt->kind != StmtKind_Null)
-    {
+    if (stmt->kind != StmtKind_Null) {
       queue_push(list.first, list.last, stmt);
     }
   }
@@ -1118,15 +1009,13 @@ parse_statements(Parser *p)
 // DECLARATIONS
 
 internal String8
-parse_type_name(Parser *p)
-{
-  switch (p->curr.kind)
-  {
+parse_type_name(Parser *p) {
+  switch (p->curr.kind) {
   // builtin types
-  case TokenKind_S8:
-  case TokenKind_S16:
-  case TokenKind_S32:
-  case TokenKind_S64:
+  case TokenKind_I8:
+  case TokenKind_I16:
+  case TokenKind_I32:
+  case TokenKind_I64:
   case TokenKind_U8:
   case TokenKind_U16:
   case TokenKind_U32:
@@ -1143,6 +1032,8 @@ parse_type_name(Parser *p)
     String8 name = p->curr.lexeme;
     advance(p);
     return str8_copy(p->arena, name);
+  default:
+    break;
   }
 
   // assert(!"Expected type name");
@@ -1150,82 +1041,70 @@ parse_type_name(Parser *p)
   return (String8){0};
 }
 
-internal Type_Spec *
-parse_type_prefix(Parser *p)
-{
-  if (match(p, TokenKind_Star))
-  {
-    Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Ptr);
+internal TypeSpec *
+parse_type_prefix(Parser *p) {
+  if (match(p, TokenKind_Star)) {
+    TypeSpec *t = type_spec_alloc(p, TypeSpecKind_Ptr);
     t->ptr.pointee = parse_type_prefix(p);
     return t;
   }
-  if (match(p, TokenKind_LBracket))
-  {
-    if (!match(p, TokenKind_RBracket))
-    {
-      Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Array);
+  if (match(p, TokenKind_LBracket)) {
+    if (!match(p, TokenKind_RBracket)) {
+      TypeSpec *t = type_spec_alloc(p, TypeSpecKind_Array);
       t->array.count = parse_expr(p);
       expect(p, TokenKind_RBracket);
       t->array.elem  = parse_type_prefix(p);
       return t;
-    }
-    else
-    {
-      Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Slice);
+    } else {
+      TypeSpec *t = type_spec_alloc(p, TypeSpecKind_Slice);
       t->slice.elem = parse_type_prefix(p);
       return t;
     }
   }
 
   // named type
-  Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Name);
+  TypeSpec *t = type_spec_alloc(p, TypeSpecKind_Name);
   t->name = parse_type_name(p);
   return t;
 }
 
 internal Decl *parse_decl_nosemi(Parser *p);
 
-internal Type_Spec *
-parse_type_proc(Parser *p)
-{
-  Decl_List list = {0};
+internal TypeSpec *
+parse_type_proc(Parser *p) {
+  DeclList list = {0};
   u64 param_count = 0;
 
   expect(p, TokenKind_LParen);
 
-  while (!match(p, TokenKind_RParen))
-  {
+  while (!match(p, TokenKind_RParen)) {
     // need to call parse_decl
     // a := 5
     // a: int
-    // Type_Spec *param = parse_type(p);
+    // TypeSpec *param = parse_type(p);
     Decl *param = parse_decl_nosemi(p);
     queue_push(list.first, list.last, param);
     param_count += 1;
     match(p, TokenKind_Comma);
   }
 
-  Type_Spec *ret = NULL;
-  if (match(p, TokenKind_Arrow))
-  {
+  TypeSpec *ret = NULL;
+  if (match(p, TokenKind_Arrow)) {
     ret = parse_type(p);
   }
 
   Stmt *body = NULL;
-  if (check(p, TokenKind_LBrace))
-  {
+  if (check(p, TokenKind_LBrace)) {
     body = parse_stmt_block(p);
   }
 
-  Decl_Array params = {0};
-  if (param_count > 0)
-  {
+  DeclArray params = {0};
+  if (param_count > 0) {
     params.count = param_count;
     params.v = push_array(p->arena, Decl *, params.count);
 
     u32 i = 0;
-    for each_node(it, Decl, list.first)
-    {
+    for each_node(it, Decl, list.first) {
       params.v[i++] = it;
     }
   }
@@ -1233,19 +1112,16 @@ parse_type_proc(Parser *p)
   return type_spec_proc(p, params, ret, body);
 }
 
-internal Type_Spec *
-parse_type_aggr(Parser *p, Type_Spec_Kind kind)
-{
+internal TypeSpec *
+parse_type_aggr(Parser *p, TypeSpecKind kind) {
   assert(kind == TypeSpecKind_Struct || kind == TypeSpecKind_Union);
   expect(p, TokenKind_LBrace);
 
-  Aggr_Field_List list = {0};
+  AggrFieldList list = {0};
   u64 count = 0;
-  while (!check(p, TokenKind_RBrace))
-  {
-    Aggr_Field_Node *node = push_struct(p->arena, Aggr_Field_Node);
-    while (true)
-    {
+  while (!check(p, TokenKind_RBrace)) {
+    AggrFieldNode *node = push_struct(p->arena, AggrFieldNode);
+    while (true) {
       String8 field_name = parse_ident(p);
       str8_list_push(p->arena, &node->v.names, field_name);
 
@@ -1265,23 +1141,20 @@ parse_type_aggr(Parser *p, Type_Spec_Kind kind)
     list.count += 1;
     count += 1;
 
-    if (match(p, TokenKind_Semicolon))
-    {
+    if (match(p, TokenKind_Semicolon)) {
       continue;
     }
   }
 
   expect(p, TokenKind_RBrace);
 
-  Aggr_Field_Array fields = {0};
-  if (count > 0)
-  {
+  AggrFieldArray fields = {0};
+  if (count > 0) {
     fields.count = count;
-    fields.v = push_array_nz(p->arena, Aggr_Field, list.count);
+    fields.v = push_array_nz(p->arena, AggrField, list.count);
 
     u32 i = 0;
-    for each_node(it, Aggr_Field_Node, list.first)
-    {
+    for each_node(it, AggrFieldNode, list.first) {
       fields.v[i++] = it->v;
     }
   }
@@ -1289,44 +1162,38 @@ parse_type_aggr(Parser *p, Type_Spec_Kind kind)
   return type_spec_aggr(p, kind, fields);
 }
 
-internal Type_Spec *
-parse_type_enum(Parser *p)
-{
+internal TypeSpec *
+parse_type_enum(Parser *p) {
   expect(p, TokenKind_LBrace);
 
-  Enum_Member_List list = {0};
+  EnumMemberList list = {0};
   u64 count = 0;
 
-  while (!check(p, TokenKind_RBrace))
-  {
-    Enum_Member_Node *node = push_struct(p->arena, Enum_Member_Node);
+  while (!check(p, TokenKind_RBrace)) {
+    EnumMemberNode *node = push_struct(p->arena, EnumMemberNode);
 
     node->v.name = parse_ident(p);
-    if (match(p, TokenKind_Equal))
-    {
+    if (match(p, TokenKind_Equal)) {
       node->v.value = parse_expr(p);
     }
 
     queue_push(list.first, list.last, node);
     count += 1;
 
-    if (!match(p, TokenKind_Comma))
-    {
+    if (!match(p, TokenKind_Comma)) {
       break;
     }
   }
 
   expect(p, TokenKind_RBrace);
 
-  Enum_Member_Array members = {0};
-  if (count > 0)
-  {
+  EnumMemberArray members = {0};
+  if (count > 0) {
     members.count = count;
-    members.v = push_array_nz(p->arena, Enum_Member, count);
+    members.v = push_array_nz(p->arena, EnumMember, count);
 
     u32 i = 0;
-    for each_node(it, Enum_Member_Node, list.first)
-    {
+    for each_node(it, EnumMemberNode, list.first) {
       members.v[i++] = it->v;
     }
   }
@@ -1334,69 +1201,51 @@ parse_type_enum(Parser *p)
   return type_spec_enum(p, members);
 }
 
-internal Type_Spec *
-parse_type_base(Parser *p)
-{
-  // 1. identifiers and built-in types
-  if (check(p, TokenKind_Ident) || (p->curr.kind >= TokenKind_S8 && p->curr.kind <= TokenKind_String))
-  {
+internal TypeSpec *
+parse_type_base(Parser *p) {
+  if (check(p, TokenKind_Ident) || (p->curr.kind >= TokenKind_I8 && p->curr.kind <= TokenKind_String)) {
+    // 1. identifiers and built-in types
     return type_spec_name(p, parse_type_name(p));
-  }
-  // 2. proc(args) -> ret
-  else if (match(p, TokenKind_Proc))
-  {
+  } else if (match(p, TokenKind_Proc)) {
+    // 2. proc(args) -> ret
     return parse_type_proc(p);
-  }
-  // 3. struct { ... }
-  else if (match(p, TokenKind_Struct))
-  {
+  } else if (match(p, TokenKind_Struct)) {
+    // 3. struct { ... }
     return parse_type_aggr(p, TypeSpecKind_Struct);
-  }
-  // 4. union { ... }
-  else if (match(p, TokenKind_Union))
-  {
+  } else if (match(p, TokenKind_Union)) {
+    // 4. union { ... }
     return parse_type_aggr(p, TypeSpecKind_Union);
-  }
-  // 5. enum { ... }
-  else if (match(p, TokenKind_Enum))
-  {
+  } else if (match(p, TokenKind_Enum)) {
+    // 5. enum { ... }
     return parse_type_enum(p);
-  }
-  // 6. grouping: (int)
-  else if (match(p, TokenKind_LParen))
-  {
-    Type_Spec *t = parse_type(p);
+  } else if (match(p, TokenKind_LParen)) {
+    // 6. grouping: (int)
+    TypeSpec *t = parse_type(p);
     expect(p, TokenKind_RParen);
     return t;
   }
-  Arena_Temp scratch = arena_scratch_get(0, 0);
+  Temp scratch = arena_scratch_get(0, 0);
   report_error(p, "Unexpected token %.*s in type", str8_varg(str_from_token_kind(scratch.arena, p->curr.kind)));
   arena_scratch_release(scratch);
   return NULL;
 }
 
-internal Type_Spec *
-parse_type(Parser *p)
-{
-  if (match(p, TokenKind_Star))
-  {
-    Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Ptr);
+internal TypeSpec *
+parse_type(Parser *p) {
+  if (match(p, TokenKind_Star)) {
+    TypeSpec *t = type_spec_alloc(p, TypeSpecKind_Ptr);
     t->ptr.pointee = parse_type(p); // Recursive call to handle **int
     return t;
   }
   
-  if (match(p, TokenKind_LBracket))
-  {
+  if (match(p, TokenKind_LBracket)) {
     // Check if it's a slice []int or array [N]int
-    if (match(p, TokenKind_RBracket))
-    {
-      Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Slice);
+    if (match(p, TokenKind_RBracket)) {
+      TypeSpec *t = type_spec_alloc(p, TypeSpecKind_Slice);
       t->slice.elem = parse_type(p);
       return t;
-    }
-    else
-    {
-      Type_Spec *t = type_spec_alloc(p, TypeSpecKind_Array);
+    } else {
+      TypeSpec *t = type_spec_alloc(p, TypeSpecKind_Array);
       t->array.count = parse_expr(p); // Parse the '2' in [2]
       expect(p, TokenKind_RBracket);
       t->array.elem = parse_type(p);
@@ -1409,63 +1258,51 @@ parse_type(Parser *p)
 }
 
 internal Decl *
-parse_decl_nosemi(Parser *p)
-{
+parse_decl_nosemi(Parser *p) {
   b32 is_foreign = false;
-  if (match(p, TokenKind_Foreign))
-  {
+  if (match(p, TokenKind_Foreign)) {
     is_foreign = true;
   }
 
   String8 name = parse_ident(p);
   expect(p, TokenKind_Colon);
 
-  Type_Spec *type_hint = NULL;
+  TypeSpec *type_hint = NULL;
   Expr      *init_expr = NULL;
-  Type_Spec *init_type = NULL;
+  TypeSpec *init_type = NULL;
   b32        is_const  = false;
 
   // CASE A: Inferred Type (name :: value OR name := value)
-  if (check(p, TokenKind_Colon) || check(p, TokenKind_Equal))
-  {
+  if (check(p, TokenKind_Colon) || check(p, TokenKind_Equal)) {
     if (match(p, TokenKind_Colon)) is_const = true;
-    else               match(p, TokenKind_Equal);
+    else                           match(p, TokenKind_Equal);
 
     // Is the value a Type Literal (struct/enum) or a Value Expression (5+2)?
     // But check if it's a compound literal first (e.g., [3]int.{1,2,3})
-    if (is_explicit_type_start(p) && !looks_like_dotted_compound(p))
-    {
+    if (is_explicit_type_start(p) && !looks_like_dotted_compound(p)) {
       init_type = parse_type(p); // Color :: enum { RED, BLUE }
-    }
-    else
-    {
+    } else {
       init_expr = parse_expr(p); // N :: 500 or a := [3]int.{1,2,3}
     }
-  }
-  // CASE B: Explicit Type (name : int ...)
-  else
-  {
+  } else {
+    // CASE B: Explicit Type (name : int ...)
     type_hint = parse_type(p);
 
-    if (match(p, TokenKind_Colon)) // name : type : value;
-    {
+    if (match(p, TokenKind_Colon)) {
+      // name : type : value;
       is_const = true;
       init_expr = parse_expr(p);
-    }
-    else if (match(p, TokenKind_Equal)) // name : type = value;
-    {
+    } else if (match(p, TokenKind_Equal)) {
+      // name : type = value;
       init_expr = parse_expr(p);
     }
   }
 
   Decl *decl = NULL;
 
-  if (is_const)
-  {
+  if (is_const) {
     decl = decl_const(p, name, type_hint, init_expr, init_type);
-  }
-  else
-  {
+  } else {
     decl = decl_var(p, name, type_hint, init_expr);
   }
 
@@ -1475,21 +1312,18 @@ parse_decl_nosemi(Parser *p)
 }
 
 internal Decl *
-parse_decl(Parser *p)
-{
+parse_decl(Parser *p) {
   while (match(p, TokenKind_Semicolon)) {};
   Decl *decl = parse_decl_nosemi(p);
   expect(p, TokenKind_Semicolon);
   return decl;
 }
 
-internal Decl_List
-parse_declarations(Parser *p)
-{
-  Decl_List list = {0};
+internal DeclList
+parse_declarations(Parser *p) {
+  DeclList list = {0};
 
-  while (lexer_can_peek(p->lexer))
-  {
+  while (lexer_can_peek(p->lexer)) {
     Decl *decl = parse_decl(p);
     queue_push(list.first, list.last, decl);
 
@@ -1501,12 +1335,10 @@ parse_declarations(Parser *p)
 }
 
 internal void
-parser_test()
-{
+parser_test() {
   printf("\n");
   printf("--- STATEMENTS\n");
   printf("\n");
-
   {
     // String8 source = S(
     //   "x = 5 + 3\n"
@@ -1596,11 +1428,10 @@ parser_test()
     Lexer l = lexer_init(source);
     Parser p = parser_init(&l);
 
-    Stmt_List list = parse_statements(&p);
+    StmtList list = parse_statements(&p);
 
-    for (Stmt *it = list.first; it != NULL; it = it->next)
-    {
-      Arena_Temp scratch = arena_scratch_get(0, 0);
+    for (Stmt *it = list.first; it != NULL; it = it->next) {
+      Temp scratch = arena_scratch_get(0, 0);
 
       String8List list = {0};
 
@@ -1617,8 +1448,7 @@ parser_test()
   printf("\n");
   printf("--- DECLARATIONS\n");
   printf("\n");
-
-  {
+ {
     String8 source = S(
       // "var foo = a ? a&b + c<<d + e*f == +u-v-w + *g/h(x,y) + -i%k[x] && m <= n*(p+q)/r : 0\n"
       // "var foo = a ? 1 : 0\n"
@@ -1688,11 +1518,10 @@ parser_test()
     Lexer l = lexer_init(source);
     Parser p = parser_init(&l);
 
-    Decl_List list = parse_declarations(&p);
+    DeclList list = parse_declarations(&p);
 
-    for each_node(it, Decl, list.first)
-    {
-      Arena_Temp scratch = arena_scratch_get(0, 0);
+    for each_node(it, Decl, list.first) {
+      Temp scratch = arena_scratch_get(0, 0);
 
       String8List list = {0};
 

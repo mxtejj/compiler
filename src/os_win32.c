@@ -1,64 +1,59 @@
 #include "os.h"
+
+#pragma push_macro("function")
+#undef function
 #define WIN32_LEAN_AND_MEAN
 #define NO_MIN_MAX
 #include <windows.h>
+#pragma pop_macro("function")
 
-internal u32
-os_page_size()
-{
+function u32
+os_page_size() {
   SYSTEM_INFO info = {0};
   GetSystemInfo(&info);
   return info.dwPageSize;
 }
 
-internal void *
-os_reserve(usize size)
-{
+function void *
+os_reserve(usize size) {
   return VirtualAlloc(NULL, size, MEM_RESERVE, PAGE_READWRITE);
 }
 
-internal b32
-os_commit(void *ptr, usize size)
-{
+function b32
+os_commit(void *ptr, usize size) {
   void *result = VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE);
   return result != NULL;
 }
 
-internal b32
-os_decommit(void *ptr, usize size)
-{
+function b32
+os_decommit(void *ptr, usize size) {
   return VirtualFree(ptr, size, MEM_DECOMMIT);
 }
 
-internal b32
-os_release(void *ptr, usize size)
-{
+function b32
+os_release(void *ptr, usize size) {
   return VirtualFree(ptr, size, MEM_RELEASE);
 }
 
-internal void
-os_exit(u32 code)
-{
+function void
+os_exit(u32 code) {
   ExitProcess(code);
 }
 
-internal String8
-os_read_entire_file(Arena *arena, String8 path)
-{
-  Arena_Temp scratch = arena_scratch_get(&arena, 1);
+function String8
+os_read_entire_file(Arena *arena, String8 path) {
+  Temp scratch = arena_scratch_get(&arena, 1);
 
   String8 result = {0};
   String16 path16 = str16_from_8(scratch.arena, path);
 
   HANDLE handle = CreateFileW(path16.data, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-  if (handle == INVALID_HANDLE_VALUE)
-  {
+  if (handle == INVALID_HANDLE_VALUE) {
     return result;
   }
 
   LARGE_INTEGER file_size = {0};
-  if (!GetFileSizeEx(handle, &file_size))
-  {
+  if (!GetFileSizeEx(handle, &file_size)) {
     CloseHandle(handle);
     return result;
   }
@@ -81,16 +76,14 @@ os_read_entire_file(Arena *arena, String8 path)
   return result;
 }
 
-internal b32
-os_write_entire_file(String8 path, String8 contents)
-{
-  Arena_Temp scratch = arena_scratch_get(NULL, 0);
+function b32
+os_write_entire_file(String8 path, String8 contents) {
+  Temp scratch = arena_scratch_get(NULL, 0);
 
   String16 path16 = str16_from_8(scratch.arena, path);
 
   HANDLE handle = CreateFileW(path16.data, GENERIC_WRITE, 0, NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-  if (handle == INVALID_HANDLE_VALUE)
-  {
+  if (handle == INVALID_HANDLE_VALUE) {
     return false;
   }
 

@@ -4,7 +4,6 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <math.h>
-#include "globals.h"
 
 //
 // TODO:
@@ -14,11 +13,9 @@
 //   [ ] multi line
 //
 
-internal String8
-str_from_token_kind(Arena *arena, Token_Kind kind)
-{
-  switch (kind)
-  {
+function String8
+str_from_token_kind(Arena *arena, TokenKind kind) {
+  switch (kind) {
   case TokenKind_EOF:            return str8_lit("end of file");
   case TokenKind_LParen:         return str8_lit("(");
   case TokenKind_RParen:         return str8_lit(")");
@@ -73,10 +70,10 @@ str_from_token_kind(Arena *arena, Token_Kind kind)
   case TokenKind_FloatLiteral:   return str8_lit("float literal");
   case TokenKind_CharLiteral:    return str8_lit("char literal");
   case TokenKind_Nil:            return str8_lit("nil");
-  case TokenKind_S8:             return str8_lit("s8");
-  case TokenKind_S16:            return str8_lit("s16");
-  case TokenKind_S32:            return str8_lit("s32");
-  case TokenKind_S64:            return str8_lit("s64");
+  case TokenKind_I8:             return str8_lit("i8");
+  case TokenKind_I16:            return str8_lit("i16");
+  case TokenKind_I32:            return str8_lit("i32");
+  case TokenKind_I64:            return str8_lit("i64");
   case TokenKind_U8:             return str8_lit("u8");
   case TokenKind_U16:            return str8_lit("u16");
   case TokenKind_U32:            return str8_lit("u32");
@@ -123,20 +120,17 @@ str_from_token_kind(Arena *arena, Token_Kind kind)
 }
 
 internal u64
-lexer_row(Lexer *l)
-{
+lexer_row(Lexer *l) {
   return l->line;
 }
 
 internal u64
-lexer_col(Lexer *l)
-{
+lexer_col(Lexer *l) {
   return l->cursor - l->bol;
 }
 
 internal void
-lexer_syntax_error(Lexer *l, const char *fmt, ...)
-{
+lexer_syntax_error(Lexer *l, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
 
@@ -158,91 +152,77 @@ lexer_syntax_error(Lexer *l, const char *fmt, ...)
   va_end(args);
 }
 
-internal Lexer
-lexer_init(String8 source)
-{
+function Lexer
+lexer_init(String8 source) {
   Lexer l = {0};
   l.arena  = arena_alloc(GB(1), MB(1), 0);
   l.source = source;
   return l;
 }
 
-internal void
-lexer_fini(Lexer *l)
-{
+function void
+lexer_fini(Lexer *l) {
   *l = (Lexer){0};
   arena_delete(l->arena);
 }
 
 internal char
-lexer_peek(Lexer *l)
-{
+lexer_peek(Lexer *l) {
   assert(lexer_can_peek(l));
   return l->source.data[l->cursor];
 }
 
 internal void
-lexer_eat(Lexer *l)
-{
+lexer_eat(Lexer *l) {
   assert(lexer_can_peek(l));
 
   char x = lexer_peek(l);
   l->cursor += 1;
 
-  if (x == '\r' && (lexer_can_peek(l) && lexer_peek(l) == '\n'))
-  {
+  if (x == '\r' && (lexer_can_peek(l) && lexer_peek(l) == '\n')) {
     // Consume \r
     l->cursor += 1;
     x = '\n';
   }
-  if (x == '\n')
-  {
+  if (x == '\n') {
     l->line += 1;
     l->bol = l->cursor;
   }
 }
 
-internal bool
-lexer_can_peek(Lexer *l)
-{
+internal b32
+lexer_can_peek(Lexer *l) {
   return l->cursor < l->source.count;
 }
 
 internal void
-lexer_eat_whitespace(Lexer *l)
-{
-  while (lexer_can_peek(l) && isspace(lexer_peek(l)))
-  {
+lexer_eat_whitespace(Lexer *l) {
+  while (lexer_can_peek(l) && isspace(lexer_peek(l))) {
     lexer_eat(l);
   }
 }
 
 internal bool
-is_symbol(Lexer *l)
-{
+is_symbol(Lexer *l) {
   assert(lexer_can_peek(l));
   char c = lexer_peek(l);
   return c == '_' || isalnum(c);
 }
 
 internal bool
-is_symbol_char(char c)
-{
+is_symbol_char(char c) {
   return c == '_' || isalnum(c);
 }
 
 internal Token
-lexer_make_token(Lexer *l, Token_Kind kind)
-{
-  return (Token)
-  {
+lexer_make_token(Lexer *l, TokenKind kind) {
+  return (Token) {
     .kind = kind,
     .lexeme = str8_substr(l->source, l->start, l->cursor),
   };
 }
 
-global read_only char escape_to_char[256] =
-{
+global read_only char escape_to_char[256] = {
   ['n'] = '\n',
   ['r'] = '\r',
   ['t'] = '\t',
@@ -253,8 +233,7 @@ global read_only char escape_to_char[256] =
 };
 
 internal Token
-lexer_parse_string(Lexer *l)
-{
+lexer_parse_string(Lexer *l) {
   assert(lexer_peek(l) == '"');
 
   Arena *string_arena = arena_alloc(GB(1), MB(8), 0);
@@ -262,19 +241,14 @@ lexer_parse_string(Lexer *l)
   u64 string_len = 0;
 
   lexer_eat(l);
-  while (lexer_can_peek(l) && lexer_peek(l) != '"')
-  {
+  while (lexer_can_peek(l) && lexer_peek(l) != '"') {
     char c = lexer_peek(l);
-    if (c == '\n')
-    {
+    if (c == '\n') {
       // TODO: Check \r
       lexer_syntax_error(l, "String literal cannot contain newline");
-    }
-    else if (c == '\\')
-    {
+    } else if (c == '\\') {
       lexer_eat(l);
-      if (lexer_peek(l) == '"')
-      {
+      if (lexer_peek(l) == '"') {
         // append "
         char *a = push_array_align(string_arena, char, 1, 1);
         *a = lexer_peek(l);
@@ -284,8 +258,7 @@ lexer_parse_string(Lexer *l)
         continue;
       }
       c = escape_to_char[lexer_peek(l)];
-      if (c == 0 && lexer_peek(l) != '0')
-      {
+      if (c == 0 && lexer_peek(l) != '0') {
         lexer_syntax_error(l, "Invalid string literal escape '\\%c'", lexer_peek(l));
       }
     }
@@ -297,13 +270,10 @@ lexer_parse_string(Lexer *l)
     lexer_eat(l);
   }
 
-  if (lexer_can_peek(l))
-  {
+  if (lexer_can_peek(l)) {
     assert(lexer_peek(l) == '"');
     lexer_eat(l);
-  }
-  else
-  {
+  } else {
     lexer_syntax_error(l, "Unexpected end of file within string literal");
   }
 
@@ -322,8 +292,7 @@ lexer_parse_string(Lexer *l)
 }
 
 internal Token
-lexer_parse_float(Lexer *l)
-{
+lexer_parse_float(Lexer *l) {
   /*
 
   (
@@ -337,49 +306,41 @@ lexer_parse_float(Lexer *l)
 
   */
 
-  while (lexer_can_peek(l) && isdigit(lexer_peek(l)))
-  {
+  while (lexer_can_peek(l) && isdigit(lexer_peek(l))) {
     lexer_eat(l);
   }
 
-  if (lexer_can_peek(l) && (lexer_peek(l)) == '.')
-  {
+  if (lexer_can_peek(l) && (lexer_peek(l)) == '.') {
     lexer_eat(l); // .
-    while (lexer_can_peek(l) && isdigit(lexer_peek(l)))
-    {
+    while (lexer_can_peek(l) && isdigit(lexer_peek(l))) {
       lexer_eat(l);
     }
   }
 
-  if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'e')
-  {
+  if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'e') {
     lexer_eat(l);
-    if (lexer_can_peek(l) && (lexer_peek(l) == '+' || lexer_peek(l) == '-'))
-    {
+    if (lexer_can_peek(l) && (lexer_peek(l) == '+' || lexer_peek(l) == '-')) {
       lexer_eat(l);
     }
-    if (!isdigit(lexer_peek(l)))
-    {
+    if (!isdigit(lexer_peek(l))) {
       lexer_syntax_error(l, "Expected digit after float literal exponent, got '%c'", lexer_peek(l));
       // assert(0);
     }
-    while (lexer_can_peek(l) && isdigit(lexer_peek(l)))
-    {
+    while (lexer_can_peek(l) && isdigit(lexer_peek(l))) {
       lexer_eat(l);
     }
   }
 
   Token t = lexer_make_token(l, TokenKind_FloatLiteral);
 
-  Arena_Temp scratch = arena_scratch_get(0, 0);
+  Temp scratch = arena_scratch_get(0, 0);
 
   u8 *buf = push_array(scratch.arena, u8, t.lexeme.count); // +1 ?
   mem_copy(buf, t.lexeme.data, t.lexeme.count);
   buf[t.lexeme.count] = '\0';
 
   f64 value = strtod(buf, NULL);
-  if (value == HUGE_VAL || value == -HUGE_VAL)
-  {
+  if (value == HUGE_VAL || value == -HUGE_VAL) {
     lexer_syntax_error(l, "Float literal overflow");
   }
 
@@ -391,36 +352,28 @@ lexer_parse_float(Lexer *l)
 }
 
 internal Token
-lexer_parse_integer(Lexer *l)
-{
+lexer_parse_integer(Lexer *l) {
   u64 value = 0;
   u64 base = 10;
 
-  if (lexer_can_peek(l) && lexer_peek(l) == '0')
-  {
+  if (lexer_can_peek(l) && lexer_peek(l) == '0') {
     lexer_eat(l);
-    if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'x')
-    {
+    if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'x') {
       // HEX
       lexer_eat(l);
       base = 16;
-    }
-    else if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'b')
-    {
+    } else if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'b') {
       // BINARY
       lexer_eat(l);
       base = 2;
-    }
-    else if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'o')
-    {
+    } else if (lexer_can_peek(l) && tolower(lexer_peek(l)) == 'o') {
       // OCTAL
       lexer_eat(l);
       base = 8;
     }
   }
 
-  local_persist u8 char_to_digit[256] =
-  {
+  local_persist u8 char_to_digit[256] = {
     ['0'] = 0,
     ['1'] = 1,
     ['2'] = 2,
@@ -440,29 +393,22 @@ lexer_parse_integer(Lexer *l)
   };
 
   // for (;;)
-  while (lexer_can_peek(l))
-  {
+  while (lexer_can_peek(l)) {
     u64 digit = char_to_digit[lexer_peek(l)];
-    if (digit == 0 && lexer_peek(l) != '0')
-    {
+    if (digit == 0 && lexer_peek(l) != '0') {
       break;
     }
-    if (digit >= base)
-    {
+    if (digit >= base) {
       lexer_syntax_error(l, "Digit '%c' out of range for base %llu", lexer_peek(l), base);
       break;
     }
-    if (value > (UINT64_MAX - digit) / base)
-    {
+    if (value > (UINT64_MAX - digit) / base) {
       lexer_syntax_error(l, "Integer literal overflow");
-      while (lexer_can_peek(l) && isdigit(lexer_peek(l)))
-      {
+      while (lexer_can_peek(l) && isdigit(lexer_peek(l))) {
         lexer_eat(l);
       }
       value = 0;
-    }
-    else
-    {
+    } else {
       lexer_eat(l);
       value *= base;
       value += digit;
@@ -476,24 +422,21 @@ lexer_parse_integer(Lexer *l)
 }
 
 internal Token
-lexer_parse_ident_or_keyword(Lexer *l)
-{
+lexer_parse_ident_or_keyword(Lexer *l) {
   typedef struct Keyword Keyword;
-  struct Keyword
-  {
-    Token_Kind kind;
+  struct Keyword {
+    TokenKind kind;
     String8    value;
   };
 
-  local_persist Keyword keywords[] =
-  {
+  local_persist Keyword keywords[] = {
     { .kind = TokenKind_Nil,       .value = S("nil") },
 
     // integer types
-    { .kind = TokenKind_S8,        .value = S("s8") },
-    { .kind = TokenKind_S16,       .value = S("s16") },
-    { .kind = TokenKind_S32,       .value = S("s32") },
-    { .kind = TokenKind_S64,       .value = S("s64") },
+    { .kind = TokenKind_I8,        .value = S("i8") },
+    { .kind = TokenKind_I16,       .value = S("i16") },
+    { .kind = TokenKind_I32,       .value = S("i32") },
+    { .kind = TokenKind_I64,       .value = S("i64") },
     { .kind = TokenKind_U8,        .value = S("u8") },
     { .kind = TokenKind_U16,       .value = S("u16") },
     { .kind = TokenKind_U32,       .value = S("u32") },
@@ -524,15 +467,13 @@ lexer_parse_ident_or_keyword(Lexer *l)
     { .kind = TokenKind_Fallthrough, .value = S("fallthrough") },
     { .kind = TokenKind_Continue,    .value = S("continue") },
     { .kind = TokenKind_Return,      .value = S("return") },
-
-    { .kind = TokenKind_Struct,    .value = S("struct") },
-    { .kind = TokenKind_Union,     .value = S("union") },
-    { .kind = TokenKind_Enum,      .value = S("enum") },
-    { .kind = TokenKind_String,    .value = S("string") },
+    { .kind = TokenKind_Struct,      .value = S("struct") },
+    { .kind = TokenKind_Union,       .value = S("union") },
+    { .kind = TokenKind_Enum,        .value = S("enum") },
+    { .kind = TokenKind_String,      .value = S("string") },
 
     // declarations
     { .kind = TokenKind_Proc,      .value = S("proc") },
-
     { .kind = TokenKind_SizeOf,    .value = S("size_of") },
     { .kind = TokenKind_Cast,      .value = S("cast") },
     { .kind = TokenKind_Transmute, .value = S("transmute") },
@@ -542,18 +483,15 @@ lexer_parse_ident_or_keyword(Lexer *l)
   };
   static_assert(array_count(keywords) == (TokenKind_Keyword_End - TokenKind_KeywordBegin));
 
-  while (lexer_can_peek(l) && is_symbol(l))
-  {
+  while (lexer_can_peek(l) && is_symbol(l)) {
     lexer_eat(l);
   }
 
   Token t = lexer_make_token(l, TokenKind_Ident);
 
   // TODO(#5): String interning for faster string checks
-  for (u32 i = 0; i < array_count(keywords); i++)
-  {
-    if (str8_equal(t.lexeme, keywords[i].value))
-    {
+  for (u32 i = 0; i < array_count(keywords); i++) {
+    if (str8_equal(t.lexeme, keywords[i].value)) {
       t.kind = keywords[i].kind;
       break;
     }
@@ -562,49 +500,41 @@ lexer_parse_ident_or_keyword(Lexer *l)
   return t;
 }
 
-internal Token
-lexer_next(Lexer *l)
-{
+function Token
+lexer_next(Lexer *l) {
   // lexer_eat_whitespace(l);
 
-  for (;;)
-  {
+  for (;;) {
     if (!lexer_can_peek(l)) break;
 
     char c = lexer_peek(l);
-    if (c == ' ' || c == '\t')
-    {
+    if (c == ' ' || c == '\t') {
       lexer_eat(l);
-    }
-    else if (c == '\r' || c == '\n')
-    {
+    } else if (c == '\r' || c == '\n') {
       // if the previous token was a terminator, we stop
       // here and return a semicolon instead of eating the newline
-      if (l->insert_semicolon)
-      {
+      if (l->insert_semicolon) {
         // PEEK AHEAD: Skip whitespaces/newlines to see what's coming
         u64 temp_cursor = l->cursor + 1;
-        while (temp_cursor < l->source.count && isspace(l->source.data[temp_cursor]))
-        {
+        while (temp_cursor < l->source.count && isspace(l->source.data[temp_cursor])) {
           temp_cursor++;
         }
 
         // If the next actual token is a '{' or 'else', don't insert a semicolon!
-        if (temp_cursor < l->source.count && l->source.data[temp_cursor] == '{')
-        {
+        if (temp_cursor < l->source.count && l->source.data[temp_cursor] == '{') {
           l->insert_semicolon = false;
           lexer_eat(l); // Just eat the newline
           continue;
         }
         
         // Check for "else" keyword
-        if (temp_cursor + 4 <= l->source.count &&
+        if (temp_cursor + 4 <= l->source.count     &&
             l->source.data[temp_cursor + 0] == 'e' &&
             l->source.data[temp_cursor + 1] == 'l' &&
             l->source.data[temp_cursor + 2] == 's' &&
             l->source.data[temp_cursor + 3] == 'e' &&
-            (temp_cursor + 4 >= l->source.count || !is_symbol_char(l->source.data[temp_cursor + 4])))
-        {
+            (temp_cursor + 4 >= l->source.count || !is_symbol_char(l->source.data[temp_cursor + 4]))
+        ) {
           l->insert_semicolon = false;
           lexer_eat(l); // Just eat the newline
           continue;
@@ -621,18 +551,14 @@ lexer_next(Lexer *l)
         return t;
       }
       lexer_eat(l);
-    }
-    else
-    {
+    } else {
       break;
     }
   }
   l->start = l->cursor;
 
-  if (!lexer_can_peek(l))
-  {
-    if (l->insert_semicolon)
-    {
+  if (!lexer_can_peek(l)) {
+    if (l->insert_semicolon) {
       Token t = {0};
       t.pos.row = lexer_row(l) + 1;
       t.pos.col = l->start - l->bol + 1;
@@ -647,14 +573,13 @@ lexer_next(Lexer *l)
   }
 
   // TODO: make lexer_row, lexer_col return with +1
-  Source_Pos pos = {0};
+  SourcePos pos = {0};
   pos.row = lexer_row(l) + 1;
   pos.col = l->start - l->bol + 1;
 
   Token t = {0};
 
-  switch (lexer_peek(l))
-  {
+  switch (lexer_peek(l)) {
   case 'A': case 'B': case 'C': case 'D': case 'E': case 'F': case 'G': case 'H': case 'I': case 'J':
   case 'K': case 'L': case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R': case 'S': case 'T':
   case 'U': case 'V': case 'W': case 'X': case 'Y': case 'Z':
@@ -666,23 +591,18 @@ lexer_next(Lexer *l)
     break;
 
   case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-    while (lexer_can_peek(l) && isdigit(lexer_peek(l)))
-    {
+    while (lexer_can_peek(l) && isdigit(lexer_peek(l))) {
       lexer_eat(l);
     }
 
     b32 looks_like_float = false;
-    if (lexer_can_peek(l))
-    {
-      if (tolower(lexer_peek(l)) == 'e')
-      {
+    if (lexer_can_peek(l)) {
+      if (tolower(lexer_peek(l)) == 'e') {
         looks_like_float = true;
       }
-      else if (lexer_peek(l) == '.')
-      {
+      else if (lexer_peek(l) == '.') {
         lexer_eat(l);
-        if (lexer_can_peek(l) && lexer_peek(l) != '.')
-        {
+        if (lexer_can_peek(l) && lexer_peek(l) != '.') {
           looks_like_float = true;
         }
       }
@@ -691,12 +611,9 @@ lexer_next(Lexer *l)
     l->cursor = l->start;
     // if (lexer_can_peek(l) &&
     //    (lexer_peek(l) == '.' || tolower(lexer_peek(l)) == 'e'))
-    if (looks_like_float)
-    {
+    if (looks_like_float) {
       t = lexer_parse_float(l);
-    }
-    else
-    {
+    } else {
       t = lexer_parse_integer(l);
     }
     break;
@@ -733,13 +650,10 @@ lexer_next(Lexer *l)
     //   t = lexer_make_token(l, TOKEN_INCREMENT);
     // }
     // else
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_AddAssign);
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Plus);
     }
     break;
@@ -751,88 +665,64 @@ lexer_next(Lexer *l)
     //   t = lexer_make_token(l, TOKEN_DECREMENT);
     // }
     // else
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_SubAssign);
-    }
-    else if (lexer_can_peek(l) && lexer_peek(l) == '>')
-    {
+    } else if (lexer_can_peek(l) && lexer_peek(l) == '>') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_Arrow);
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Minus);
     }
     break;
   case '^':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_XorAssign);
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Caret);
     }
     break;
   case '&':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '&')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '&') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_LogicalAnd);
-    }
-    else if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    } else if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_AndAssign);
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Ampersand);
     }
     break;
   case '|':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '|')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '|') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_LogicalOr);
-    }
-    else if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    } else if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_OrAssign);
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Pipe);
     }
     break;
   case '*':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_MulAssign);
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Star);
     }
     break;
   case '/':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_DivAssign);
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Slash);
     }
     break;
@@ -842,13 +732,10 @@ lexer_next(Lexer *l)
     break;
   case '!':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_CmpNeq);
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Exclamation);
     }
     break;
@@ -858,43 +745,32 @@ lexer_next(Lexer *l)
     break;
   case '=':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_CmpEq);
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Equal);
     }
     break;
   case '.':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '*')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '*') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_Deref);
-    }
-    else if (lexer_can_peek(l) && lexer_peek(l) == '.')
-    {
+    } else if (lexer_can_peek(l) && lexer_peek(l) == '.') {
       lexer_eat(l);
-      if (lexer_can_peek(l) && lexer_peek(l) == '<')
-      {
+      if (lexer_can_peek(l) && lexer_peek(l) == '<') {
         lexer_eat(l);
         t = lexer_make_token(l, TokenKind_RangeExcl);
       }
-      else if (lexer_can_peek(l) && lexer_peek(l) == '=')
-      {
+      else if (lexer_can_peek(l) && lexer_peek(l) == '=') {
         lexer_eat(l);
         t = lexer_make_token(l, TokenKind_RangeIncl);
       }
-      else
-      {
+      else {
         lexer_syntax_error(l, "Range operator must explicitly be inclusive '..=' or exclusive '..<'");
       }
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_Dot);
     }
     break;
@@ -919,46 +795,35 @@ lexer_next(Lexer *l)
     t = lexer_parse_string(l);
     break;
 
-  case '\'':
-  {
+  case '\'': {
     char val = 0;
     lexer_eat(l);
-    if (!lexer_can_peek(l))
-    {
+    if (!lexer_can_peek(l)) {
       lexer_syntax_error(l, "Unexpected end of file in character literal");
     }
-    if (lexer_peek(l) == '\'')
-    {
+    if (lexer_peek(l) == '\'') {
       lexer_syntax_error(l, "Character literal must not be empty");
-    }
-    else
-    {
-      if (lexer_peek(l) == '\n')
-      {
+    } else {
+      if (lexer_peek(l) == '\n') {
         lexer_syntax_error(l, "Character literal must not contain newline");
       }
-      else if (lexer_peek(l) == '\\')
-      {
+      else if (lexer_peek(l) == '\\') {
         lexer_eat(l);
         val = escape_to_char[lexer_peek(l)];
-        if (val == 0 && lexer_peek(l) != '0')
-        {
+        if (val == 0 && lexer_peek(l) != '0') {
           lexer_syntax_error(l, "Invalid character literal escape '\\%c'", lexer_peek(l));
         }
         lexer_eat(l);
       }
-      else
-      {
+      else {
         val = lexer_peek(l);
         lexer_eat(l);
       }
 
-      if (lexer_peek(l) != '\'')
-      {
+      if (lexer_peek(l) != '\'') {
         lexer_syntax_error(l, "Expected closing character single quote", lexer_peek(l));
       }
-      else
-      {
+      else {
         lexer_eat(l);
       }
     }
@@ -969,52 +834,38 @@ lexer_next(Lexer *l)
 
   case '>':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_CmpGtEq);
-    }
-    else if (lexer_can_peek(l) && lexer_peek(l) == '>')
-    {
+    } else if (lexer_can_peek(l) && lexer_peek(l) == '>') {
       lexer_eat(l);
-      if (lexer_can_peek(l) && lexer_peek(l) == '=')
-      {
+      if (lexer_can_peek(l) && lexer_peek(l) == '=') {
         lexer_eat(l);
         t = lexer_make_token(l, TokenKind_RShiftAssign);
       }
-      else
-      {
+      else {
         t = lexer_make_token(l, TokenKind_RShift);
       }
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_CmpGt);
     }
     break;
 
   case '<':
     lexer_eat(l);
-    if (lexer_can_peek(l) && lexer_peek(l) == '=')
-    {
+    if (lexer_can_peek(l) && lexer_peek(l) == '=') {
       lexer_eat(l);
       t = lexer_make_token(l, TokenKind_CmpLtEq);
-    }
-    else if (lexer_can_peek(l) && lexer_peek(l) == '<')
-    {
+    } else if (lexer_can_peek(l) && lexer_peek(l) == '<') {
       lexer_eat(l);
-      if (lexer_can_peek(l) && lexer_peek(l) == '=')
-      {
+      if (lexer_can_peek(l) && lexer_peek(l) == '=') {
         lexer_eat(l);
         t = lexer_make_token(l, TokenKind_LShiftAssign);
       }
-      else
-      {
+      else {
         t = lexer_make_token(l, TokenKind_LShift);
       }
-    }
-    else
-    {
+    } else {
       t = lexer_make_token(l, TokenKind_CmpLt);
     }
     break;
@@ -1027,14 +878,13 @@ lexer_next(Lexer *l)
   t.pos = pos;
   t.pos.length = l->cursor - l->start; // Set token length
 
-  switch (t.kind)
-  {
+  switch (t.kind) {
   case TokenKind_Ident:
   case TokenKind_Nil:
-  case TokenKind_S8:
-  case TokenKind_S16:
-  case TokenKind_S32:
-  case TokenKind_S64:
+  case TokenKind_I8:
+  case TokenKind_I16:
+  case TokenKind_I32:
+  case TokenKind_I64:
   case TokenKind_U8:
   case TokenKind_U16:
   case TokenKind_U32:

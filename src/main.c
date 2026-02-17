@@ -38,8 +38,7 @@
 # include <windows.h>
 
 internal void
-win32_enable_vt_mode()
-{
+win32_enable_vt_mode() {
   HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
   DWORD dwMode = 0;
 
@@ -51,23 +50,19 @@ win32_enable_vt_mode()
 }
 #endif
 
-Arena *g_arena;
-
 internal const char *
-tprint(const char *fmt, ...)
-{
+tprint(const char *fmt, ...) {
   local_persist char buf[256];
   va_list args;
   va_start(args, fmt);
   int n = vsnprintf(buf, sizeof(buf), fmt, args);
-  va_end(fmt);
+  va_end(args);
   buf[n] = 0;
   return buf;
 }
 
 internal void
-usage(const char *program_name)
-{
+usage(const char *program_name) {
   printf("Usage: %s <file.kk>\n", program_name);
   // printf("Usage: %s [command] [options] <file.kk>\n", program_name);
   // printf("COMMANDS:\n");
@@ -77,8 +72,7 @@ usage(const char *program_name)
 }
 
 int
-main(int argc, char **argv)
-{
+main(int argc, char **argv) {
   // const char *program_name = shift_args(argc, argv);
   // if (argc == 0)
   // {
@@ -90,8 +84,7 @@ main(int argc, char **argv)
   win32_enable_vt_mode();
 #endif
 
-  g_arena = arena_alloc(GB(1), MB(8), 0);
-  Arena_Temp scratch = arena_scratch_get(0, 0);
+  Temp scratch = arena_scratch_get(0, 0);
 
   // char *file_name = shift_args(argc, argv);
   String8 source = os_read_entire_file(scratch.arena, str8_lit("test.kk"));
@@ -110,11 +103,9 @@ main(int argc, char **argv)
     Lexer l = lexer_init(source);
 
     Token t;
-    while ((t = lexer_next(&l)).kind != TokenKind_EOF)
-    {
+    while ((t = lexer_next(&l)).kind != TokenKind_EOF) {
       printf("%.*s %.*s", str8_varg(str_from_token_kind(scratch.arena, t.kind)), str8_varg(t.lexeme));
-      switch (t.kind)
-      {
+      switch (t.kind) {
       case TokenKind_IntegerLiteral:
         printf(" (value=%llu)", t.value.integer);
         break;
@@ -124,6 +115,7 @@ main(int argc, char **argv)
       case TokenKind_String:
         printf(" (value=%.*s)", str8_varg(t.value.string));
         break;
+      default: break;
       }
       printf("\n");
     }
@@ -219,14 +211,12 @@ main(int argc, char **argv)
 
   {
     typedef struct Expr_Test_Case Expr_Test_Case;
-    struct Expr_Test_Case
-    {
+    struct Expr_Test_Case {
       String8 input;
       String8 output;
     };
 
-    Expr_Test_Case expr_tests[] =
-    {
+    Expr_Test_Case expr_tests[] = {
       #if 1
       // literals
       { .input = S("1"),         .output = S("1") },
@@ -381,13 +371,11 @@ main(int argc, char **argv)
     };
 
     u64 padding = 0;
-    for (u32 i = 0; i < array_count(expr_tests); i++)
-    {
+    for (u32 i = 0; i < array_count(expr_tests); i++) {
       padding = MAX(padding, expr_tests[i].input.count);
     }
 
-    for (u32 i = 0; i < array_count(expr_tests); i++)
-    {
+    for (u32 i = 0; i < array_count(expr_tests); i++) {
       Expr_Test_Case test = expr_tests[i];
 
       char buf[128];
@@ -395,7 +383,7 @@ main(int argc, char **argv)
       Lexer l = lexer_init(test.input);
       Parser p = parser_init(&l);
 
-      Arena_Temp scratch = arena_scratch_get(0, 0);
+      Temp scratch = arena_scratch_get(0, 0);
 
       String8List list = {0};
 
@@ -411,8 +399,7 @@ main(int argc, char **argv)
       printf("%.*s", str8_varg(result));
       printf("\n" CLR_RESET);
 
-      if (!str8_equal(result, test.output))
-      {
+      if (!str8_equal(result, test.output)) {
         printf("Expected " CLR_GRN "%.*s" CLR_RESET ", got " CLR_RED "%.*s\n" CLR_RESET, str8_varg(test.output), str8_varg(result));
         assert(!"Expression test failed");
       }
@@ -434,7 +421,7 @@ main(int argc, char **argv)
     Lexer l = lexer_init(source);
     Parser p = parser_init(&l);
 
-    Decl_List list = parse_declarations(&p);
+    DeclList list = parse_declarations(&p);
     sym_set_source_text(l.source);
     sym_global_decl_list(list);
     sym_global_complete_syms();
@@ -447,7 +434,6 @@ main(int argc, char **argv)
   }
 
   arena_scratch_release(scratch);
-  arena_delete(g_arena);
 
   return 0;
 }

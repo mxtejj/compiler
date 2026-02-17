@@ -2,6 +2,9 @@
 
 #include "base.h"
 
+typedef struct Arena Arena;
+typedef struct Temp Temp;
+
 #define ARENA_HEADER_SIZE sizeof(Arena)
 #define ARENA_ALIGN       sizeof(void *)
 
@@ -10,16 +13,13 @@
 #define ARENA_SCRATCH_COMMIT  KB(64)
 
 typedef u32 Arena_Flags;
-enum
-{
+enum {
   Arena_Flag_Null     = 0,
   Arena_Flag_Growable = (1 << 0),
   Arena_Flag_Decommit = (1 << 1),
 };
 
-typedef struct Arena Arena;
-struct Arena
-{
+struct Arena {
   Arena *curr;
   Arena *prev;
 
@@ -33,9 +33,7 @@ struct Arena
   u64 commit_pos;
 };
 
-typedef struct Arena_Temp Arena_Temp;
-struct Arena_Temp
-{
+struct Temp {
   Arena *arena;
   u64   pos;
 };
@@ -59,8 +57,8 @@ void   arena_pop(Arena *arena, u64 size);
 void   arena_pop_to(Arena *arena, u64 pos);
 void   arena_clear(Arena *arena);
 
-Arena_Temp arena_temp_begin(Arena *arena);
-void arena_temp_end(Arena_Temp temp);
+Temp arena_temp_begin(Arena *arena);
+void arena_temp_end(Temp temp);
 
-Arena_Temp arena_scratch_get(Arena **conflicts, u32 num_conflicts);
-void arena_scratch_release(Arena_Temp scratch);
+Temp arena_scratch_get(Arena **conflicts, u32 num_conflicts);
+void arena_scratch_release(Temp scratch);
